@@ -13,7 +13,7 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$Header: instable.h,v 1.89 99/03/01 21:21:53 kentd Exp $"
+	.stringz "@(#)$Header: instable.h,v 1.90 99/06/22 23:35:43 kentd Exp $"
 # endif
 #endif
 
@@ -791,6 +791,7 @@ inst44_SYM		/*  MVP */
 	stw	scratch2,STACK_SRC_BANK(sp)
 
 inst44_loop_SYM
+	fldws	0(fcycles_stop_ptr),fcycles_stop
 	CYCLES_PLUS_3
 	ldw	STACK_SRC_BANK(sp),scratch2
 	fcmp,<,sgl fcycles,fcycles_stop
@@ -854,7 +855,7 @@ inst44_out_of_time_SYM
 			pc += 3;
 			break;
 		}
-		if(fcycles >= fcycles_stop) {
+		if(fcycles >= g_fcycles_stop) {
 			break;
 		}
 	}
@@ -1013,6 +1014,7 @@ inst54_SYM		/*  MVN  */
 /*  even in 8bit acc mode, use 16-bit accumulator! */
 
 inst54_loop_SYM
+	fldws	0(fcycles_stop_ptr),fcycles_stop
 	CYCLES_PLUS_3
 	ldw	STACK_SRC_BANK(sp),scratch2
 	fcmp,<,sgl fcycles,fcycles_stop
@@ -1076,7 +1078,7 @@ inst54_notnat_SYM
 			pc += 3;
 			break;
 		}
-		if(fcycles >= fcycles_stop) {
+		if(fcycles >= g_fcycles_stop) {
 			break;
 		}
 	}

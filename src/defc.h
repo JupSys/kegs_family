@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.69 99/06/01 01:03:07 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.70 99/06/22 22:38:25 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -98,11 +98,13 @@ STRUCT(Fplus) {
 	float	plus_2;
 	float	plus_3;
 	float	plus_x_minus_1;
+	float	fcycles_stop;
+	float	ftmp_unused2;
 };
 
 STRUCT(Engine_reg) {
 	float	fcycles;
-	float	fcycles_stop;
+	float	ftmp_unused1;
 	Fplus	*fplus_ptr;
 
 	word32	kbank;

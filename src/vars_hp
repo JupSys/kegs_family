@@ -1,5 +1,5 @@
 
-OBJECTS = $(OBJECTS1) engine_s.o
+OBJECTS = engine_s.o $(OBJECTS1)
 CC = cc -Ae -C
 CCOPTS = -O
 OPTS =  -DNDEBUG

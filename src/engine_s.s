@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.138 99/06/01 00:56:12 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.141 99/06/22 22:37:53 kentd Exp $"
 
 	.code
 
@@ -32,7 +32,6 @@ rcsid_engine_s_s
 # define LOG_PC
 # define ACCURATE_SLOW_MEM
 # define DEBUG_TOOLBOX
-# define DEBUG_CYCLES
 #endif
 
 
@@ -80,7 +79,7 @@ rcsid_engine_s_s
 #define STACK_GET_MEMORY24_SAVE2		-156
 #define STACK_GET_MEMORY24_SAVE3		-160
 
-#define STACK_SAVE_INIT_CYCLES			-164
+/* #define STACK_SAVE_INIT_CYCLES		-164 */
 #define STACK_SAVE_DECIMAL16_A			-168
 #define STACK_SAVE_DECIMAL16_B			-172
 #define STACK_SAVE_INSTR_TMP1			-176
@@ -145,6 +144,7 @@ rcsid_engine_s_s
 
 	.code
 	.import halt_sim,data
+	.import g_fcycles_stop,data
 	.import g_irq_pending,data
 	.import g_wait_pending,data
 	.import g_rom_version,data
@@ -209,16 +209,18 @@ enter_asm
 	fstds,ma fr_dbl_2,8(scratch2)
 	fcpy,dbl 0,fr_dbl_1
 	fstds,ma fr_dbl_3,8(scratch2)
+	fstds,ma fr_dbl_4,8(scratch2)
 	ldil	l%g_cur_dcycs,scratch2
 
 	ldil	l%g_last_vbl_dcycs,scratch3
-	ldo	r%g_cur_dcycs(scratch2),scratch2
 	fcpy,dbl 0,fr_dbl_2
+	ldo	r%g_cur_dcycs(scratch2),scratch2
+	fcpy,dbl 0,fr_dbl_3
 	ldo	r%g_last_vbl_dcycs(scratch3),scratch3
 	fldds	0(scratch2),ftmp1
 	ldil	l%page_info_rd_wr,page_info_ptr
 	fldds	0(scratch3),ftmp2
-	fcpy,dbl 0,fr_dbl_3
+	fcpy,dbl 0,fr_dbl_4
 	ldo	r%page_info_rd_wr(page_info_ptr),page_info_ptr
 	fsub,dbl ftmp1,ftmp2,ftmp1
 	bv	0(scratch1)
@@ -233,6 +235,7 @@ leave_asm
 	fldds,ma 8(scratch2),fr_dbl_1
 	fldds,ma 8(scratch2),fr_dbl_2
 	fldds,ma 8(scratch2),fr_dbl_3
+	fldds,ma 8(scratch2),fr_dbl_4
 
 	bv	(link)
 	ldwm	-STACK_ENGINE_SIZE(sp),page_info_ptr
@@ -761,7 +764,9 @@ check_breakpoints_loop_asm
 check_breakpoints_hit
 	LDC(halt_sim,scratch1)
 	ldw	(scratch1),r1
+	ldil	l%g_fcycles_stop,ret0
 	depi	1,31,1,r1
+	stw	0,r%g_fcycles_stop(ret0)
 	bv	0(scratch4)
 	stw	r1,(scratch1)
 	nop
@@ -1212,11 +1217,13 @@ enter_engine
 	ldw	ENGINE_FPLUS_PTR(arg0),scratch1		;fplus ptr
 	fldds	ENGINE_FDBL_1(arg0),fr_dbl_1
 
-	ldil	l%halt_sim,halt_sim_ptr
+	ldil	l%g_fcycles_stop,fcycles_stop_ptr
 	ldw	ENGINE_REG_ACC(arg0),acc
-	ldo	r%halt_sim(halt_sim_ptr),halt_sim_ptr
+	ldo	r%g_fcycles_stop(fcycles_stop_ptr),fcycles_stop_ptr
 	fldds	FPLUS_DBL_1(scratch1),fr_dbl_2
+	ldo	FPLUS_DBL_3(scratch1),ret0
 	fldds	FPLUS_DBL_2(scratch1),fr_dbl_3
+	fldds	0(ret0),fr_dbl_4
 	ldil	l%table8,ret0
 	ldw	ENGINE_REG_XREG(arg0),xreg
 	ldil	l%table16,inst_tab_ptr
@@ -1233,10 +1240,6 @@ enter_engine
 	copy	ret0,inst_tab_ptr
 	ldw	ENGINE_REG_PC(arg0),pc
 
-#ifdef DEBUG_CYCLES
-	stw	cycles,STACK_SAVE_INIT_CYCLES(sp)
-#endif
-
 	ldo	r%page_info_rd_wr(page_info_ptr),page_info_ptr
 	ldw	ENGINE_REG_KBANK(arg0),kbank
 	extru,<> psr,30,1,0
@@ -1244,8 +1247,8 @@ enter_engine
 	extru	psr,24,1,neg
 	dep	kbank,15,16,pc
 	stw	arg0,STACK_SAVE_ARG0(sp)
-	b	dispatch2
-	fcpy,sgl 0,fscr1
+	b	dispatch
+	ldi	0,scratch1
 
 	.export resize_acc_to8,code
 resize_acc_to8
@@ -1321,7 +1324,9 @@ clr_halt_act
 set_halt_act
 	LDC(halt_sim,scratch1)
 	ldw	(scratch1),scratch2
+	ldil	l%g_fcycles_stop,scratch3
 	or	scratch2,arg0,arg0
+	stw	0,r%g_fcycles_stop(scratch3)
 	bv	0(link)
 	stw	arg0,(scratch1)
 
@@ -1329,21 +1334,6 @@ set_halt_act
 	.align	32
 	.export dispatch,code
 dispatch
-
-#ifdef DEBUG_CYCLES
-	ldw	STACK_SAVE_INIT_CYCLES(sp),arg0
-	comb,<	cycles,arg0,dispatch_done_cycles_mismatch
-	nop
-#endif
-
-
-	fldws	0(halt_sim_ptr),fscr1
-
-
-
-	.export dispatch2,code
-dispatch2
-; scratch4 = halt_sim
 
 #ifdef CHECK_SIZE_CONSISTENCY
 	nop
@@ -1369,26 +1359,26 @@ dispatch2
 	dep	kbank,23,8,scratch2
 no_debug_toolbox
 #endif
+	fldws	0(fcycles_stop_ptr),fcycles_stop
 	dep	kbank,15,16,pc
 
-	fcmp,>=,sgl fcycles,fcycles_stop		;C=0 if can cont
+	ldi	0xfd,scratch3
 	extru	pc,23,16,arg2
 
 	ldwx,s	arg2(page_info_ptr),scratch2
-	ldi	0xfd,scratch3
+	fcmp,<=,sgl fcycles,fcycles_stop		;C=1 if can cont
 
 	extru	pc,31,8,scratch4
-	fcmp,!=,sgl fscr1,0				;C=0 if can cont
 
 	ldbx	scratch4(scratch2),instr
 	comclr,>= scratch4,scratch3,0	;stop for pieces if near end of page
 
-	ftest,acc2			;null next if can cont
+	ftest				;null next if can cont
 
 	ldi	-1,scratch2
 	ldwx,s	instr(inst_tab_ptr),link
 
-	add	scratch4,scratch2,scratch1
+	addl	scratch4,scratch2,scratch1
 	bb,<,n	scratch2,BANK_IO_BIT,dispatch_instr_io
 
 	; depi	0,31,3,link
@@ -1449,11 +1439,10 @@ log_pc_asm
 	.export dispatch_instr_io,code
 dispatch_instr_io
 ; check if we're here because of timeout or halt required
-	fcmp,>=,sgl fcycles,fcycles_stop
+	fcmp,<=,sgl fcycles,fcycles_stop	;C=1 if we can cont
 	ldwx,s	arg2(page_info_ptr),scratch2
-	fcmp,!=,sgl fscr1,0
 
-	ftest,acc2				;do next instr if must stop
+	ftest					;do next instr if must stop
 	b,n	dispatch_done_clr_ret0
 
 	bb,>=,n	scratch2,BANK_IO_BIT,dispatch_instr_pieces
@@ -2437,10 +2426,10 @@ g_engine_c_mode
 
 	.bss
 
-	.align	0x100
 	.export slow_memory,data
 	.export rom_fc_ff,data
 	.export dummy_memory1,data
+	.align	0x100
 slow_memory	.block	128*1024
 dummy_memory1	.block	3*1024
 rom_fc_ff	.block	256*1024

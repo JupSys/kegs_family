@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.83 99/06/01 00:30:39 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.84 99/06/22 22:38:33 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -33,10 +33,8 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.83 99/06/01 00:30:39
 #define JOYSTICK_LINUX		2
 #define JOYSTICK_KEYPAD		3
 
-#define DEF_CYCLES	(40*1000)
 
-#define HALT_STEP	0xca0
-#define HALT_EVENT	0x600
+#define HALT_EVENT	0x10
 
 #define MAX_BREAK_POINTS	0x20
 
@@ -86,7 +84,7 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.83 99/06/01 00:30:39
 
 #define ENGINE_FDBL_1		0x00
 #define ENGINE_FCYCLES		0x00
-#define ENGINE_FCYCLES_STOP	0x04
+#define ENGINE_FTMP_UNUSED1	0x04
 #define ENGINE_FPLUS_PTR	0x08
 #define ENGINE_REG_KBANK	0x0c
 #define ENGINE_REG_PC		0x10
@@ -113,6 +111,9 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.83 99/06/01 00:30:39
 #define FPLUS_DBL_2		0x08
 #define FPLUS_3			0x08
 #define FPLUS_X_MINUS_1		0x0c
+#define FPLUS_DBL_3		0x10
+#define FPLUS_FCYCLES_STOP	0x10
+#define FPLUS_FTMP_UNUSED2	0x14
 
 #define RET_BREAK	0x1
 #define RET_COP		0x2

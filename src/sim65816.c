@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.286 99/06/01 00:32:21 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.288 99/06/22 22:38:07 kentd Exp $";
 
 #include <math.h>
 
@@ -86,8 +86,9 @@ extern int g_preferred_rate;
 
 void U_STACK_TRACE();
 
-int halt_sim;
-int enter_debug;
+float	g_fcycles_stop = 0.0;
+int	halt_sim = 0;
+int	enter_debug = 0;
 int	g_rom_version = 0;
 int	g_halt_on_bad_read = 0;
 int	g_ignore_bad_acc = 0;
@@ -148,7 +149,7 @@ int kbd_in_end = 0;
 byte kbd_in_buf[LEN_KBD_BUF];
 
 
-#define PC_LOG_LEN	(32*1024)
+#define PC_LOG_LEN	(16*1024)
 
 Pc_log pc_log_array[PC_LOG_LEN + 2];
 
@@ -623,8 +624,8 @@ check_engine_asm_defines()
 	eptr = &ereg;
 	CHECK(eptr, eptr->fcycles, ENGINE_FDBL_1, val1, val2);
 	CHECK(eptr, eptr->fcycles, ENGINE_FCYCLES, val1, val2);
-	CHECK(eptr, eptr->fcycles_stop, ENGINE_FDBL_1+4, val1, val2);
-	CHECK(eptr, eptr->fcycles_stop, ENGINE_FCYCLES_STOP, val1, val2);
+	CHECK(eptr, eptr->ftmp_unused1, ENGINE_FDBL_1+4, val1, val2);
+	CHECK(eptr, eptr->ftmp_unused1, ENGINE_FTMP_UNUSED1, val1, val2);
 
 	CHECK(eptr, eptr->fplus_ptr, ENGINE_FPLUS_PTR, val1, val2);
 	CHECK(eptr, eptr->acc, ENGINE_REG_ACC, val1, val2);
@@ -658,6 +659,8 @@ check_engine_asm_defines()
 	CHECK(fplusptr, fplusptr->plus_3, FPLUS_3, val1, val2);
 	CHECK(fplusptr, fplusptr->plus_x_minus_1, FPLUS_DBL_2+4, val1, val2);
 	CHECK(fplusptr, fplusptr->plus_x_minus_1, FPLUS_X_MINUS_1, val1, val2);
+	CHECK(fplusptr, fplusptr->fcycles_stop, FPLUS_DBL_3, val1, val2);
+	CHECK(fplusptr, fplusptr->fcycles_stop, FPLUS_FCYCLES_STOP, val1, val2);
 }
 
 byte *
@@ -867,7 +870,7 @@ initialize_events()
 	g_event_start.next = 0;
 	g_event_start.dcycs = 0.0;
 
-	add_event_entry(0.0, EV_60HZ);
+	add_event_entry(DCYCS_IN_16MS, EV_60HZ);
 }
 
 void
@@ -1100,7 +1103,7 @@ show_pmhz()
 
 
 void
-run_prog(word32 cycles)
+run_prog()
 {
 	Fplus	*fplus_ptr;
 	Event	*this_event;
@@ -1110,6 +1113,7 @@ run_prog(word32 cycles)
 	double	prev_dtime;
 	float	prerun_fcycles;
 	float	fspeed_mult;
+	float	fcycles_stop;
 	word32	ret;
 	int	type;
 	int	motor_on;
@@ -1120,9 +1124,6 @@ run_prog(word32 cycles)
 	int	fast;
 	int	this_type;
 
-	if(g_stepping) {
-		set_halt(HALT_STEP);
-	}
 
 	fflush(stdout);
 
@@ -1132,11 +1133,15 @@ run_prog(word32 cycles)
 	g_recip_projected_pmhz_slow.plus_2 = (float)2.0;
 	g_recip_projected_pmhz_slow.plus_3 = (float)3.0;
 	g_recip_projected_pmhz_slow.plus_x_minus_1 = (float)0.9;
+	g_recip_projected_pmhz_slow.fcycles_stop = (float)0.0;
+	g_recip_projected_pmhz_slow.ftmp_unused2 = (float)0.0;
 
 	g_recip_projected_pmhz_fast.plus_1 = (float)(1.0 / 2.5);
 	g_recip_projected_pmhz_fast.plus_2 = (float)(2.0 / 2.5);
 	g_recip_projected_pmhz_fast.plus_3 = (float)(3.0 / 2.5);
 	g_recip_projected_pmhz_fast.plus_x_minus_1 = (float)(1.98 - (1.0/2.5));
+	g_recip_projected_pmhz_fast.fcycles_stop = (float)0.0;
+	g_recip_projected_pmhz_fast.ftmp_unused2 = (float)0.0;
 
 	if(g_cur_fplus_ptr == 0) {
 		g_recip_projected_pmhz_unl = g_recip_projected_pmhz_slow;
@@ -1179,14 +1184,18 @@ run_prog(word32 cycles)
 
 		this_type = g_event_start.next->type;
 
-		prerun_fcycles = g_cur_dcycs - g_last_vbl_dcycs + 0.001;
+		prerun_fcycles = g_cur_dcycs - g_last_vbl_dcycs;
 		engine.fcycles = prerun_fcycles;
-		engine.fcycles_stop = g_event_start.next->dcycs -
-							g_last_vbl_dcycs;
+		fcycles_stop = (g_event_start.next->dcycs - g_last_vbl_dcycs) +
+							0.001;
+		if(g_stepping) {
+			fcycles_stop = prerun_fcycles;
+		}
+		g_fcycles_stop = fcycles_stop;
 
 #if 0
 		printf("Enter engine, fcycs: %f, stop: %f\n",
-			(double)engine.fcycles, (double)engine.fcycles_stop);
+			prerun_fcycles, fcycles_stop);
 		printf("g_cur_dcycs: %f, last_vbl_dcyc: %f\n", g_cur_dcycs,
 			g_last_vbl_dcycs);
 #endif
@@ -1204,6 +1213,11 @@ run_prog(word32 cycles)
 
 		g_dadjcycs += (engine.fcycles - prerun_fcycles) *
 					fspeed_mult;
+
+#if 0
+		printf("...back, engine.fcycles: %f, dcycs: %f\n",
+			(double)engine.fcycles, dcycs);
+#endif
 
 		g_cur_dcycs = dcycs;
 
@@ -1294,6 +1308,9 @@ run_prog(word32 cycles)
 #endif
 
 		if(halt_sim != 0 && halt_sim != HALT_EVENT) {
+			break;
+		}
+		if(g_stepping) {
 			break;
 		}
 	}
@@ -1585,7 +1602,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.51");
+		update_status_line(6, "KEGS v0.52");
 
 		g_status_refresh_needed = 1;
 

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.32 99/06/01 01:21:03 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.33 99/06/22 23:35:33 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -21,6 +21,7 @@ const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.32 99/06/01 01:21:0
 #endif
 
 extern int halt_sim;
+extern float g_fcycles_stop;
 extern int g_wait_pending;
 extern int g_irq_pending;
 extern int g_testing;
@@ -57,7 +58,7 @@ int bogus[] = {
 #define CYCLES_MINUS_1	fcycles -= fplus_1;
 #define CYCLES_MINUS_2	fcycles -= fplus_2;
 
-#define CYCLES_FINISH	fcycles = fcycles_stop + fplus_1;
+#define CYCLES_FINISH	fcycles = g_fcycles_stop + fplus_1;
 
 #define FCYCLES_ROUND	fcycles = (int)(fcycles + fplus_x_m1);
 
@@ -795,7 +796,6 @@ enter_engine(Engine_reg *engine_ptr)
 	word32	pull_tmp;
 	word32	tmp_bytes;
 	float	fcycles;
-	float	fcycles_stop;
 	Fplus	*fplus_ptr;
 	float	fplus_1;
 	float	fplus_2;
@@ -821,7 +821,6 @@ enter_engine(Engine_reg *engine_ptr)
 	direct = engine_ptr->direct;
 	psr = engine_ptr->psr;
 	fcycles = engine_ptr->fcycles;
-	fcycles_stop = engine_ptr->fcycles_stop;
 	fplus_ptr = engine_ptr->fplus_ptr;
 	zero = !(psr & 2);
 	neg = (psr >> 7) & 1;
@@ -833,16 +832,9 @@ enter_engine(Engine_reg *engine_ptr)
 
 	g_ret1 = 0;
 
-	if(psr & 0x20) {
-		goto skip_check8;
-	} else {
-		goto skip_check16;
-	}
-
 recalc_accsize:
 	if(psr & 0x20) {
-		while(halt_sim == 0 && (fcycles < fcycles_stop)) {
-skip_check8:
+		while(fcycles <= g_fcycles_stop) {
 #if 0
 			if((neg & ~1) || (psr & (~0x1ff))) {
 				printf("psr = %04x\n", psr);
@@ -870,8 +862,7 @@ skip_check8:
 			}
 		}
 	} else {
-		while(halt_sim == 0 && (fcycles < fcycles_stop)) {
-skip_check16:
+		while(fcycles <= g_fcycles_stop) {
 			FETCH_OPCODE;
 #ifdef LOG_PC
 			LOG_PC_MACRO();

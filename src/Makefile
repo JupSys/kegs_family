@@ -1,7 +1,7 @@
 
 # KEGS Makefile--set all options in the "vars" file!
 
-OBJECTS1 = adb.o clock.o dis.o joystick_driver.c paddles.c scc.o iwm.o moremem.o sim65816.o smartport.o sound.o video.o xdriver.o sound_driver.o
+OBJECTS1 = adb.o clock.o dis.o joystick_driver.o paddles.o scc.o iwm.o moremem.o sim65816.o smartport.o sound.o video.o xdriver.o sound_driver.o
 PROJROOT = .
 
 include vars

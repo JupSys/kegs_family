@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.16 99/05/31 23:41:26 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.18 99/06/22 23:34:15 kentd Exp $";
 
 #include "defc.h"
 
@@ -242,13 +242,11 @@ do_c70d(word32 arg0)
 	int	ctl_ptr;
 	int	ctl_code;
 	int	mask;
-	int	i;
 	int	stat_val;
 	int	size;
-	int	len;
 	int	ret;
 	int	ext;
-
+	int	i;
 
 	if((engine.psr & 0x100) == 0) {
 		disk_printf("c70d called in native mode!\n");
@@ -316,12 +314,16 @@ do_c70d(word32 arg0)
 			unit, status_ptr, status_code);
 		if(unit == 0 && status_code == 0) {
 			/* Smartport driver status */
+			/* see technotes/smpt/tn-smpt-002 */
 			set_memory_c(status_ptr, g_highest_smartport_unit+1, 0);
-			len = MIN(7, MAX_C7_DISKS);
-			for(i = 0; i < len; i++) {
-				/* dev vendor id */
-				set_memory_c(status_ptr+i+1, 2, 0);
-			}
+			set_memory_c(status_ptr+1, 0xff, 0); /* interrupt stat*/
+			set_memory_c(status_ptr+2, 0x02, 0); /* vendor id */
+			set_memory_c(status_ptr+3, 0x00, 0); /* vendor id */
+			set_memory_c(status_ptr+4, 0x00, 0); /* version lo */
+			set_memory_c(status_ptr+5, 0x10, 0); /* version hi */
+			set_memory_c(status_ptr+6, 0x00, 0);
+			set_memory_c(status_ptr+7, 0x00, 0);
+
 			engine.xreg = 8;
 			engine.yreg = 0;
 			engine.acc &= 0xff00;
@@ -404,11 +406,13 @@ do_c70d(word32 arg0)
 			engine.pc = (rts_addr + 3 + ext) & 0xffff;
 
 			disk_printf("Just finished unit %d, stat 3\n", unit);
-			if(unit == 0 || unit > MAX_C7_DISKS) {
-				engine.acc |= 0x21;
+			if(unit == 0 || unit > (g_highest_smartport_unit+1)) {
+				engine.acc |= 0x28;
 				engine.psr |= 1;
-				printf("unit: %02x, stopping\n", unit);
-				set_halt(1);
+				if(unit == 0 || unit > MAX_C7_DISKS) {
+					printf("unit: %02x, stat 3\n", unit);
+					set_halt(1);
+				}
 			}
 			return;
 		}
@@ -524,7 +528,7 @@ do_c70d(word32 arg0)
 		}
 		engine.pc = (rts_addr + 3 + ext) & 0xffff;
 
-		HALT_ON(HALT_ON_C70D_WRITES, "c70d Write done\n");
+		HALT_ON(HALT_ON_C70D_WRITES, "c70d Format done\n");
 		return;
 		break;
 	case 0x04:	/* Control == 0x04 and 0x44 */

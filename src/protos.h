@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.127 99/06/01 00:56:23 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.128 99/06/22 22:39:03 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -298,7 +298,7 @@ double remove_event_doc(int osc);
 double remove_event_scc(int type);
 void show_all_events(void);
 void show_pmhz(void);
-void run_prog(word32 cycles);
+void run_prog(void);
 void add_irq(void);
 void remove_irq(void);
 void take_irq(int is_it_brk);

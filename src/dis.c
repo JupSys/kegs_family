@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.71 99/06/01 00:30:48 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.72 99/06/22 22:38:54 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -481,7 +481,7 @@ do_blank()
 		for(i=0;i < tmp;i++) {
 			g_stepping = 1;
 			do_step();
-			if(enter_debug || halt_sim != HALT_STEP) {
+			if(enter_debug || halt_sim != 0) {
 				break;
 			}
 		}
@@ -519,8 +519,7 @@ do_go()
 	clear_halt();
 	g_show_screen = 1;
 
-
-	run_prog(DEF_CYCLES);
+	run_prog();
 	show_regs();
 }
 
@@ -533,7 +532,7 @@ do_step()
 	clear_halt();
 
 	g_show_screen = 0;
-	run_prog(1);
+	run_prog();
 	g_show_screen = 1;
 	show_regs();
 	size_mem_imm = 2;
