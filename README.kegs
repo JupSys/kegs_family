@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.84
+KEGS: Kent's Emulated GS version 0.86
 http://kegs.sourceforge.net/
 
 What is this?
@@ -197,7 +197,10 @@ Using KEGS:
 The host computer mouse is the Apple IIgs mouse and joystick by default.
 By default, the host pointer is not constrained inside the window and
 remains visible.  Press F8 to hide the cursor and constrain the mouse.  F8
-again toggles out of constrain mode.
+again toggles out of constrain mode.  When the GSOS desktop is running,
+KEGS hides the host cursor automatically and enables special tracking
+which forces the emulated cursor to follow the host cursor.  If this doesn't
+work right under some program, just press F8 for better compatibility.
 
 The default joystick is the mouse position.  Upper left is 0,0.  Lower right
 is 255,255.  Press Shift-F9 to swap the X and Y axes.  Press F9 to reverse
@@ -211,12 +214,13 @@ If you have a real joystick on Linux, start KEGS with "-joystick" and
 you should be able to use it.  Real joysticks should also work on Windows.
 
 The left mouse button is the mouse button for KEGS.  The right mouse
-button (if you have it) or F6 toggles between three speed modes.  Mode 0
+button (if you have it) or F6 toggles between four speed modes.  Mode 0
 (the default) means run as fast as possible.  Mode 1 means run at 1MHz.
-Mode 2 means run at 2.8MHz.  Most Apple //e (or earlier) games need to be
+Mode 2 means run at 2.8MHz.  Mode 3 means run at 8.0MHz (about the speed
+of a ZipGS accelerator).  Most Apple //e (or earlier) games need to be
 run at 1MHz.  Many Apple IIgs demos must run at 2.8MHz or they crash.  Try
 running ornery programs at 2.8MHz.  3200 pictures generally only display
-correctly at 2.8MHz.
+correctly at 2.8MHz or sometimes 8.0MHz.
 
 The middle mouse button or Shift-F6 causes KEGS to stop emulation, and enter
 the debugger.  You can continue with "g" then return in the debug window.
@@ -329,7 +333,7 @@ KEGS command-line option summary:
 	exactly 140 colors across the screen, as opposed to the blending
 	being done by default.
 
-X-Window/Linux options
+X-Windows/Linux options
 -15:	KEGS will only look for a 15-bit X-Window display.
 -16:	KEGS will only look for a 16-bit X-Window display (not tested, probably
 	 will get red colors wrong).
@@ -362,9 +366,7 @@ anything else work.
 If you can't get any of these to work on your machine, let me know.
 Note that X Windows often has other things mapped to Meta- and Alt-
 key sequences, so they often don't get passed through to KEGS.  So it's
-best to use another key instead of Alt or Meta.  Alt-Up-arrow often
-means circulate through the X windows, which means it isn't passed on
-to KEGS.
+best to use another key instead of Alt or Meta.
 
 The joystick/paddle buttons are just the Command and Option keys.
 
@@ -372,8 +374,8 @@ Reset:
 -----
 
 The reset key is Pause/Break or F12.  You must hit it with Ctrl to get it to
-take effect (just like a real Apple IIgs).  Ctrl-open_apple-Reset
-forces a reboot.  Ctrl-Close_apple-Open_apple-Reset enters selftests.
+take effect (just like a real Apple IIgs).  Ctrl-Command-Reset
+forces a reboot.  Ctrl-Command-Option-Reset enters selftests.
 Selftests will pass if you force speed to 2.8MHz using the middle
 button.  Watch out for ctrl-shift-Break--it will likely kill your
 X Windows session.
@@ -382,7 +384,7 @@ Control Panel:
 -------------
 
 You can get to the Apple IIgs control panel (unless some application
-has locked it out) using Ctrl-Open_apple-ESC.
+has locked it out) using Ctrl-Command-ESC.
 
 
 How to use "to_pro":
@@ -532,16 +534,15 @@ action games are more playable at 2.8MHz.
 
 The 8.0MHz setting means follow the ZipGS-selected speed, but don't go
 faster than 8.0MHz.  If your host computer cannot keep up, then the
-emulated second will be extended.  You can
-use the ZipGS control panel, or ZIPPY.GS on the sample disk image to
-set the emulated ZipGS speed to anything from 1MHz to 8MHz in .5MHz
-increments.
+emulated second will be extended.  You can use the ZipGS control panel,
+or ZIPPY.GS on the sample disk image to set the emulated ZipGS speed to
+anything from 1MHz to 8MHz in .5MHz increments.
 
 The Unlimited setting means run as fast as possible, whatever speed that
-is (but always above 1MHz).  Eff MHz gives you
-the current Apple IIgs equivalent speed.  Many games will be unplayable at
-the unlimited setting.  Setting the IIgs control panel speed to "slow"
-will slow down to 1MHz.
+is (but always above 1MHz).  Eff MHz gives you the current Apple IIgs
+equivalent speed.  Many games will be unplayable at the unlimited
+setting.  Setting the IIgs control panel speed to "slow" will slow down
+to 1MHz.
 
 Sound output has an interesting relationship to KEGS timing.  KEGS must
 play one second of sound per second of emulated time.  Normally, this
@@ -704,10 +705,6 @@ are patched to enable use of more than 8MB of memory.  I then patch the ROM
 self-tests to make the ROM checksum pass.  But other programs, like
 the Apple IIgs Diagnostic Disk, will detect a ROM checksum mismatch.
 Don't worry about it.
-
-KEGS will mess up the border colors under heavy border color switching.
-It gets simple effects correct, but demos which try to scroll words
-across the bottom will just get random lines.  I'll fix it eventually.
 
 Sound breaks up if KEGS is unable to keep up--it should only be happening
 if you are trying to force KEGS to run at 2.8MHz, but cannot due to
