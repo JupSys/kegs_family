@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.33 99/04/24 22:44:38 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.34 99/05/04 23:37:58 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -84,7 +84,6 @@ int g_mouse_overflow_x = 0;
 int g_mouse_overflow_y = 0;
 int g_mouse_overflow_button = 0;
 int g_mouse_overflow_valid = 0;
-
 
 int	g_adb_mouse_valid_data = 0;
 int	g_adb_mouse_coord = 0;
@@ -1229,67 +1228,6 @@ mouse_read_c024()
 	g_adb_mouse_coord ^= 1;
 	return ret;
 }
-
-
-
-double	g_paddle_trig_dcycs = 0;
-int	g_swap_paddles = 0;
-int	g_invert_paddles = 0;
-
-int
-read_paddles(int paddle, double dcycs)
-{
-	double	trig_dcycs;
-	double	diff_dcycs;
-
-	if(paddle > 1) {
-		return 0;
-	}
-
-	if(g_swap_paddles) {
-		paddle = !paddle;
-	}
-
-	if(paddle == 0) {
-		/* mous_phys_x is 0->560, convert that to 0-2816 cycles */
-		/* so, mult by 5 */
-		if(g_mouse_cur_x < BASE_MARGIN_LEFT) {
-			trig_dcycs = 0.0;
-		} else {
-			trig_dcycs = (g_mouse_cur_x - BASE_MARGIN_LEFT) * 5;
-		}
-	} else {
-		/* mous_phys_y is 0->384, convert that to 0-2816 cycles */
-		/* so, mult by 15 then divide by 2 (shift right by 1) */
-		if(g_mouse_cur_y < BASE_MARGIN_TOP) {
-			trig_dcycs = 0.0;
-		} else {
-			trig_dcycs = ((g_mouse_cur_y - BASE_MARGIN_TOP)*15) >>1;
-		}
-	}
-
-	if(trig_dcycs > 2816.0) {
-		trig_dcycs = 2816.0;
-	}
-
-	if(g_invert_paddles) {
-		trig_dcycs = 2816.0 - trig_dcycs;
-	}
-
-	diff_dcycs = dcycs - g_paddle_trig_dcycs;
-#if 0
-	printf("read pad, diff_time: %d, cycs: %d, trig: %08x, x,y: %d,%d\n",
-		diff_time, cycs, g_paddle_trig_dcycs, mouse_phys_x,
-		mouse_phys_y);
-#endif
-
-	if(diff_dcycs < trig_dcycs) {
-		return 0x80;
-	} else {
-		return 0x00;
-	}
-}
-
 
 void
 adb_key_event(int a2code, int is_up)

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.198 99/04/24 22:45:12 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.199 99/05/04 23:38:21 kentd Exp $";
 
 #include "defc.h"
 
@@ -41,6 +41,8 @@ extern int scr_mode;
 extern int Verbose;
 extern double g_paddle_trig_dcycs;
 extern int g_rom_version;
+
+extern int g_paddle_button[4];
 
 extern Fplus *g_cur_fplus_ptr;
 
@@ -1443,13 +1445,14 @@ io_read(word32 loc, Cyc *cyc_ptr)
 
 		/* 0xc060 - 0xc06f */
 		case 0x60: /* 0xc060 */
-			return IOR(0);
+			return IOR(g_paddle_button[3]);
 		case 0x61: /* 0xc061 */
-			return IOR(adb_is_cmd_key_down());
+			return IOR(adb_is_cmd_key_down() || g_paddle_button[0]);
 		case 0x62: /* 0xc062 */
-			return IOR(adb_is_option_key_down());
+			return IOR(adb_is_option_key_down() ||
+							g_paddle_button[1]);
 		case 0x63: /* 0xc063 */
-			return IOR(0);
+			return IOR(g_paddle_button[2]);
 		case 0x64: /* 0xc064 */
 			return read_paddles(0, dcycs);
 		case 0x65: /* 0xc065 */
@@ -1473,7 +1476,7 @@ io_read(word32 loc, Cyc *cyc_ptr)
 
 		/* 0xc070 - 0xc07f */
 		case 0x70: /* c070 */
-			g_paddle_trig_dcycs = dcycs;
+			paddle_trigger(dcycs);
 			return 0;
 		case 0x71:	/* 0xc071 */
 		case 0x72: case 0x73:
@@ -2097,7 +2100,7 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 
 		/* 0xc070 - 0xc07f */
 		case 0x70: /* 0xc070 = Trigger paddles */
-			g_paddle_trig_dcycs = dcycs;
+			paddle_trigger(dcycs);
 			return;
 		case 0x73: /* 0xc073 = slinky ram card bank addr? */
 			return;

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.122 99/04/05 00:11:34 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.123 99/05/04 23:38:32 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -88,7 +88,6 @@ int read_adb_ram(word32 addr);
 void write_adb_ram(word32 addr, int val);
 int update_mouse(int x, int y, int button_state, int button_valid);
 int mouse_read_c024(void);
-int read_paddles(int paddle, double dcycs);
 void adb_key_event(int a2code, int is_up);
 word32 adb_read_c000(void);
 word32 adb_access_c010(void);
@@ -219,6 +218,10 @@ void eject_disk(Disk *dsk);
 void kegs_file_copy(char *orig_name, char *new_name);
 void eject_disk_by_num(int slot, int drive);
 
+/* joystick_driver.c */
+void joystick_init(void);
+void joystick_update(void);
+
 /* moremem.c */
 void fixup_brks(void);
 void fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
@@ -261,6 +264,12 @@ void io_write(word32 loc, int val, Cyc *cyc_ptr);
 word32 get_lines_since_vbl(double dcycs);
 int in_vblank(double dcycs);
 int read_vid_counters(int loc, double dcycs);
+
+/* paddles.c */
+void paddle_trigger(double dcycs);
+int paddle_trigger_mouse(double dcycs);
+int paddle_trigger_linux(double dcycs);
+int read_paddles(int paddle, double dcycs);
 
 /* sim65816.c */
 void show_pc_log(void);
