@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.338 2003-11-18 17:35:43-05 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.343 2003-11-21 15:18:00-05 kentd Exp $";
 
 #include <math.h>
 
@@ -102,9 +102,10 @@ int	g_code_red = 0;
 int	g_code_yellow = 0;
 int	g_use_alib = 0;
 int	g_raw_serial = 1;
+int	g_serial_out_masking = 0;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.83";
+const char g_kegs_version_str[] = "0.84";
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
@@ -149,7 +150,7 @@ int Verbose = 0;
 int Halt_on = 0;
 
 word32 g_mem_size_base = 256*1024;	/* size of motherboard memory */
-word32 g_mem_size_exp = 4*1024*1024;	/* size of expansion RAM card */
+word32 g_mem_size_exp = 8*1024*1024;	/* size of expansion RAM card */
 word32 g_mem_size_total = 256*1024;	/* Total contiguous RAM from 0 */
 
 extern word32 slow_mem_changed[];
@@ -1228,7 +1229,6 @@ double	g_dtime_this_vbl_array[60];
 double	g_dtime_exp_array[60];
 double	g_dtime_pmhz_array[60];
 double	g_dtime_eff_pmhz_array[60];
-int	speed_changed = 0;
 int	g_limit_speed = 0;
 double	sim_time[60];
 double	g_sim_sum = 0.0;
@@ -1236,6 +1236,9 @@ double	g_sim_sum = 0.0;
 double	g_cur_sim_dtime = 0.0;
 double	g_projected_pmhz = 1.0;
 double	g_zip_pmhz = 8.0;
+double	g_sim_mhz = 100.0;
+int	g_line_ref_amt = 1;
+int	g_video_line_update_interval = 0;
 
 Fplus	g_recip_projected_pmhz_slow;
 Fplus	g_recip_projected_pmhz_fast;
@@ -1263,11 +1266,13 @@ setup_zip_speeds()
 	mult = 16 - ((g_zipgs_reg_c05a >> 4) & 0xf);
 		// 16 = full speed, 1 = 1/16th speed
 	fmhz = (8.0 * mult) / 16.0;
+#if 0
 	if(mult == 16) {
 		/* increase full speed by 19% to make zipgs freq measuring */
 		/* programs work correctly */
 		fmhz = fmhz * 1.19;
 	}
+#endif
 	frecip = 1.0 / fmhz;
 	g_zip_pmhz = fmhz;
 	g_recip_projected_pmhz_zip.plus_1 = frecip;
@@ -1293,7 +1298,7 @@ run_prog()
 	double	fspeed_mult;
 	double	fcycles_stop;
 	word32	ret;
-	word32	zip_speed, zip_speed_new;
+	word32	zip_speed_0tof, zip_speed_0tof_new;
 	int	zip_en, zip_follow_cps;
 	int	type;
 	int	motor_on;
@@ -1301,9 +1306,8 @@ run_prog()
 	int	iwm_25;
 	int	limit_speed;
 	int	apple35_sel;
-	int	fast;
+	int	fast, zip_speed, faster_than_28, unl_speed;
 	int	this_type;
-	int	unl_speed;
 
 	fflush(stdout);
 
@@ -1319,7 +1323,7 @@ run_prog()
 	g_recip_projected_pmhz_fast.plus_3 = (3.0 / 2.5);
 	g_recip_projected_pmhz_fast.plus_x_minus_1 = (1.98 - (1.0/2.5));
 
-	zip_speed = g_zipgs_reg_c05a & 0xf0;
+	zip_speed_0tof = g_zipgs_reg_c05a & 0xf0;
 	setup_zip_speeds();
 
 	if(g_cur_fplus_ptr == 0) {
@@ -1340,30 +1344,31 @@ run_prog()
 		apple35_sel = g_apple35_sel;
 		zip_en = ((g_zipgs_reg_c05b & 0x10) == 0);
 		zip_follow_cps = ((g_zipgs_reg_c059 & 0x8) != 0);
-		zip_speed_new = g_zipgs_reg_c05a & 0xf0;
+		zip_speed_0tof_new = g_zipgs_reg_c05a & 0xf0;
 		fast = speed_fast || (zip_en && !zip_follow_cps);
+
+		if(zip_speed_0tof_new != zip_speed_0tof) {
+			zip_speed_0tof = zip_speed_0tof_new;
+			setup_zip_speeds();
+		}
 
 		iwm_1 = motor_on && !apple35_sel &&
 				(g_slot_motor_detect & 0x4) &&
 				(g_slow_525_emul_wr || !g_fast_disk_emul);
 		iwm_25 = (motor_on && apple35_sel) && !g_fast_disk_emul;
-		unl_speed = fast && (!iwm_1 && !iwm_25) && (limit_speed == 0) &&
-			zip_en;
+		faster_than_28 = fast && (!iwm_1 && !iwm_25) && zip_en &&
+			((limit_speed == 0) || (limit_speed == 3));
+		zip_speed = faster_than_28 &&
+			((zip_speed_0tof != 0) || (limit_speed == 3) ||
+							(g_zipgs_unlock >= 4) );
+		unl_speed = faster_than_28 && !zip_speed;
 		if(unl_speed) {
-			/* unlimited speed, or zip speed */
-			if(zip_speed_new != zip_speed) {
-				zip_speed = zip_speed_new;
-				setup_zip_speeds();
-			}
-			if(zip_speed != 0 || (g_zipgs_unlock >= 4)) {
-				/* use slowed-down zip speed */
-				fspeed_mult = g_zip_pmhz;
-				fplus_ptr = &g_recip_projected_pmhz_zip;
-			} else {
-				/* use unlimited speed */
-				fspeed_mult = g_projected_pmhz;
-				fplus_ptr = &g_recip_projected_pmhz_unl;
-			}
+			/* use unlimited speed */
+			fspeed_mult = g_projected_pmhz;
+			fplus_ptr = &g_recip_projected_pmhz_unl;
+		} else if(zip_speed) {
+			fspeed_mult = g_zip_pmhz;
+			fplus_ptr = &g_recip_projected_pmhz_zip;
 		} else if(fast && !iwm_1 && !(limit_speed == 1)) {
 			fspeed_mult = 2.5;
 			fplus_ptr = &g_recip_projected_pmhz_fast;
@@ -1750,10 +1755,11 @@ update_60hz(double dcycs, double dtime_now)
 	if(prev_vbl_index == 0) {
 		if(g_sim_sum < (1.0/250.0)) {
 			sim_mhz_ptr = "???";
+			g_sim_mhz = 250.0;
 		} else {
-			sprintf(sim_mhz_buf, "%6.2f",
-				(dadj_cycles_1sec / g_sim_sum) /
-							(1000.0*1000.0));
+			g_sim_mhz = (dadj_cycles_1sec / g_sim_sum) /
+							(1000.0*1000.0);
+			sprintf(sim_mhz_buf, "%6.2f", g_sim_mhz);
 			sim_mhz_ptr = sim_mhz_buf;
 		}
 		if(dtime_diff_1sec < (1.0/250.0)) {
@@ -1768,6 +1774,7 @@ update_60hz(double dcycs, double dtime_now)
 		switch(g_limit_speed) {
 		case 1:	sp_str = "1Mhz"; break;
 		case 2:	sp_str = "2.8Mhz"; break;
+		case 3:	sp_str = "8.0Mhz"; break;
 		default: sp_str = "Unlimited"; break;
 		}
 
@@ -1778,20 +1785,30 @@ update_60hz(double dcycs, double dtime_now)
 			sp_str);
 		video_update_status_line(0, status_buf);
 
+		if(g_video_line_update_interval == 0) {
+			if(g_sim_mhz > 12.0) {
+				/* just set video line_ref_amt to 1 */
+				g_line_ref_amt = 1;
+			} else if(g_line_ref_amt == 1 && g_sim_mhz < 4.0) {
+				g_line_ref_amt = 8;
+			}
+		} else {
+			g_line_ref_amt = g_video_line_update_interval;
+		}
+
 		if(g_dnatcycs_1sec < (1000.0*1000.0)) {
 			/* make it so large that all %'s become 0 */
 			g_dnatcycs_1sec = 800.0*1000.0*1000.0*1000.0;
 		}
 		dnatcycs_1sec = g_dnatcycs_1sec / 100.0; /* eff mult by 100 */
 
-		dtmp1 = (double)(g_cycs_in_xredraw) / dnatcycs_1sec;
 		dtmp2 = (double)(g_cycs_in_check_input) / dnatcycs_1sec;
 		dtmp3 = (double)(g_cycs_in_refresh_line) / dnatcycs_1sec;
 		dtmp4 = (double)(g_cycs_in_refresh_ximage) / dnatcycs_1sec;
-		sprintf(status_buf, "xfer:%08x, %5.1f xred_cs:%4.1f%% "
+		sprintf(status_buf, "xfer:%08x, %5.1f ref_amt:%d "
 			"ch_in:%4.1f%% ref_l:%4.1f%% ref_x:%4.1f%%",
 			g_refresh_bytes_xfer, g_dnatcycs_1sec/(1000.0*1000.0),
-			dtmp1, dtmp2, dtmp3, dtmp4);
+			g_line_ref_amt, dtmp2, dtmp3, dtmp4);
 		video_update_status_line(1, status_buf);
 
 		sprintf(status_buf, "Ints:%3d I/O:%4dK BRK:%3d COP:%2d "

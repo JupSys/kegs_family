@@ -8,12 +8,13 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_scc_socket_driver_c[] = "@(#)$KmKId: scc_socket_driver.c,v 1.2 2003-09-20 15:02:27-04 kentd Exp $";
+const char rcsid_scc_socket_driver_c[] = "@(#)$KmKId: scc_socket_driver.c,v 1.4 2003-11-20 23:43:41-05 kentd Exp $";
 
 /* This file contains the Unix socket calls */
 
 #include "defc.h"
 #include "scc.h"
+#include <signal.h>
 
 extern Scc scc_stat[2];
 
@@ -23,11 +24,11 @@ scc_socket_init(int port)
 #ifdef SCC_SOCKETS
 	Scc	*scc_ptr;
 	struct sockaddr_in sa_in;
+	int	on;
+	int	flags;
 	int	ret;
 	int	sockfd;
 	int	inc;
-
-	int	on;
 
 	inc = 0;
 
@@ -80,14 +81,14 @@ scc_socket_init(int port)
 
 	ret = listen(sockfd, 1);
 
-	on = 1;
-# ifdef FIOSNBIO
-	ret = ioctl(sockfd, FIOSNBIO, (char *)&on);
-# else
-	ret = ioctl(sockfd, FIONBIO, (char *)&on);
-# endif
+	flags = fcntl(sockfd, F_GETFL, 0);
+	if(flags == -1) {
+		printf("fcntl GETFL ret: %d, errno: %d\n", flags, errno);
+		return;
+	}
+	ret = fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 	if(ret == -1) {
-		printf("ioctl ret: %d, errno: %d\n", ret,errno);
+		printf("fcntl SETFL ret: %d, errno: %d\n", ret, errno);
 		return;
 	}
 
@@ -108,7 +109,9 @@ scc_accept_socket(int port)
 {
 #ifdef SCC_SOCKETS
 	Scc	*scc_ptr;
+	int	flags;
 	int	rdwrfd;
+	int	ret;
 
 	scc_ptr = &(scc_stat[port]);
 
@@ -118,6 +121,19 @@ scc_accept_socket(int port)
 		if(rdwrfd < 0) {
 			return;
 		}
+
+		/* For Linux, we need to set O_NONBLOCK on the rdwrfd */
+		flags = fcntl(rdwrfd, F_GETFL, 0);
+		if(flags == -1) {
+			printf("fcntl GETFL ret: %d, errno: %d\n", flags,errno);
+			return;
+		}
+		ret = fcntl(rdwrfd, F_SETFL, flags | O_NONBLOCK);
+		if(ret == -1) {
+			printf("fcntl SETFL ret: %d, errno: %d\n", ret, errno);
+			return;
+		}
+
 		scc_ptr->rdwrfd = rdwrfd;
 	}
 #endif
@@ -153,6 +169,10 @@ scc_socket_fill_readbuf(int port, double dcycs)
 			}
 			scc_add_to_readbuf(port, tmp_buf[i], dcycs);
 		}
+	} else if(ret == 0) {
+		/* assume socket close */
+		close(rdwrfd);
+		scc_ptr->rdwrfd = -1;
 	}
 #endif
 }
@@ -161,6 +181,7 @@ void
 scc_socket_empty_writebuf(int port)
 {
 #ifdef SCC_SOCKETS
+	struct sigaction newact, oldact;
 	Scc	*scc_ptr;
 	int	rdptr;
 	int	wrptr;
@@ -198,8 +219,27 @@ scc_socket_empty_writebuf(int port)
 			done = 1;
 			break;
 		}
+
+		/* ignore SIGPIPE around writes to the socket, so we can */
+		/*  catch a closed socket and prepare to re-accept a new */
+		/*  connection.  Otherwise, SIGPIPE kills KEGS */
+		sigemptyset(&newact.sa_mask);
+		newact.sa_handler = SIG_IGN;
+		newact.sa_flags = 0;
+		sigaction(SIGPIPE, &newact, &oldact);
+		
 		ret = write(rdwrfd, &(scc_ptr->out_buf[rdptr]), len);
-		if(ret <= 0) {
+
+		sigaction(SIGPIPE, &oldact, 0);
+			/* restore previous SIGPIPE behavior */
+
+		if(ret == 0) {
+			done = 1;	/* give up for now */
+			break;
+		} else if(ret < 0) {
+			/* assume socket is dead */
+			close(rdwrfd);
+			scc_ptr->rdwrfd = -1;
 			done = 1;
 			break;
 		} else {

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.230 2003-11-19 19:53:04-05 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.232 2003-11-21 14:45:42-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -30,7 +30,6 @@ extern word32 g_breakpts[];
 
 extern int halt_sim;
 extern double g_last_vbl_dcycs;
-extern int speed_changed;
 
 extern Page_info page_info_rd_wr[];
 
@@ -1802,8 +1801,6 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x36: /* 0xc036 = CYAREG */
 			tmp = (val>>7) & 1;
 			if(speed_fast != tmp) {
-				speed_changed++;
-
 				/* to recalculate times */
 				set_halt(HALT_EVENT);
 			}
@@ -1828,9 +1825,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			}
 			return;
 		case 0x37: /* 0xc037 */
-			if(val != 0) {
-				UNIMPL_WRITE;
-			}
+			/* just ignore, probably someone writing c036 m=0 */
 			return;
 		case 0x38: /* 0xc038 */
 			scc_write_reg(1, val, dcycs);
@@ -2051,9 +2046,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			set_statereg(dcycs, val);
 			return;
 		case 0x69: /* 0xc069 */
-			if(val != 0) {
-				halt_printf("Writing c069 with %02x\n",val);
-			}
+			/* just ignore, someone writing c068 with m=0 */
 			return;
 		case 0x6a: /* 0xc06a */
 		case 0x6b: /* 0xc06b */

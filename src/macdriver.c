@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_macdriver_c[] = "@(#)$KmKId: macdriver.c,v 1.16 2003-10-20 22:45:54-04 kentd Exp $";
+const char rcsid_macdriver_c[] = "@(#)$KmKId: macdriver.c,v 1.18 2003-11-20 23:50:45-05 kentd Exp $";
 
 // Quartz: CreateCGContextForPort vs QDBeginCGContext
 
@@ -192,6 +192,9 @@ my_cmd_handler( EventHandlerCallRef handlerRef, EventRef event, void *userdata)
 		osresult = noErr;
 		break;
 	case 'quit':
+		break;
+	case 'swin':
+		/* not sure what this is, but Panther sends it */
 		break;
 	default:
 		printf("commandID %08x unknown\n", command_id);

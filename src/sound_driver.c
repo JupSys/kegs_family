@@ -8,14 +8,13 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sound_driver_c[] = "@(#)$KmKId: sound_driver.c,v 1.14 2003-10-17 15:07:55-04 kentd Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$KmKId: sound_driver.c,v 1.15 2003-11-21 14:47:53-05 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"
 
 #ifdef HPUX
 # include <sys/audio.h>
-# include "Alib.h"
 #endif
 
 #if defined(__linux__) || defined(OSS)
@@ -37,10 +36,6 @@ extern int g_audio_rate;
 int	g_preferred_rate = 48000;
 int	g_audio_socket = -1;
 int	g_bytes_written = 0;
-#ifdef HPUX
-Audio	*g_audio = 0;
-ATransID g_xid;
-#endif
 
 #define ZERO_BUF_SIZE		2048
 
@@ -136,11 +131,7 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
 	g_childsnd_shm_addr = shm_addr;
 
 #ifdef HPUX
-	if(g_use_alib) {
-		child_sound_init_alib();
-	} else {
-		child_sound_init_hpdev();
-	}
+	child_sound_init_hpdev();
 #endif
 #if defined(__linux__) || defined(OSS)
 	child_sound_init_linux();
@@ -178,11 +169,7 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
 	}
 
 #ifdef HPUX
-	if(g_use_alib) {
-		ACloseAudio(g_audio, &status_return);
-	} else {
-		ioctl(g_audio_socket, AUDIO_DRAIN, 0);
-	}
+	ioctl(g_audio_socket, AUDIO_DRAIN, 0);
 #endif
 	close(g_audio_socket);
 
@@ -366,97 +353,6 @@ child_sound_init_hpdev()
 }
 
 
-void
-child_sound_init_alib()
-{
-	AOutputChMask	chan_mask;
-	AOutputDstMask	dest_mask;
-	AudioAttributes attr;
-	AudioAttributes *attr_ptr;
-	SSPlayParams	play_params;
-	SStream		audio_stream;
-	AGainEntry	gain_entries[2];
-	long		status_return;
-	char	*str;
-	int	speaker;
-	int	ret;
-
-	status_return = 0;
-	g_audio = AOpenAudio((char *)0, &status_return);
-	if(g_audio == (Audio *)0) {
-		printf("AopenAudio failed, ret: %ld\n", status_return);
-		exit(1);
-	}
-
-	chan_mask = AOutputChannels(g_audio);
-	doc_printf("Output channel mask: %08x\n", (word32)chan_mask);
-
-	dest_mask = AOutputDestinations(g_audio);
-	doc_printf("Output destinations mask: %08x\n", (word32)dest_mask);
-
-	attr_ptr = ABestAudioAttributes(g_audio);
-	attr = *attr_ptr;
-
-	attr.attr.sampled_attr.data_format = ADFLin16;
-	attr.attr.sampled_attr.bits_per_sample = 8*SAMPLE_SIZE;
-	attr.attr.sampled_attr.sampling_rate = g_audio_rate;
-	attr.attr.sampled_attr.channels = NUM_CHANNELS;
-	attr.attr.sampled_attr.interleave = 1;
-	attr.attr.sampled_attr.duration.type = ATTFullLength;
-
-	gain_entries[0].u.o.out_ch = AOCTLeft;
-	gain_entries[1].u.o.out_ch = AOCTLeft;
-	gain_entries[0].gain = AUnityGain;
-	gain_entries[1].gain = AUnityGain;
-
-	speaker = 1;
-	str = getenv("SPEAKER");
-	if(str) {
-		if(str[0] != 'i' && str[0] != 'I') {
-			speaker = 0;
-		}
-	}
-
-	if(speaker) {
-		printf("Sending sound to internal speaker\n");
-		gain_entries[0].u.o.out_dst = AODTLeftIntSpeaker;
-		gain_entries[1].u.o.out_dst = AODTRightIntSpeaker;
-	} else {
-		printf("Sending sound to external jack\n");
-		gain_entries[0].u.o.out_dst = AODTLeftJack;
-		gain_entries[1].u.o.out_dst = AODTRightJack;
-	}
-
-	play_params.gain_matrix.type = AGMTOutput;
-	play_params.gain_matrix.num_entries = NUM_CHANNELS;
-	play_params.gain_matrix.gain_entries = &(gain_entries[0]);
-	play_params.play_volume = AUnityGain;
-	play_params.priority = APriorityNormal;
-	play_params.event_mask = 0;
-
-	g_xid = APlaySStream(g_audio, -1, &attr, &play_params, &audio_stream,
-		&status_return);
-
-	doc_printf("g_xid: %ld, status_return: %ld\n", (long)g_xid,
-		status_return);
-
-	g_audio_socket = socket(AF_INET, SOCK_STREAM, 0);
-	if(g_audio_socket < 0) {
-		printf("socket create, errno: %d\n", errno);
-		exit(1);
-	}
-
-	doc_printf("g_audio_socket: %d\n", g_audio_socket);
-
-	ret = connect(g_audio_socket,
-			(struct sockaddr *)&audio_stream.tcp_sockaddr,
-			sizeof(struct sockaddr_in) );
-
-	if(ret < 0) {
-		printf("connect failed, errno: %d\n", errno);
-		exit(1);
-	}
-}
 #endif
 
 #if defined(__linux__) || defined(OSS)

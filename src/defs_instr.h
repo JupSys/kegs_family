@@ -13,7 +13,7 @@
 	.data
 	.export rcsdif_defs_instr_h,data
 rcsdif_defs_instr_h
-	.stringz "@(#)$KmKId: defs_instr.h,v 1.55 2002-11-20 01:17:03-05 kadickey Exp $"
+	.stringz "@(#)$KmKId: defs_instr.h,v 1.56 2003-11-21 14:47:16-05 kentd Exp $"
 	.code
 # endif
 
@@ -233,14 +233,14 @@ defs_instr_start_16	.word	0
 # ifdef ACC8
 #  define GET_ABS_RD()				\
 	GET_2BYTE_ARG;				\
-	GET_MEMORY8((dbank << 16) + arg, arg);	\
 	CYCLES_PLUS_1;				\
+	GET_MEMORY8((dbank << 16) + arg, arg);	\
 	INC_KPC_3;
 # else
 #  define GET_ABS_RD()				\
 	GET_2BYTE_ARG;				\
-	GET_MEMORY16((dbank << 16) + arg, arg);	\
 	CYCLES_PLUS_1;				\
+	GET_MEMORY16((dbank << 16) + arg, arg);	\
 	INC_KPC_3;
 # endif
 #endif
@@ -275,14 +275,14 @@ defs_instr_start_16	.word	0
 # ifdef ACC8
 #  define GET_LONG_RD()				\
 	GET_3BYTE_ARG;				\
-	GET_MEMORY8(arg, arg);			\
 	CYCLES_PLUS_2;				\
+	GET_MEMORY8(arg, arg);			\
 	INC_KPC_4;
 # else
 #  define GET_LONG_RD()				\
 	GET_3BYTE_ARG;				\
-	GET_MEMORY16(arg, arg);			\
 	CYCLES_PLUS_2;				\
+	GET_MEMORY16(arg, arg);			\
 	INC_KPC_4;
 # endif
 #endif

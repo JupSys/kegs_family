@@ -9,17 +9,12 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_sound_h[] = "@(#)$KmKId: sound.h,v 1.16 2002-11-19 12:10:37-05 kadickey Exp $";
+const char rcsid_sound_h[] = "@(#)$KmKId: sound.h,v 1.17 2003-11-21 15:15:57-05 kentd Exp $";
 #endif
 
 #if !defined(_WIN32) && !defined(__CYGWIN__)
-# if defined(HPUX)
-#  include <ipc.h>
-#  include <shm.h>
-# else
-#  include <sys/ipc.h>
-#  include <sys/shm.h>
-# endif
+# include <sys/ipc.h>
+# include <sys/shm.h>
 #endif
 
 #define SOUND_SHM_SAMP_SIZE		(32*1024)

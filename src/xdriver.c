@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.178 2003-11-04 21:54:24-05 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.180 2003-11-21 00:21:45-05 kentd Exp $";
 
 # if !defined(__CYGWIN__) && !defined(__POWERPC__)
 /* No shared memory on Cygwin */
@@ -29,6 +29,7 @@ const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.178 2003-11-04 21:54:2
 #endif
 
 int XShmQueryExtension(Display *display);
+void _XInitImageFuncPtrs(XImage *xim);
 
 #include "defc.h"
 #include "protos_xdriver.h"
@@ -868,6 +869,13 @@ get_ximage(Kimage *kimage_ptr)
 
 	xim = XCreateImage(g_display, g_vis, depth, ZPixmap, 0,
 		(char *)ptr, width, height, 8, 0);
+
+#ifdef KEGS_LITTLE_ENDIAN
+	xim->byte_order = LSBFirst;
+#else
+	xim->byte_order = MSBFirst;
+#endif
+	_XInitImageFuncPtrs(xim);	/* adjust to new byte order */
 
 	/* check mdepth! */
 	if(xim->bits_per_pixel != mdepth) {

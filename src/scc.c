@@ -8,13 +8,15 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$KmKId: scc.c,v 1.35 2003-09-20 15:02:16-04 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$KmKId: scc.c,v 1.38 2003-11-20 23:50:32-05 kentd Exp $";
 
 #include "defc.h"
 
 extern int Verbose;
+extern int g_code_yellow;
 extern double g_cur_dcycs;
 extern int g_raw_serial;
+extern int g_serial_out_masking;
 
 /* my scc port 0 == channel A = slot 1 */
 /*        port 1 == channel B = slot 2 */
@@ -36,6 +38,8 @@ Scc	scc_stat[2];
 int g_baud_table[] = {
 	110, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200
 };
+
+int g_scc_overflow = 0;
 
 void
 scc_init()
@@ -1027,8 +1031,13 @@ scc_add_to_readbuf(int port, word32 val, double dcycs)
 		scc_printf("scc in port[%d] add char 0x%02x, %d,%d != %d\n",
 				scc_ptr->port, val,
 				in_wrptr, in_wrptr_next, in_rdptr);
+		g_scc_overflow = 0;
 	} else {
-		halt_printf("scc inbuf overflow port %d\n", scc_ptr->port);
+		if(g_scc_overflow == 0) {
+			g_code_yellow++;
+			printf("scc inbuf overflow port %d\n", port);
+		}
+		g_scc_overflow = 1;
 	}
 
 	scc_maybe_rx_event(port, dcycs);
@@ -1068,14 +1077,23 @@ scc_add_to_writebuf(int port, word32 val, double dcycs)
 			return;
 		}
 	}
+	if(g_serial_out_masking) {
+		val = val & 0x7f;
+	}
+
 	out_wrptr_next = (out_wrptr + 1) & (SCC_OUTBUF_SIZE - 1);
 	if(out_wrptr_next != out_rdptr) {
 		scc_ptr->out_buf[out_wrptr] = val;
 		scc_ptr->out_wrptr = out_wrptr_next;
 		scc_printf("scc wrbuf port %d had char 0x%02x added\n",
 			scc_ptr->port, val);
+		g_scc_overflow = 0;
 	} else {
-		halt_printf("scc outbuf overflow port %d\n", scc_ptr->port);
+		if(g_scc_overflow == 0) {
+			g_code_yellow++;
+			printf("scc outbuf overflow port %d\n", port);
+		}
+		g_scc_overflow = 1;
 	}
 }
 

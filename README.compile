@@ -90,6 +90,16 @@ the "PERL = perl" line in the vars file and make it point to the correct place.
 Audio is currently disabled by default, but you can try turning it on
 by runnning "kegs -audio 1".
 
+HP-UX assembly-emulation instructions:
+-------------------------------------
+
+Use the vars_hp vars file by:
+
+rm vars; ln -s vars_hp vars
+
+Edit the Makefile, and remove "engine_c.o" from the "OBJECTS1=" line at
+the top.  Then just type "make".
+
 
 Other platform "C" build instructions:
 -------------------------------------

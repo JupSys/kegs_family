@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.49 2003-11-04 21:52:39-05 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.50 2003-11-21 14:46:16-05 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -86,6 +86,7 @@ int bogus[] = {
 		tmp_pc_ptr->stack_direct = (stack << 16) + direct;	\
 		tmp_pc_ptr->dcycs = fcycles + g_last_vbl_dcycs - fplus_2; \
 		if(log_pc_ptr >= log_pc_end_ptr) {			\
+			/*halt2_printf("log_pc oflow %f\n", tmp_pc_ptr->dcycs);*/ \
 			log_pc_ptr = log_pc_start_ptr;			\
 		}
 
@@ -311,7 +312,7 @@ extern word32 slow_mem_changed[];
 			&fcycles_tmp1, fplus_ptr);			\
 		fcycles = fcycles_tmp1;					\
 	} else {							\
-		CYCLES_PLUS_2;						\
+		CYCLES_PLUS_3;						\
 		ptr[0] = (val);						\
 		ptr[1] = (val) >> 8;					\
 		ptr[2] = (val) >> 16;					\

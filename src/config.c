@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.24 2003-11-18 17:36:07-05 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.30 2003-11-21 16:38:53-05 kentd Exp $";
 
 #include "defc.h"
 #include <stdarg.h>
@@ -29,9 +29,12 @@ extern double g_cur_dcycs;
 
 extern word32 g_adb_repeat_vbl;
 
+extern int g_limit_speed;
 extern int g_force_depth;
 extern int g_raw_serial;
+extern int g_serial_out_masking;
 extern word32 g_mem_size_exp;
+extern int g_video_line_update_interval;
 
 extern int g_screen_index[];
 extern word32 g_full_refresh_needed;
@@ -68,7 +71,7 @@ int	g_cfg_curs_y = 0;
 int	g_cfg_curs_inv = 0;
 int	g_cfg_curs_mousetext = 0;
 
-#define CFG_MAX_OPTS	8
+#define CFG_MAX_OPTS	16
 #define CFG_OPT_MAXSTR	100
 
 int g_cfg_opts_vals[CFG_MAX_OPTS];
@@ -111,11 +114,18 @@ Cfg_menu g_cfg_main_menu[] = {
 { "Force X-windows display depth", KNMP(g_force_depth), CFGTYPE_INT },
 { "Auto-update config.kegs,0,Manual,1,Immediately",
 		KNMP(g_config_kegs_auto_update), CFGTYPE_INT },
+{ "Speed,0,Unlimited,1,1.0MHz,2,2.8MHz,3,8.0MHz (Zip)",
+		KNMP(g_limit_speed), CFGTYPE_INT },
 { "Expansion Mem Size,0,0MB,0x100000,1MB,0x200000,2MB,0x300000,3MB,"
 	"0x400000,4MB,0x600000,6MB,0x800000,8MB,0xa00000,10MB,0xc00000,12MB,"
 	"0xe00000,14MB", KNMP(g_mem_size_exp), CFGTYPE_INT },
 { "Serial Ports,0,Only use sockets 6501-6502,1,Use real ports if avail",
 		KNMP(g_raw_serial), CFGTYPE_INT },
+{ "Serial Output,0,Send full 8-bit data,1,Mask off high bit",
+		KNMP(g_serial_out_masking), CFGTYPE_INT },
+{ "3200 Color Enable,0,Auto (Full if fast enough),1,Full (Update every line),"
+	"8,Off (Update video every 8 lines)",
+		KNMP(g_video_line_update_interval), CFGTYPE_INT },
 { "Dump text screen to file", (void *)cfg_text_screen_dump, 0, 0, CFGTYPE_FUNC},
 { "", 0, 0, 0, 0 },
 { "Save changes to config.kegs", (void *)config_write_config_kegs_file, 0, 0, 
@@ -1389,7 +1399,7 @@ cfg_putchar(int c)
 	if(g_cfg_curs_mousetext) {
 		c = (c & 0x1f) | 0x40;
 	}
-	set_memory_c(0x400 + offset + (x >> 1), c, 0);
+	set_memory_c(0xe00400 + offset + (x >> 1), c, 0);
 	x++;
 	if(x >= 80) {
 		x = 0;
@@ -1539,6 +1549,10 @@ cfg_parse_menu(Cfg_menu *menu_ptr, int menu_pos, int highlight_pos, int change)
 		}
 		outstr[outpos++] = c;
 		outstr[outpos] = 0;
+		if(outpos >= CFG_OPT_MAXSTR) {
+			fprintf(stderr, "CFG_OPT_MAXSTR exceeded\n");
+			my_exit(1);
+		}
 		if(c == 0) {
 			if(opt_get_str == 2) {
 				outstr = &(valbuf[0]);
@@ -1556,6 +1570,10 @@ cfg_parse_menu(Cfg_menu *menu_ptr, int menu_pos, int highlight_pos, int change)
 				num_opts++;
 				outstr = &(valbuf[0]);
 				opt_get_str = 0;
+				if(num_opts >= CFG_MAX_OPTS) {
+					fprintf(stderr, "CFG_MAX_OPTS oflow\n");
+					my_exit(1);
+				}
 			} else {
 				val = strtoul(valbuf, 0, 0);
 				g_cfg_opts_vals[num_opts] = val;
@@ -1668,6 +1686,7 @@ cfg_get_base_path(char *pathptr, const char *inptr, int go_up)
 	char	*slashptr;
 	char	*outptr;
 	int	add_dotdot, is_dotdot;
+	int	len;
 	int	c;
 
 	/* Take full filename, copy it to pathptr, and truncate at last slash */
@@ -1711,6 +1730,12 @@ cfg_get_base_path(char *pathptr, const char *inptr, int go_up)
 			tmpptr = pathptr;
 		}
 		strncpy(&g_cfg_file_match[0], tmpptr, CFG_PATH_MAX);
+		/* remove trailing / from g_cfg_file_match */
+		len = strlen(&g_cfg_file_match[0]);
+		if((len > 1) && (len < (CFG_PATH_MAX - 1)) &&
+					g_cfg_file_match[len - 1] == '/') {
+			g_cfg_file_match[len - 1] = 0;
+		}
 		//printf("set g_cfg_file_match to %s\n", &g_cfg_file_match[0]);
 	}
 	if(!is_dotdot && (slashptr != 0)) {
@@ -1843,6 +1868,35 @@ cfg_dirent_sortfn(const void *obj1, const void *obj2)
 	return strcmp(direntptr1->name, direntptr2->name);
 }
 
+int
+cfg_str_match(const char *str1, const char *str2, int len)
+{
+	const byte *bptr1, *bptr2;
+	int	c, c2;
+	int	i;
+
+	/* basically, work like strcmp, except if str1 ends first, return 0 */
+
+	bptr1 = (const byte *)str1;
+	bptr2 = (const byte *)str2;
+	for(i = 0; i < len; i++) {
+		c = *bptr1++;
+		c2 = *bptr2++;
+		if(c == 0) {
+			if(i > 0) {
+				return 0;
+			} else {
+				return c - c2;
+			}
+		}
+		if(c != c2) {
+			return c - c2;
+		}
+	}
+
+	return 0;
+}
+
 void
 cfg_file_readdir(const char *pathptr)
 {
@@ -1954,9 +2008,10 @@ cfg_file_readdir(const char *pathptr)
 	qsort(&(g_cfg_dirlist.direntptr[0]), g_cfg_dirlist.last,
 					sizeof(Cfg_dirent), cfg_dirent_sortfn);
 
-	for(i = 0; i < g_cfg_dirlist.last; i++) {
-		ret = strncmp(g_cfg_dirlist.direntptr[i].name,
-					&g_cfg_file_match[0], CFG_PATH_MAX);
+	g_cfg_dirlist.curent = g_cfg_dirlist.last - 1;
+	for(i = g_cfg_dirlist.last - 1; i >= 0; i--) {
+		ret = cfg_str_match(&g_cfg_file_match[0],
+				g_cfg_dirlist.direntptr[i].name, CFG_PATH_MAX);
 		if(ret <= 0) {
 			/* set cur ent to closest filename to the match name */
 			g_cfg_dirlist.curent = i;
@@ -2247,10 +2302,15 @@ cfg_file_handle_key(int key)
 	if(g_cfg_select_partition > 0) {
 		listhdrptr = &g_cfg_partitionlist;
 	}
+	if( (g_cfg_file_pathfield == 0) &&
+		 ((key >= 'a' && key <= 'z') || (key >= 'A' && key <= 'Z')) ) {
+		/* jump to file starting with this letter */
+		g_cfg_file_match[0] = key;
+		g_cfg_file_match[1] = 0;
+		g_cfg_dirlist.invalid = 1;	/* re-read directory */
+	}
 
 	switch(key) {
-	case 'e':
-	case 'E':
 	case 0x1b:
 		eject_disk_by_num(g_cfg_slotdrive >> 8, g_cfg_slotdrive & 0xff);
 		g_cfg_slotdrive = -1;
@@ -2390,9 +2450,11 @@ config_control_panel()
 		cfg_htab_vtab(0, 23);
 		cfg_printf("Move: \tJ\t \tK\t Change: \tH\t \tU\t \tM\t");
 		if(print_eject_help) {
-			cfg_printf("   Eject: E");
+			cfg_printf("   Eject: ");
 			if(g_cfg_slotdrive >= 0) {
-				cfg_printf(" or \bESC\b");
+				cfg_printf("\bESC\b");
+			} else {
+				cfg_printf("E");
 			}
 		}
 #if 0
@@ -2417,7 +2479,7 @@ config_control_panel()
 			} else {
 				key = -1;
 			}
-			micro_sleep(2.0/60.0);
+			micro_sleep(1.0/60.0);
 			g_cfg_vbl_count++;
 			if(!match_found) {
 				break;
@@ -2483,8 +2545,8 @@ config_control_panel()
 	}
 
 	for(i = 0; i < 0x400; i++) {
-		set_memory_c(0x400+i, g_save_text_screen_bytes[i], 0);
-		set_memory_c(0x10400+i, g_save_text_screen_bytes[0x400+i], 0);
+		set_memory_c(0xe00400+i, g_save_text_screen_bytes[i], 0);
+		set_memory_c(0xe10400+i, g_save_text_screen_bytes[0x400+i], 0);
 	}
 
 	// And quit

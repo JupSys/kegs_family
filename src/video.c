@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.121 2003-11-06 21:54:39-05 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.124 2003-11-21 14:45:06-05 kentd Exp $";
 
 #include <time.h>
 
@@ -43,6 +43,8 @@ extern int g_screen_mdepth;
 
 extern int statereg;
 extern double g_cur_dcycs;
+
+extern int g_line_ref_amt;
 
 extern int g_border_color;
 extern int g_config_control_panel;
@@ -397,24 +399,21 @@ video_init()
 			next2_col = (i >> (3 + j)) & 0xf;
 			next3_col = (i >> (4 + j)) & 0xf;
 			cur_col = (((cur_col << 4) + cur_col) >> (3 - j)) & 0xf;
-			if(cur_col == match_col) {
-				col[j] = cur_col;
-			} else {
-				if((cur_col == 0xf) || (next_col == 0xf) ||
+
+			if((cur_col == 0xf) || (next_col == 0xf) ||
 							(next2_col == 0xf) ||
 							(next3_col == 0xf)) {
-					cur_col = 0xf;
-					col[j] = cur_col;
-					match_col = cur_col;
-				} else if((cur_col == 0) || (next_col == 0) ||
+				cur_col = 0xf;
+				col[j] = cur_col;
+				match_col = cur_col;
+			} else if((cur_col == 0) || (next_col == 0) ||
 					(next2_col == 0) || (next3_col == 0)) {
-					cur_col = 0;
-					col[j] = cur_col;
-					match_col = cur_col;
-				} else {
-					col[j] = cur_col;
-					match_col = cur_col;
-				}
+				cur_col = 0;
+				col[j] = cur_col;
+				match_col = cur_col;
+			} else {
+				col[j] = cur_col;
+				match_col = cur_col;
 			}
 		}
 		if(g_use_dhr140) {
@@ -2623,7 +2622,7 @@ video_update_event_line(int line)
 
 	video_update_through_line(line);
 
-	new_line = line + 1;
+	new_line = line + g_line_ref_amt;
 	if(new_line < 200) {
 		if(!g_config_control_panel) {
 			add_event_vid_upd(new_line);

@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_scc_h[] = "@(#)$KmKId: scc.h,v 1.11 2003-11-03 01:49:29-05 kentd Exp $";
+const char rcsid_scc_h[] = "@(#)$KmKId: scc.h,v 1.12 2003-11-21 00:27:00-05 kentd Exp $";
 #endif
 
 #ifdef _WIN32
@@ -19,7 +19,7 @@ const char rcsid_scc_h[] = "@(#)$KmKId: scc.h,v 1.11 2003-11-03 01:49:29-05 kent
 # include <netinet/in.h>
 #endif
 
-#if defined(HPUX) || defined(__linux__) || defined(SOLARIS) || defined(MAC)
+#if defined(HPUX) || defined(__linux__) || defined(SOLARIS) || defined(MAC) || defined(__MACH__)
 # define SCC_SOCKETS
 #endif
 

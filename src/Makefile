@@ -1,4 +1,4 @@
-# $Id: release_makefile_base,v 1.14 2003/11/05 03:00:13 kentd Exp $
+# $Id: release_makefile_base,v 1.15 2003/11/21 20:00:42 kentd Exp $
 
 OBJECTS1 = adb.o clock.o config.o dis.o engine_c.o scc.o iwm.o \
 	joystick_driver.o moremem.o paddles.o sim65816.o smartport.o \
@@ -62,8 +62,24 @@ kegswin.exe: $(OBJECTS) compile_time.o
 size_c.h: size_tab.h
 	$(PERL) make_size c size_tab.h > size_c.h
 
-
 engine_c.o: 8inst_c.h 16inst_c.h size_c.h
+
+8inst_s.h: instable.h
+	$(PERL) make_inst s 8 instable.h > 8inst_s.h
+
+16inst_s.h: instable.h
+	$(PERL) make_inst s 16 instable.h > 16inst_s.h
+
+size_s.h: size_tab.h
+	$(PERL) make_size s size_tab.h > size_s.h
+
+8size_s.h: size_tab.h
+	$(PERL) make_size 8 size_tab.h > 8size_s.h
+
+16size_s.h: size_tab.h
+	$(PERL) make_size 16 size_tab.h > 16size_s.h
+
+engine_s.o: 8inst_s.h 16inst_s.h 8size_s.h 16size_s.h size_s.h
 
 .s.o:
 	$(AS) -c $(OPTS) -I. $*.s

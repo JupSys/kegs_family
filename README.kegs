@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.82
+KEGS: Kent's Emulated GS version 0.84
 http://kegs.sourceforge.net/
 
 What is this?
@@ -24,7 +24,7 @@ KEGS features:
 -------------
 
 Fast 65816 emulation:
-	About 80MHz on a P4 1.7GHz, and about 70MHz on a G4 1GHz.
+	About 80MHz on a P4 1.7GHz or a G4 1GHz.
 Emulates low-level 5.25" and 3.5" drive accesses (even nibble-copiers work!).
 Emulates classic Apple II sound and 32-voice Ensoniq sound.
 	All sound is played in 16-bit stereo at 48KHz (44100 on a Mac).
@@ -40,7 +40,7 @@ Emulated battery RAM remembers control panel settings.
 Limited SCC (serial port) emulation to enable PR#1/2 IN#1/2 and other
 	serial programs to work.
 
-KEGS by default emulates a 4MB Apple IIgs, but you can change this with
+KEGS by default emulates a 8MB Apple IIgs, but you can change this with
 the "-mem" command line option.
 
 KEGS is so accurate, even the built-in ROM selftests pass (you must be in
@@ -83,10 +83,6 @@ Getting ROMs
 You need a copy of the memory from fe/0000 - ff/ffff from a ROM 01 GS
 or fc/0000 - ff/ffff from a ROM 03 GS, and put that in a file called
 "ROM".  I'll eventually write detailed instructions on how to do this.
-
-You may find it convenient to also get a file of the Disk II ROMs
-from a real Apple II Disk II card and place that in "c600.rom".  This
-will improve compatibility with Apple II, II+, and //e programs.
 
 Running KEGS:
 ------------
@@ -178,7 +174,7 @@ F1:	Alias of Command
 F2:	Alias of Option
 F3:	Alias of ESC for OS/2 compatibility.
 F4:	Configuration Panel
-F6:	Toggle through the 3 speeds: Unlimited, 1MHz, 2.8MHz
+F6:	Toggle through the 4 speeds: Unlimited, 1MHz, 2.8MHz, 8.0MHz
 Shift-F6: Enter KEGS debugger
 F7:	Toggle fast_disk_emul on/off
 F8:	Toggle pointer hiding on/off.
@@ -302,8 +298,8 @@ KEGS command-line option summary:
 -mem {mem_amt}: KEGS will use mem_amt as the amount of expansion RAM in
 	the IIgs.  This memory is in addition to the 256KB on a ROM 01
 	motherboard, or 1MB on a ROM 03.  The memory is in bytes,
-	and it will be rounded down to the nearest 64KB.  "-mem 0x400000"
-	will use 4MB of expansion RAM (the default).
+	and it will be rounded down to the nearest 64KB.  "-mem 0x800000"
+	will use 8MB of expansion RAM (the default).
 -badrd:	Causes KEGS to halt on any access to invalid memory addresses.
 	Useful for debugging.  By default, KEGS allows reads to invalid
 	memory since the Finder does some (especially when you open the
@@ -498,8 +494,8 @@ force KEGS to run at 1MHz, and 3.5" drive accesses force KEGS to run at
 KEGS Timing:
 -----------
 
-KEGS supports running at four speeds:  1MHz, 2.8MHz, Zip GS-selected speed.
-Pressing the middle mouse button toggles between these modes.  The 1MHz
+KEGS supports running at four speeds:  1MHz, 2.8MHz, 8.0MHz, and Unlimited.
+Pressing the middle mouse button cycles between these modes.  The 1MHz
 and 2.8MHz speeds force KEGS to run at exactly those speeds, providing
 accurate reproduction of a real Apple IIgs.
 
@@ -534,17 +530,18 @@ faster than 2.8MHz, it takes small pauses to slow down, just like in
 selftests (cmd-option-ctrl-Reset) must run at 2.8MHz.  Many Apple IIgs
 action games are more playable at 2.8MHz.
 
-Letting KEGS run at the Zip GS-selected speed usually means "as fast as
-possible." KEGS will run at whatever speed it is able to, above 1MHz (if
-it falls below 1MHz, it extends the emulated second).  Eff MHz gives you
+The 8.0MHz setting means follow the ZipGS-selected speed, but don't go
+faster than 8.0MHz.  If your host computer cannot keep up, then the
+emulated second will be extended.  You can
+use the ZipGS control panel, or ZIPPY.GS on the sample disk image to
+set the emulated ZipGS speed to anything from 1MHz to 8MHz in .5MHz
+increments.
+
+The Unlimited setting means run as fast as possible, whatever speed that
+is (but always above 1MHz).  Eff MHz gives you
 the current Apple IIgs equivalent speed.  Many games will be unplayable at
 the unlimited setting.  Setting the IIgs control panel speed to "slow"
-will slow down to 1MHz.  But if you use a ZipGS control program (like
-ZIPPY.GS by Andy McFadden) and set the relative speed to less than 100%,
-then KEGS will run at exactly the speed selected.  KEGS emulates an 8MHz
-ZipGS, so it can emulate 7.5MHz, 7.0MHz, etc.  This is useful for
-running some games which are slow at 2.8MHz, but which are too fast in
-the unlimited speed.
+will slow down to 1MHz.
 
 Sound output has an interesting relationship to KEGS timing.  KEGS must
 play one second of sound per second of emulated time.  Normally, this
@@ -691,8 +688,8 @@ The NinjaForce Megademo mostly works, but sometimes hangs in the BBS Demo.
 Just skip that demo if it happens.
 
 The California Demo hangs at startup unless you use the IIgs control panel
-to boot from slot 5, and then do a ctrl-Open_Apple-Reset to boot, then
-it works fine.  This seems to be a bug in the demo.
+to boot from slot 5, and then do a ctrl-Open_Apple-Reset to boot--doing
+the above lets it work fine. This seems to be a bug in the demo.
 
 
 KEGS bugs:
@@ -702,7 +699,8 @@ KEGS's serial port emulation is very limited now, and only for
 adventurous souls.
 
 On a ROM03, KEGS makes a patch to the ROM image (inside emulation, not
-to the Unix file) to fix a bug in the ROM code.  I then patch the ROM
+to the Unix file) to fix a bug in the ROM code.  Both ROM01 and ROM03
+are patched to enable use of more than 8MB of memory.  I then patch the ROM
 self-tests to make the ROM checksum pass.  But other programs, like
 the Apple IIgs Diagnostic Disk, will detect a ROM checksum mismatch.
 Don't worry about it.
@@ -750,6 +748,8 @@ to the emulated IIgs.  Telnet on Unix defaults to "line mode" which
 buffers keys you type until you hit return.  This can be a bit distracting,
 and can be disabled by hitting Ctrl-] and then "mode char".  This
 causes a few {{ chars to show up in KEGS--just ignore this for now.
+You may want to go to the F4 Config Panel and set "mask off high bit"
+for serial port accesses to make PR#2 work a little nicer.
 
 That's about it.  Proterm and Appleworks GS can talk to the modem port
 fine, but it's limited in its usefulness.  I have printed from

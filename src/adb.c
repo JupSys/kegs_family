@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.56 2003-11-04 02:21:56-05 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.57 2003-11-21 14:45:52-05 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -1412,7 +1412,7 @@ adb_increment_speed()
 	const char *str;
 
 	g_limit_speed++;
-	if(g_limit_speed > 2) {
+	if(g_limit_speed > 3) {
 		g_limit_speed = 0;
 	}
 
@@ -1426,6 +1426,9 @@ adb_increment_speed()
 		break;
 	case 2:
 		str = "...2.8MHz!";
+		break;
+	case 3:
+		str = "...8.0MHz!";
 		break;
 	}
 	printf("Toggling g_limit_speed to %d%s\n", g_limit_speed, str);

@@ -11,7 +11,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$KmKId: engine_s.s,v 1.152 2002-11-19 03:10:49-05 kadickey Exp $"
+	.stringz "@(#)$KmKId: engine_s.s,v 1.155 2003-11-25 22:06:48-05 kentd Exp $"
 
 	.code
 
@@ -112,6 +112,9 @@ rcsid_engine_s_s
 #define	CYCLES_PLUS_1		fadd,dbl fr_plus_1,fcycles,fcycles
 #define	CYCLES_PLUS_2		fadd,dbl fr_plus_2,fcycles,fcycles
 #define	CYCLES_PLUS_3		fadd,dbl fr_plus_3,fcycles,fcycles
+#define	CYCLES_PLUS_5		fadd,dbl fr_plus_3,fcycles,fcycles ! \
+				fadd,dbl fr_plus_2,fcycles,fcycles
+				
 #define	CYCLES_MINUS_1		fsub,dbl fcycles,fr_plus_1,fcycles
 #define	CYCLES_MINUS_2		fsub,dbl fcycles,fr_plus_2,fcycles
 
@@ -121,6 +124,12 @@ rcsid_engine_s_s
 #define FCYCLES_ROUND_2		fcnvfxt,dbl,dbl ftmp1,ftmp1
 #define FCYCLES_ROUND_3		fcnvxf,dbl,dbl ftmp1,fcycles
 
+/* HACK: INC_KPC* and DEC_KPC2 should avoid overflow into kbank! */
+#define INC_KPC_1		addi	1,kpc,kpc
+#define INC_KPC_2		addi	2,kpc,kpc
+#define INC_KPC_3		addi	3,kpc,kpc
+#define INC_KPC_4		addi	4,kpc,kpc
+#define DEC_KPC2		addi	-2,kpc,kpc
 
 #define get_mem_b0_8	get_memory_asm
 #define get_mem_b0_16	get_memory16_asm
@@ -1464,8 +1473,25 @@ log_pc_asm
 	stw	ret1,LOG_PC_XREG_YREG(scratch2)
 	addi	LOG_PC_SIZE,scratch2,r31
 	stw	scratch3,LOG_PC_STACK_DIRECT(scratch2)
+
+;	comb,>=	r31,ret0,log_pc_oflow
+;	nop
+
 	comclr,< r31,ret0,0
 ; reload log_pc with log_pc_start_ptr
+	ldw	rs%log_pc_start_ptr-log_pc_ptr(scratch4),r31
+
+	bv	0(link)
+	stw	r31,0(scratch4)
+
+log_pc_oflow
+	ldil	l%g_fcycles_stop,scratch3
+	ldil	l%halt_sim,ret0
+	stw	0,r%g_fcycles_stop(scratch3)
+	ldi	2,arg0
+	stw	0,r%g_fcycles_stop+4(scratch3)
+	stw	arg0,r%halt_sim(ret0)
+
 	ldw	rs%log_pc_start_ptr-log_pc_ptr(scratch4),r31
 	bv	0(link)
 	stw	r31,0(scratch4)
@@ -1885,7 +1911,7 @@ sbc_decimal_16
 	.code
 #define INCLUDE_RCSID_S
 #include "defs_instr.h"
-#include "8inst_s" 
+#include "8inst_s.h" 
 #undef INCLUDE_RCSID_S
 	.code
 #undef SYM
@@ -1893,7 +1919,7 @@ sbc_decimal_16
 
 	.code
 #include "defs_instr.h"
-#include "16inst_s"
+#include "16inst_s.h"
 	.code
 #undef SYM
 
@@ -2431,20 +2457,20 @@ sbc_decimal_16
 
 	.data
 #define INCLUDE_RCSID_S
-#include "8size"
+#include "8size_s.h"
 #undef INCLUDE_RCSID_S
 
 	.export table8,data
 table8
-#include "8size"
+#include "8size_s.h"
 
 	.export	table16,data
 table16
-#include "16size"
+#include "16size_s.h"
 
 	.export	sizes_tab,data
 sizes_tab
-#include "size_s"
+#include "size_s.h"
 
 
 	.export g_engine_c_mode,data

@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.171 2003-11-19 19:49:49-05 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.172 2003-11-21 16:39:39-05 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -172,6 +172,7 @@ void cfg_file_init(void);
 void cfg_free_alldirents(Cfg_listhdr *listhdrptr);
 void cfg_file_add_dirent(Cfg_listhdr *listhdrptr, const char *nameptr, int is_dir, int size, int image_start, int part_num);
 int cfg_dirent_sortfn(const void *obj1, const void *obj2);
+int cfg_str_match(const char *str1, const char *str2, int len);
 void cfg_file_readdir(const char *pathptr);
 char *cfg_shorten_filename(const char *in_ptr, int maxlen);
 void cfg_fix_topent(Cfg_listhdr *listhdrptr);

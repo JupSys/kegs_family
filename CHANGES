@@ -1,4 +1,18 @@
 
+Changes in KEGS v0.84 since v0.83 (11/21/03)
+- Add new speed, 8.0MHz directly using right-clicking or F6.
+- Sim speed and Video update interval added to Config panel.
+- Various cycle timing bugs in engine_c.c fixed.
+- Add Config Panel entry to mask serial output to 7-bit, to enable PR#2 to
+	work better with an external telnet.
+- In Config Panel file selection, typing a letter jumps to the first file
+	beginning with that letter.
+- Fixed various serial socket bugs.  Now you can disconnect a telnet session
+	and start a new one, and a Linux hang is fixed.
+- Default GS memory size increased to 8MB.
+- Small fix to double-hires color table.
+- X windows can now send displays to other-endian X servers.
+
 Changes in KEGS v0.83 since v0.82 (11/19/03)
 - Add Memory Size to config panel, with support for up to 14MB of memory
 	(Geoff Weiss)

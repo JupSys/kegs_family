@@ -10,7 +10,7 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$KmKId: instable.h,v 1.99 2003-11-17 23:00:59-05 kentd Exp $"
+	.stringz "@(#)$KmKId: instable.h,v 1.102 2003-11-25 22:05:33-05 kentd Exp $"
 # endif
 #endif
 
@@ -448,8 +448,8 @@ inst22_SYM		/*  JSL Long */
 #else
 	GET_3BYTE_ARG;
 	tmp1 = arg;
-	PUSH24_UNSAFE(kpc + 3);
 	CYCLES_PLUS_3;
+	PUSH24_UNSAFE(kpc + 3);
 	kpc = tmp1 & 0xffffff;
 #endif
 
@@ -787,15 +787,10 @@ inst44_SYM		/*  MVP */
 	stw	scratch2,STACK_SRC_BANK(sp)
 
 inst44_loop_SYM
-	fldds	0(fcycles_stop_ptr),fcycles_stop
-	CYCLES_PLUS_3
+	CYCLES_PLUS_1
 	ldw	STACK_SRC_BANK(sp),scratch2
-	fcmp,<,dbl fcycles,fcycles_stop
-	ftest
-	b	inst44_out_of_time_SYM
 	copy	xreg,arg0
 
-	CYCLES_PLUS_2
 	bl	get_mem_long_8,link
 	dep	scratch2,15,8,arg0
 /*  got byte */
@@ -804,17 +799,29 @@ inst44_loop_SYM
 	bl	set_mem_long_8,link
 	dep	dbank,15,8,arg0
 /*  wrote byte, dec acc */
+	CYCLES_PLUS_2
+	fldds	0(fcycles_stop_ptr),fcycles_stop
 	addi	-1,xreg,xreg
 	zdepi	-1,31,16,scratch2
 	addi	-1,yreg,yreg
 	addi	-1,acc,acc
+	fcmp,<,dbl fcycles,fcycles_stop
 	and	xreg,scratch2,xreg
 	extrs	acc,31,16,scratch1
 	and	yreg,scratch2,yreg
-	comib,<> -1,scratch1,inst44_loop_SYM
+
+	comib,= -1,scratch1,inst44_done_SYM
 	and	acc,scratch2,acc
 
+	ftest
+	b	inst44_out_of_time_SYM
+
+	CYCLES_PLUS_2
+	b	inst44_loop_SYM
+	nop
+
 /*  get here if done */
+inst44_done_SYM
 	INC_KPC_3
 	b	dispatch
 	nop
@@ -837,10 +844,11 @@ inst44_out_of_time_SYM
 		halt_printf("MVP but not native m or x!\n");
 		break;
 	}
+	CYCLES_MINUS_2
 	dbank = arg & 0xff;
 	tmp1 = (arg >> 8) & 0xff;
 	while(1) {
-		CYCLES_PLUS_1;
+		CYCLES_PLUS_3;
 		GET_MEMORY8((tmp1 << 16) + xreg, arg);
 		SET_MEMORY8((dbank << 16) + yreg, arg);
 		CYCLES_PLUS_2;
@@ -854,7 +862,6 @@ inst44_out_of_time_SYM
 		if(fcycles >= g_fcycles_stop) {
 			break;
 		}
-		CYCLES_PLUS_2;
 	}
 #endif
 
@@ -1012,15 +1019,10 @@ inst54_SYM		/*  MVN  */
 /*  even in 8bit acc mode, use 16-bit accumulator! */
 
 inst54_loop_SYM
-	fldds	0(fcycles_stop_ptr),fcycles_stop
-	CYCLES_PLUS_3
+	CYCLES_PLUS_1
 	ldw	STACK_SRC_BANK(sp),scratch2
-	fcmp,<,dbl fcycles,fcycles_stop
-	ftest
-	b	inst54_out_of_time_SYM
 	copy	xreg,arg0
 
-	CYCLES_PLUS_2
 	bl	get_mem_long_8,link
 	dep	scratch2,15,8,arg0
 /*  got byte */
@@ -1029,17 +1031,28 @@ inst54_loop_SYM
 	bl	set_mem_long_8,link
 	dep	dbank,15,8,arg0
 /*  wrote byte, dec acc */
+	CYCLES_PLUS_2
+	fldds	0(fcycles_stop_ptr),fcycles_stop
 	addi	1,xreg,xreg
 	zdepi	-1,31,16,scratch2
 	addi	1,yreg,yreg
 	addi	-1,acc,acc
+	fcmp,<,dbl fcycles,fcycles_stop
 	and	xreg,scratch2,xreg
 	extrs	acc,31,16,scratch1
 	and	yreg,scratch2,yreg
-	comib,<> -1,scratch1,inst54_loop_SYM
+
+	comib,=	-1,scratch1,inst54_done_SYM
 	and	acc,scratch2,acc
+	ftest
+	b,n	inst54_out_of_time_SYM
+
+	CYCLES_PLUS_2
+	b	inst54_loop_SYM
+	nop
 
 /*  get here if done */
+inst54_done_SYM
 	INC_KPC_3
 	b	dispatch
 	nop
@@ -1062,10 +1075,11 @@ inst54_notnat_SYM
 		halt_printf("MVN but not native m or x!\n");
 		break;
 	}
+	CYCLES_MINUS_2;
 	dbank = arg & 0xff;
 	tmp1 = (arg >> 8) & 0xff;
 	while(1) {
-		CYCLES_PLUS_1;
+		CYCLES_PLUS_3;
 		GET_MEMORY8((tmp1 << 16) + xreg, arg);
 		SET_MEMORY8((dbank << 16) + yreg, arg);
 		CYCLES_PLUS_2;
@@ -1079,7 +1093,6 @@ inst54_notnat_SYM
 		if(fcycles >= g_fcycles_stop) {
 			break;
 		}
-		CYCLES_PLUS_2;
 	}
 #endif
 
@@ -1184,6 +1197,7 @@ inst60_SYM		/*  RTS */
 	b	dispatch
 	dep	ret0,31,16,kpc
 #else
+	CYCLES_PLUS_2
 	PULL16(tmp1);
 	kpc = (kpc & 0xff0000) + ((tmp1 + 1) & 0xffff);
 #endif
@@ -1321,6 +1335,7 @@ inst6b_SYM		/*  RTL */
 	dep	scratch1,31,16,kpc
 	
 #else
+	CYCLES_PLUS_1;
 	PULL24(tmp1);
 	kpc = (tmp1 & 0xff0000) + ((tmp1 + 1) & 0xffff);
 #endif
@@ -2496,6 +2511,7 @@ insteb_SYM		/*  XBA */
 	dep	scratch1,23,8,acc
 #else
 	tmp1 = acc & 0xff;
+	CYCLES_PLUS_1
 	acc = (tmp1 << 8) + (acc >> 8);
 	INC_KPC_1;
 	SET_NEG_ZERO8(acc & 0xff);
@@ -2667,6 +2683,7 @@ instfc_SYM		/*  JSR (Abs,X) */
 	arg = (kpc & 0xff0000) + arg + xreg;
 	GET_MEMORY16(arg, tmp2);
 	kpc = (kpc & 0xff0000) + tmp2;
+	CYCLES_PLUS_2
 	PUSH16_UNSAFE(tmp1);
 #endif
 
