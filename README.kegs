@@ -1,6 +1,7 @@
 
-KEGS: Kent's Emulated GS version 0.59
+KEGS: Kent's Emulated GS version 0.60
 http://www.crosswinds.net/san-jose/~kentd/kegs/
+http://www.psn.net/~kentd/kegs/
 
 What is this?
 -------------
@@ -71,6 +72,7 @@ Included files:
 	kegs.spec		- The Linux spec file for making an RPM
 	font.65sim		- C-like description of the font KEGS uses.
 	kegs_conf		- disk image configuration info
+	disk_conf		- OLD name for kegs_conf
 	to_pro			- Hard-to-use ProDOS volume creator
 	partls			- Lists partitions on Apple-partitioned hard
 				   drives or CD-ROMs
@@ -414,9 +416,10 @@ will add breakpoints at e1/0010 and e1/0014.
 This is a "transparent" breakpoint--memory is not changed.  But any
 read or write to that address will cause KEGS to halt.  So you can
 set breakpoints on I/O addresses, or ROM, or whatever.  Setting a breakpoint
-slows KEGS down somewhat, and setting many of them will probably result
-in a noticeable slow down.  Breakpoints are not just instruction breakpoints,
-they also cause KEGS to halt on any data access, too.
+slows KEGS down somewhat, but only on accesses to the 256 byte "page"
+the breakpoint is on. Breakpoints are not just instruction breakpoints,
+they also cause KEGS to halt on any data access, too (usually called
+watchpoints).
 
 You can view memory using 'start.end' address notation, or disassemble
 using the 'L' or 'l' command.  KEGS can print out instruction history traces
@@ -424,7 +427,9 @@ if you define LOG_PC in engine_s.s or engine_c.c and recompile.  When
 you hit a breakpoint, hit "P" and it will dump the trace to pc_log_out.
 Similar tracing is available for Ensoniq state.  SCC state tracing is
 always active, and you can get a dump to the debugger window using 'Z'.
-IWM state is available with 'I'.
+IWM state is available with 'I'.  An executable with LOG_PC defined
+will run at about half speed, but it's invaluable for debugging difficult
+failures.
 
 Virtually every capital letter does some debug function--see dis.c for
 the big switch statement.  I'll document all of them someday.
@@ -513,7 +518,8 @@ KEGS command-line option summary:
 	is still 100% accurate, just the sound is not sent to the
 	workstation speaker.  Audio defaults off on Linux for now.
 -arate {num}: Forces audio sample rate to {num}.  44100 and 48000 are
-	usual, you can try 22050 to reduce KEGS's overhead.
+	usual, you can try 22050 to reduce KEGS's overhead.  On a reasonably
+	fast machine (>250MHz or so), you shouldn't need to mess with this.
 -display {machine:0.0}: Same as setting the environment variable DISPLAY.
 	Sends X display to {machine:0.0}.
 -joystick: Will use /dev/js0 as the joystick.
@@ -645,45 +651,48 @@ This is especially useful for multi-disk 5.25" programs.
 
 KEGS uses the Unix permissions on raw disk images to decide how to load
 it into the emulator.  If the file is unreadable, it cannot load the
-image (duh).  KEGS also supports the concept of "Write-through-to-Unix".
-An image that is writeable usually will pass through any changes the
-emulator makes back into the Unix image file.  I've found it useful
-to have a mode where an image appears writeable in the emulator, but
-the changes DO NOT get reflected back into the Unix file.  This can
-be achieved by setting the "execute" bit on the Unix image file.
-This always makes the image appear writeable in KEGS, but the changes
-do not get written out into the Unix file.  As a recap, here's what
-various Unix permissions mean to KEGS:
+image (duh).  KEGS used to support the concept of "Write-through-to-Unix",
+but I've removed it since only one user found it slightly useful, and
+many new users struggled with it.
+
+Here's what various Unix permissions mean to KEGS:
 
 rwx
 -**: Unreadable image
 r--: Read-only image.  Image will appear write-protected in KEGS.
-r-x: Read-only image.  Image will appear writeable in KEGS, but changes
-	will not be made to the Unix file.
 rw-: Read-write image.  Image will appear writeable in KEGS, and changes
 	will be passed through to the Unix file
-rwx: Read-only image.  Same as 'r-x'.
 
-KEGS, by default, runs the IWM (3.5" and 5.25" disks) emulation in
-an "approximate" mode, called "fast_disk_emul".  Almost everything will
-work except for nibble copiers.  To make nibble copiers work, Press F7.
-Unfortunately, formatting 5.25" disks under GS/OS does not work in
-fast_disk_emul mode--you must hit F7 to toggle to accurate IWM mode.
+KEGS, by default, runs the IWM (3.5" and 5.25" disks) emulation in an
+"approximate" mode, called "fast_disk_emul".  In this mode, KEGS
+emulates the hardware "faster" than real, meaning the data the code
+being emulated expects is made available much faster than on a real
+Apple //gs, providing a nice speed boost.  For instance, the 5.25"
+drives run 10x the real speed usually.  Almost everything will work
+except for nibble copiers, which don't like the data coming this fast.
+(Meaning, unless you're using a nibble copier, you shouldn't run into an
+issue.  All games/demos/etc run fine in this mode).  To make nibble
+copiers work, Press F7.  Earlier versions of KEGS had a bug in
+fast_disk_emul which made it unable to format 5.25" disks under GS/OS,
+but that bug has been fixed.
 
-KEGS supports low-level emulation of 5.25" and 3.5" drive hardware.  It
+KEGS always does low-level emulation of 5.25" and 3.5" drive hardware.  It
 is very accurate, supporting nibble-copiers, etc.  KEGS can read in
 the ".nib" nibblized disk format, but as read-only mode.  If
 the emulated image is no longer ProDOS or DOS 3.3 standard, KEGS will
 automatically treat the image as "Not-write-through-to-Unix" from then
-on.  It prints a message saying it has done so, so be careful.  However,
+on.  This mode means KEGS will continue to emulate the disk properly in
+memory, but it cannot encode the changes in the standard .dsk or .nib
+image format.  It prints a message saying it has done so.  However,
 the "disk" in emulation is fully useable as long as KEGS is running.  A
 standard reformatting will not cause an image to flip to not-write-
 through-to_unix, but running things like a "drive-speed" test will cause
 further changes not to propagate to the Unix file.  You will need
 to "eject" the image and re-insert it before writes will take effect.
 
-In full accuracy mode, 5.25" drive accesses force KEGS to run at 1MHz,
-and 3.5" drive accesses force KEGS to run at 2.5MHz.
+In full accuracy mode (i.e., not fast_disk_emul), 5.25" drive accesses
+force KEGS to run at 1MHz, and 3.5" drive accesses force KEGS to run at
+2.5MHz.
 
 KEGS Timing:
 -----------
@@ -705,12 +714,13 @@ briefly several times a second to maintain the 1MHz speed.  It does this
 in a Unix-friendly way that makes time available to other Unix
 processes.  This makes older Apple II games very playable just like a
 real Apple //gs on slow speed.  KEGS is running at exactly the same
-speed as an Apple //e when in 1.024MHz mode.  The 1.024MHz mode overrides
-the "fast" mode you can access through the control panel.  But, 3.5"
-accesses will "speed up" to 2.5MHz to enable that code to operate
-correctly while the 3.5" disk is being accessed.  If KEGS is running
-fast, the small pauses cause KEGS to give time to other applications,
-which you can see via the Unix "top" command.
+speed as an Apple //e when in 1.024MHz mode.  The 1.024MHz mode you set
+through the middle mouse button overrides the "fast" mode you can access
+through the control panel.  But, 3.5" accesses will "speed up" to 2.5MHz
+to enable that code to operate correctly while the 3.5" disk is being
+accessed.  If KEGS is running fast, the small pauses cause KEGS to give
+time to other applications, which you can see via the Unix "top"
+command.
 
 If you force KEGS to run at 2.5MHz, KEGS tries to run at 2.5MHz.  But
 like a real unaccelerated Apple //gs, if you set the control panel to
@@ -740,7 +750,7 @@ to 1.4 real seconds, that means KEGS only produces 1.0 second of sound
 data every 1.4 seconds--the sound breaks up!  Unfortunately, some demos
 require 2.5MHz timing--on slow machines, you just have to let the sound
 break up to see the visual effects (especially border effects).  Sorry.
-Get a faster workstation and this problem goes away.
+Get a faster machine and this problem goes away.
 
 
 KEGS SAMPLE_DISK:
@@ -810,7 +820,8 @@ ProDOS 8 text file lister, useful for viewing text files.
    ------
 
 Wolfenstein 3D for the Apple //gs.  No kidding!  Must be run from GS/OS.
-This is an old demo-version.  I'll package up the release version soon.
+This is an old demo-version.  You can download the full version at:
+http://www.sheppyware.net/products/a2/wolf3d/
 
    SOUND22:
    -------
@@ -911,15 +922,16 @@ speedup.  It describes that it has done this by saying "Pausing sound"
 in the debug window.  However, when sound restarts, it sometimes
 "breaks-up" a little.  I will work on fixes for this.
 
-By default, KEGS uses the /dev/audio device for sound output.  You can
-use the HP Alib sound output routines by running with the "-alib" option
-to KEGS.  Warning:  On 10.X, make sure you have the latest audio patches
-installed if you are not using -alib, or else you may panic the machine!
+For HP-UX, By default, KEGS uses the /dev/audio device for sound output.
+You can use the HP Alib sound output routines by running with the
+"-alib" option to KEGS.  Warning:  On 10.X, make sure you have the
+latest audio patches installed if you are not using -alib, or else you
+may panic the machine!
 
 If your display is not using shared memory, audio defaults to off unless
 you override it with "-audio 1".
 
-Sound on Linux is fairly broken now.
+Sound on Linux is somewhat broken now.
 
 SCC emulation:
 -------------

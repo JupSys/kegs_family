@@ -1,11 +1,11 @@
 Summary: Kent's Emulated GS; Apple //GS Emulator
 Name: kegs
-%define version 0.57
+%define version 0.60
 Version: %{version}
 Release: 1
 Group: Applications/Emulators
 Source: http://www.crosswinds.net/san-jose/~kentd/kegs/kegs.%{version}.tar.gz
-URL: http://www2.crosswinds.net/san-jose/~kentd/kegs/
+URL: http://www.crosswinds.net/san-jose/~kentd/kegs/
 Packager: Jonathan Stark <stark@starks.org>
 Copyright: unknown
 BuildRoot: /tmp/kegs
@@ -49,7 +49,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root)
-%doc CHANGES README.kegs README.linux.partitions INTERNALS.overview INTERNALS.iwm INTERNALS.xdriver README.linux.rpm disk_conf README.linux.rpm
+%doc CHANGES README.kegs README.linux.partitions INTERNALS.overview INTERNALS.iwm INTERNALS.xdriver README.linux.rpm kegs_conf font.65sim README.linux.rpm
 /usr/bin/to_pro
 /usr/bin/partls
 /usr/bin/kegs

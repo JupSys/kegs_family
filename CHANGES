@@ -1,4 +1,9 @@
 
+Changes in KEGS v0.60 since v0.59 (10/03/00)
+- The 16-bit colors were still wrong due to another coding error.  It would
+	be much easier to get this right if I had a 16-bit color display...
+	A user says it works now.
+
 Changes in KEGS v0.59 since v0.58 (7/07/00)
 - Added support for multiple paths to the default files and also multiple
 	names for many default files.  This should make the .rpm distribution

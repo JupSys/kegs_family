@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.157 2000/09/24 00:57:04 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.159 2000/10/03 12:15:35 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -66,9 +66,12 @@ int	g_needs_cmap = 0;
 word32	g_red_mask = 0xf;
 word32	g_green_mask = 0xf;
 word32	g_blue_mask = 0xf;
-int	g_red_shift = 8;
-int	g_green_shift = 4;
-int	g_blue_shift = 0;
+int	g_red_left_shift = 8;
+int	g_green_left_shift = 4;
+int	g_blue_left_shift = 0;
+int	g_red_right_shift = 4;
+int	g_green_right_shift = 4;
+int	g_blue_right_shift = 4;
 
 #ifdef X_SHARED_MEM
 int g_use_shmem = 1;
@@ -335,13 +338,13 @@ convert_to_xcolor(XColor *xcol, XColor *xcol2, int col_num,
 		xcol->flags = DoRed | DoGreen | DoBlue;
 		xcol2->flags = DoRed | DoGreen | DoBlue;
 	} else {
-		red = (red << 4) + red;
-		green = (green << 4) + green;
-		blue = (blue << 4) + blue;
+		red = ((red << 4) + red) >> g_red_right_shift;
+		green = ((green << 4) + green) >> g_green_right_shift;
+		blue = ((blue << 4) + blue) >> g_blue_right_shift;
 		g_palette_8to1624[col_num] =
-				((red & g_red_mask) << g_red_shift) +
-				((green & g_green_mask) << g_green_shift) +
-				((blue & g_blue_mask) << g_blue_shift);
+				((red & g_red_mask) << g_red_left_shift) +
+				((green & g_green_mask) << g_green_left_shift) +
+				((blue & g_blue_mask) << g_blue_left_shift);
 	}
 }
 
@@ -840,9 +843,12 @@ x_try_find_visual(Display *display, int depth, int screen_num,
 		Max_color_size);
 
 	v_chosen = &(visualList[visual_chosen]);
-	x_set_mask_and_shift(v_chosen->red_mask, &g_red_mask, &g_red_shift);
-	x_set_mask_and_shift(v_chosen->green_mask,&g_green_mask,&g_green_shift);
-	x_set_mask_and_shift(v_chosen->blue_mask, &g_blue_mask, &g_blue_shift);
+	x_set_mask_and_shift(v_chosen->red_mask, &g_red_mask,
+				&g_red_left_shift, &g_red_right_shift);
+	x_set_mask_and_shift(v_chosen->green_mask, &g_green_mask,
+				&g_green_left_shift, &g_green_right_shift);
+	x_set_mask_and_shift(v_chosen->blue_mask, &g_blue_mask,
+				&g_blue_left_shift, &g_blue_right_shift);
 
 	g_screen_depth = depth;
 	mdepth = depth;
@@ -860,7 +866,8 @@ x_try_find_visual(Display *display, int depth, int screen_num,
 }
 
 void
-x_set_mask_and_shift(word32 x_mask, word32 *mask_ptr, int *shift_ptr)
+x_set_mask_and_shift(word32 x_mask, word32 *mask_ptr, int *shift_left_ptr,
+		int *shift_right_ptr)
 {
 	int	shift;
 	int	i;
@@ -871,13 +878,24 @@ x_set_mask_and_shift(word32 x_mask, word32 *mask_ptr, int *shift_ptr)
 	for(i = 0; i < 32; i++) {
 		if(x_mask & 1) {
 			/* we're done! */
-			*mask_ptr = x_mask;
-			*shift_ptr = shift;
-			return;
+			break;
 		}
 		x_mask = x_mask >> 1;
 		shift++;
 	}
+	*mask_ptr = x_mask;
+	*shift_left_ptr = shift;
+	/* Now, calculate shift_right_ptr */
+	shift = 0;
+	x_mask |= 1;		// make sure at least one bit is set
+	while(x_mask < 0x80) {
+		shift++;
+		x_mask = x_mask << 1;
+	}
+
+	*shift_right_ptr = shift;
+	return;
+
 }
 
 #ifdef X_SHARED_MEM
