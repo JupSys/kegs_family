@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.62 97/11/08 12:06:52 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.65 98/05/06 23:22:49 kentd Exp $";
 
 #include "defc.h"
 
@@ -25,6 +25,7 @@ const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.62 97/11/08 12:06:52 kent
 
 extern int stepping;
 extern int Verbose;
+extern int g_use_shmem;
 extern word32 g_vbl_count;
 
 
@@ -49,6 +50,7 @@ int	g_doc_saved_ctl = 0;
 int	g_queued_samps = 0;
 int	g_queued_nonsamps = 0;
 
+int	g_audio_enable = -1;
 
 Doc_reg g_doc_regs[32];
 
@@ -75,7 +77,7 @@ int g_num_c030_fsamps = 0;
 
 #define DOC_SCAN_RATE	(DCYCS_28_MHZ/32.0)
 
-int	g_pipe_fd[2];
+int	g_pipe_fd[2] = { -1, -1 };
 word32	*g_sound_shm_addr = 0;
 int	g_sound_shm_pos = 0;
 
@@ -177,6 +179,40 @@ sound_init()
 	int	pid;
 	int	i;
 
+	for(i = 0; i < 32; i++) {
+		rptr = &(g_doc_regs[i]);
+		rptr->dcyc_ev = 0.0;
+		rptr->dcyc_ev2 = 0.0;
+		rptr->dcyc_ev3 = 0.0;
+		rptr->dcyc_ev4 = 0.0;
+		rptr->samps_to_do = 0;
+		rptr->samps_left = 0;
+		rptr->cur_ptr = 0;
+		rptr->cur_inc = 0;
+		rptr->cur_start = 0;
+		rptr->cur_end = 0;
+		rptr->size_bytes = 0;
+		rptr->event = 0;
+		rptr->running = 0;
+		rptr->has_irq_pending = 0;
+		rptr->freq = 0;
+		rptr->vol = 0;
+		rptr->waveptr = 0;
+		rptr->ctl = 1;
+		rptr->wavesize = 0;
+        }
+
+	if(!g_use_shmem) {
+		if(g_audio_enable < 0) {
+			printf("Defaulting audio off for slow X display\n");
+			g_audio_enable = 0;
+		}
+	}
+
+	if(g_audio_enable == 0) {
+		return;
+	}
+
 	shmid = shmget(IPC_PRIVATE, SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE,
 							IPC_CREAT | 0777);
 	if(shmid < 0) {
@@ -214,7 +250,13 @@ sound_init()
 		/* child */
 		/* close stdin and write-side of pipe */
 		close(0);
-		close(g_pipe_fd[1]);
+		/* Close other fds to make sure X window fd is closed */
+		for(i = 3; i < 100; i++) {
+			if(i != g_pipe_fd[0]) {
+				close(i);
+			}
+		}
+		close(g_pipe_fd[1]);		// make sure write pipe closed
 		child_sound_loop(g_pipe_fd[0], g_sound_shm_addr);
 		exit(0);
 	case -1:
@@ -228,28 +270,6 @@ sound_init()
 		doc_printf("Child is pid: %d\n", pid);
 	}
 
-	for(i = 0; i < 32; i++) {
-		rptr = &(g_doc_regs[i]);
-		rptr->dcyc_ev = 0.0;
-		rptr->dcyc_ev2 = 0.0;
-		rptr->dcyc_ev3 = 0.0;
-		rptr->dcyc_ev4 = 0.0;
-		rptr->samps_to_do = 0;
-		rptr->samps_left = 0;
-		rptr->cur_ptr = 0;
-		rptr->cur_inc = 0;
-		rptr->cur_start = 0;
-		rptr->cur_end = 0;
-		rptr->size_bytes = 0;
-		rptr->event = 0;
-		rptr->running = 0;
-		rptr->has_irq_pending = 0;
-		rptr->freq = 0;
-		rptr->vol = 0;
-		rptr->waveptr = 0;
-		rptr->ctl = 1;
-		rptr->wavesize = 0;
-        }
 }
 
 
@@ -275,7 +295,7 @@ sound_reset(double dcycs)
 void
 sound_shutdown()
 {
-	if(g_pipe_fd[1] != 0) {
+	if((g_audio_enable != 0) && g_pipe_fd[1] != 0) {
 		close(g_pipe_fd[1]);
 	}
 }
@@ -447,6 +467,11 @@ send_sound(int fd, int real_samps, int size)
 {
 	word32	tmp;
 	int	ret;
+
+	if(g_audio_enable == 0) {
+		printf("Entered send_sound but audio off!\n");
+		exit(2);
+	}
 
 	if(real_samps) {
 		tmp = size + 0xa2000000;
@@ -819,70 +844,74 @@ sound_play(double dcycs)
 	printf("samps_left: %d, num_samps: %d\n", samps_left, num_samps);
 #endif
 
-	if(snd_buf_init) {
-		/* convert sound buf */
+	if(g_audio_enable != 0) {
 
-		for(i = 0; i < num_samps; i++) {
-			val0 = outptr[0];
-			val1 = outptr[1];
-			val = val0;
-			if(val0 > 32767) {
-				val = 32767;
+		if(snd_buf_init) {
+			/* convert sound buf */
+	
+			for(i = 0; i < num_samps; i++) {
+				val0 = outptr[0];
+				val1 = outptr[1];
+				val = val0;
+				if(val0 > 32767) {
+					val = 32767;
+				}
+				if(val0 < -32768) {
+					val = -32768;
+				}
+	
+				val0 = val;
+				val = val1;
+				if(val1 > 32767) {
+					val = 32767;
+				}
+				if(val1 < -32768) {
+					val = -32768;
+				}
+	
+	
+				outptr += 2;
+	
+				sndptr[pos] = (val0 << 16) + (val & 0xffff);
+				pos++;
+				if(pos >= SOUND_SHM_SAMP_SIZE) {
+					pos = 0;
+				}
 			}
-			if(val0 < -32768) {
-				val = -32768;
+	
+			if(g_queued_nonsamps) {
+				/* force out old 0 samps */
+				send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
+				g_queued_nonsamps = 0;
 			}
-
-			val0 = val;
-			val = val1;
-			if(val1 > 32767) {
-				val = 32767;
+	
+			if(g_send_sound_to_file) {
+				send_sound_to_file(g_sound_shm_addr, g_sound_shm_pos,
+					num_samps);
 			}
-			if(val1 < -32768) {
-				val = -32768;
+	
+			g_queued_samps += num_samps;
+		} else {
+			/* move pos */
+			pos += num_samps;
+			while(pos >= SOUND_SHM_SAMP_SIZE) {
+				pos -= SOUND_SHM_SAMP_SIZE;
 			}
-
-
-			outptr += 2;
-
-			sndptr[pos] = (val0 << 16) + (val & 0xffff);
-			pos++;
-			if(pos >= SOUND_SHM_SAMP_SIZE) {
-				pos = 0;
+	
+			if(g_send_sound_to_file) {
+				send_sound_to_file(zero_buf, g_sound_shm_pos,
+					num_samps);
 			}
+	
+			if(g_queued_samps) {
+				/* force out old non-0 samps */
+				send_sound(g_pipe_fd[1], 1, g_queued_samps);
+				g_queued_samps = 0;
+			}
+	
+			g_queued_nonsamps += num_samps;
 		}
 
-		if(g_queued_nonsamps) {
-			/* force out old 0 samps */
-			send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
-			g_queued_nonsamps = 0;
-		}
-
-		if(g_send_sound_to_file) {
-			send_sound_to_file(g_sound_shm_addr, g_sound_shm_pos,
-				num_samps);
-		}
-
-		g_queued_samps += num_samps;
-	} else {
-		/* move pos */
-		pos += num_samps;
-		while(pos >= SOUND_SHM_SAMP_SIZE) {
-			pos -= SOUND_SHM_SAMP_SIZE;
-		}
-
-		if(g_send_sound_to_file) {
-			send_sound_to_file(zero_buf, g_sound_shm_pos,
-				num_samps);
-		}
-
-		if(g_queued_samps) {
-			/* force out old non-0 samps */
-			send_sound(g_pipe_fd[1], 1, g_queued_samps);
-			g_queued_samps = 0;
-		}
-
-		g_queued_nonsamps += num_samps;
 	}
 
 	g_sound_shm_pos = pos;
@@ -892,14 +921,16 @@ sound_play(double dcycs)
 
 	g_fvoices += ((float)(samps_played) / (float)(AUDIO_RATE));
 
-	if(g_queued_samps >= (AUDIO_RATE/30)) {
-		send_sound(g_pipe_fd[1], 1, g_queued_samps);
-		g_queued_samps = 0;
-	}
+	if(g_audio_enable != 0) {
+		if(g_queued_samps >= (AUDIO_RATE/30)) {
+			send_sound(g_pipe_fd[1], 1, g_queued_samps);
+			g_queued_samps = 0;
+		}
 
-	if(g_queued_nonsamps >= (AUDIO_RATE/30)) {
-		send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
-		g_queued_nonsamps = 0;
+		if(g_queued_nonsamps >= (AUDIO_RATE/30)) {
+			send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
+			g_queued_nonsamps = 0;
+		}
 	}
 
 	GET_ITIMER(end_time1);
@@ -1670,8 +1701,10 @@ doc_write_c03d(int val, double dcycs)
 
 				break;
 			case 0x02:	/* 0xe2 */
-				printf("Writing doc 0xe2 with %02x\n", val);
-				set_halt(1);
+				/* this should be illegale, but Turkey Shoot */
+				/*  writes to e2, for no apparent reason */
+				doc_printf("Writing doc 0xe2 with %02x\n", val);
+				/* set_halt(1); */
 				break;
 			default:
 				printf("Writing %02x into bad doc_reg[%04x]\n",

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.181 97/11/02 16:41:44 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.184 98/04/22 00:53:19 kentd Exp $";
 
 #include "defc.h"
 
@@ -20,6 +20,7 @@ extern int daylight;
 
 extern byte memory[];
 extern byte slow_memory[];
+extern byte dummy_memory1[];
 extern byte rom_fc_ff[];
 
 extern word32 slow_mem_changed[];
@@ -148,11 +149,11 @@ fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		if(ALTZP) {
 			add_rd = 0x10000;
 		}
-		page_info[0].rd = mem0rd + add_rd;
-		page_info[0].wr = mem0wr + add_rd;
+		SET_PAGE_INFO_RD(0, mem0rd + add_rd);
+		SET_PAGE_INFO_WR(0, mem0wr + add_rd);
 		add_rd += 0x100;
-		page_info[1].rd = mem0rd + add_rd;
-		page_info[1].wr = mem0wr + add_rd;
+		SET_PAGE_INFO_RD(1, mem0rd + add_rd);
+		SET_PAGE_INFO_WR(1, mem0wr + add_rd);
 	}
 
 	ramrd_add_rd = 0;
@@ -167,10 +168,10 @@ fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 
 	if(mask & 0x000c) {
 		/* pages 2 and 3 */
-		page_info[2].rd = mem0rd + ramrd_add_rd + 0x200;
-		page_info[3].rd = mem0rd + ramrd_add_rd + 0x300;
-		page_info[2].wr = mem0wr + ramwrt_add_wr + 0x200;
-		page_info[3].wr = mem0wr + ramwrt_add_wr + 0x300;
+		SET_PAGE_INFO_RD(2, mem0rd + ramrd_add_rd + 0x200);
+		SET_PAGE_INFO_WR(2, mem0wr + ramwrt_add_wr + 0x200);
+		SET_PAGE_INFO_RD(3, mem0rd + ramrd_add_rd + 0x300);
+		SET_PAGE_INFO_WR(3, mem0wr + ramwrt_add_wr + 0x300);
 	}
 
 	if(mask & 0x000000f0) {
@@ -197,8 +198,8 @@ fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		}
 		
 		for(j = 4; j < 8; j++) {
-			page_info[j].rd = mem0rd + add_rd;
-			page_info[j].wr = mem0wr + add_wr;
+			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
+			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
 			add_rd += 0x100;
 			add_wr += 0x100;
 		}
@@ -214,8 +215,8 @@ fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		}
 
 		for(j = 8; j < 0xc; j++) {
-			page_info[j].rd = mem0rd + add_rd;
-			page_info[j].wr = mem0wr + add_wr;
+			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
+			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
 			add_rd += 0x100;
 			add_wr += 0x100;
 		}
@@ -226,8 +227,8 @@ fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		add_rd = ramrd_add_rd + 0xc00;
 		add_wr = ramwrt_add_wr + 0xc00;
 		for(j = 0xc; j < 0x20; j++) {
-			page_info[j].rd = mem0rd + add_rd;
-			page_info[j].wr = mem0wr + add_wr;
+			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
+			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
 			add_rd += 0x100;
 			add_wr += 0x100;
 		}
@@ -245,8 +246,8 @@ fixup_bank1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	if(mask & 0x0000000f) {
 		/* pages 0 - 3 */
 		for(j = start_page; j < start_page + 4; j++) {
-			page_info[j].rd = mem0rd + add;
-			page_info[j].wr = mem0wr + add;
+			SET_PAGE_INFO_RD(j, mem0rd + add);
+			SET_PAGE_INFO_WR(j, mem0wr + add);
 			add += 0x100;
 		}
 	}
@@ -255,8 +256,8 @@ fixup_bank1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		/* pages c-1f */
 		add = 0xc00;
 		for(j = start_page + 0xc; j < start_page + 0x20; j++) {
-			page_info[j].rd = mem0rd + add;
-			page_info[j].wr = mem0wr + add;
+			SET_PAGE_INFO_RD(j, mem0rd + add);
+			SET_PAGE_INFO_WR(j, mem0wr + add);
 			add += 0x100;
 		}
 	}
@@ -270,8 +271,8 @@ fixup_bank1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		}
 		
 		for(j = start_page + 4; j < start_page + 8; j++) {
-			page_info[j].rd = mem0rd + add;
-			page_info[j].wr = mem0wr + add;
+			SET_PAGE_INFO_RD(j, mem0rd + add);
+			SET_PAGE_INFO_WR(j, mem0wr + add);
 			add += 0x100;
 		}
 	}
@@ -285,8 +286,8 @@ fixup_bank1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		}
 		
 		for(j = start_page + 8; j < start_page + 0xc; j++) {
-			page_info[j].rd = mem0rd + add;
-			page_info[j].wr = mem0wr + add;
+			SET_PAGE_INFO_RD(j, mem0rd + add);
+			SET_PAGE_INFO_WR(j, mem0wr + add);
 			add += 0x100;
 		}
 	}
@@ -447,8 +448,8 @@ fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		/* 1c000: LCBANK2 */
 		add = ((start_page + 0x10) & 0xff) << 8;
 		for(j = start_page; j < start_page + 0x10; j++) {
-			page_info[j].rd = mem0rd + add;
-			page_info[j].wr = mem0wr + add;
+			SET_PAGE_INFO_RD(j, mem0rd + add);
+			SET_PAGE_INFO_WR(j, mem0wr + add);
 			add += 0x100;
 		}
 
@@ -462,8 +463,8 @@ fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		}
 
 		for(j = start_page + 0x10; j < start_page + 0x20; j++) {
-			page_info[j].rd = mem0rd + add;
-			page_info[j].wr = mem0wr + add;
+			SET_PAGE_INFO_RD(j, mem0rd + add);
+			SET_PAGE_INFO_WR(j, mem0wr + add);
 			add += 0x100;
 		}
 
@@ -473,36 +474,36 @@ fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 
 	/* shadow_reg & 0x40 done...I/O area & normal 1d000-1dfff */
 	/* I/O area! */
-	page_info[start_page].rd = BANK_IO;
-	page_info[start_page].wr = BANK_IO;
+	SET_PAGE_INFO_RD(start_page, SET_BANK_IO);
+	SET_PAGE_INFO_WR(start_page, SET_BANK_IO);
 	rom_inc = rom10000 + 0xc100;
 	for(j = start_page + 1; j < start_page + 0x10; j++) {
 		indx = j & 0xf;
 		if(indx < 8) {
 			if((int_crom[indx] == 0) || INTCX) {
-				page_info[j].rd = rom_inc;
+				SET_PAGE_INFO_RD(j, rom_inc);
 			} else {
-				page_info[j].rd = BANK_IO;
+				SET_PAGE_INFO_RD(j, SET_BANK_IO);
 			}
 		} else {
 			/* c800 - cfff */
 			if(int_crom[3] == 0 || INTCX) {
-				page_info[j].rd = rom_inc;
+				SET_PAGE_INFO_RD(j, rom_inc);
 			} else {
 				/* c800 space not necessarily mapped */
 				/*   just map in ROM */
-				page_info[j].rd = rom_inc;
+				SET_PAGE_INFO_RD(j, rom_inc);
 #if 0
 				printf("c8000-cfff space not map!\n");
 				set_halt(1);
 #endif
 			}
 		}
-		page_info[j].wr = BANK_IO;
+		SET_PAGE_INFO_WR(j, SET_BANK_IO);
 		rom_inc += 0x100;
 	}
 
-	page_info[start_page + 7].rd = BANK_IO;		/* smartport */
+	SET_PAGE_INFO_RD(start_page + 7, SET_BANK_IO);		/* smartport */
 
 	/* and do 0xd000 - 0xdfff now */
 
@@ -511,7 +512,7 @@ fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	add_rd = 0;
 
 	if(!wrdefram && (start_page < 0x200)) {
-		mem0wr = BANK_IO;
+		mem0wr |= BANK_IO_TMP;
 	}
 
 	if(start_page < 0x100) {
@@ -534,8 +535,8 @@ fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	}
 
 	for(j = start_page + 0x10; j < start_page + 0x20; j++) {
-		page_info[j].rd = mem0rd + add + add_rd;
-		page_info[j].wr = mem0wr + add + add_wr;
+		SET_PAGE_INFO_RD(j, mem0rd + add + add_rd);
+		SET_PAGE_INFO_WR(j, mem0wr + add + add_wr);
 		add += 0x100;
 	}
 }
@@ -558,7 +559,7 @@ fixup_any_bank_e000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	} else {
 		/* decide on ROM or RAM */
 		if(!wrdefram && start_page < 0x200) {
-			mem0wr = BANK_IO;
+			mem0wr |= BANK_IO_TMP;
 		}
 
 		if((start_page < 0x100) && ALTZP) {
@@ -584,8 +585,8 @@ fixup_banke0_e1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	add = 0;
 
 	for(j = start_page; j < start_page + 0x20; j++) {
-		page_info[j].rd = mem0rd + add;
-		page_info[j].wr = mem0wr + add;
+		SET_PAGE_INFO_RD(j, mem0rd + add);
+		SET_PAGE_INFO_WR(j, mem0wr + add);
 		add += 0x100;
 	}
 
@@ -596,8 +597,8 @@ fixup_banke0_e1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		add = 0x400 + BANK_SHADOW;
 	}
 	for(j = start_page + 4; j < start_page + 0xc; j++) {
-		page_info[j].rd = mem0rd + add;
-		page_info[j].wr = mem0wr + add;
+		SET_PAGE_INFO_RD(j, mem0rd + add);
+		SET_PAGE_INFO_WR(j, mem0wr + add);
 		add += 0x100;
 	}
 }
@@ -643,8 +644,8 @@ fixup_any_bank_any_page(word32 mask, int start_page, word32 mem0rd,
 	add = (start_page & 0xff) << 8;
 
 	for(j = start_page; j < start_page + 0x20; j++) {
-		page_info[j].rd = mem0rd + add;
-		page_info[j].wr = mem0wr + add;
+		SET_PAGE_INFO_RD(j, mem0rd + add);
+		SET_PAGE_INFO_WR(j, mem0wr + add);
 		add += 0x100;
 	}
 }
@@ -1015,7 +1016,7 @@ setup_pageinfo()
 	for(i = 0xfc00; i <= 0xffff; i++) {
 		new_addr = (i - 0xfc00)*256;
 		SET_PAGE_INFO_RD(i, (word32)(&rom_fc_ff[new_addr]));
-		SET_PAGE_INFO_WR(i, (word32)(&rom_fc_ff[new_addr]) | BANK_IO);
+		SET_PAGE_INFO_WR(i, (word32)(&rom_fc_ff[new_addr])|BANK_IO_TMP);
 	}
 }
 
@@ -1243,13 +1244,13 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		case 0x37: /* 0xc037 */
 			return 0;
 		case 0x38: /* 0xc038 */
-			return scc_read_reg(1);
+			return scc_read_reg(1, dcycs);
 		case 0x39: /* 0xc039 */
-			return scc_read_reg(0);
+			return scc_read_reg(0, dcycs);
 		case 0x3a: /* 0xc03a */
-			return scc_read_data(1);
+			return scc_read_data(1, dcycs);
 		case 0x3b: /* 0xc03b */
-			return scc_read_data(0);
+			return scc_read_data(0, dcycs);
 		case 0x3c: /* 0xc03c */
 			/* doc control */
 			return doc_read_c03c(dcycs);
@@ -1876,16 +1877,16 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 			}
 			return;
 		case 0x38: /* 0xc038 */
-			scc_write_reg(1, val);
+			scc_write_reg(1, val, dcycs);
 			return;
 		case 0x39: /* 0xc039 */
-			scc_write_reg(0, val);
+			scc_write_reg(0, val, dcycs);
 			return;
 		case 0x3a: /* 0xc03a */
-			scc_write_data(1, val);
+			scc_write_data(1, val, dcycs);
 			return;
 		case 0x3b: /* 0xc03b */
-			scc_write_data(0, val);
+			scc_write_data(0, val, dcycs);
 			return;
 		case 0x3c: /* 0xc03c */
 			/* doc ctl */
@@ -2067,7 +2068,10 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 			return;
 		case 0x73: /* 0xc073 = slinky ram card bank addr? */
 			return;
-		case 0x71: /* 0xc071 */
+		case 0x71: /* 0xc071 = another slinky card enable? */
+		case 0x7e: /* 0xc07e */
+		case 0x7f: /* 0xc07f */
+			return;
 		case 0x72: /* 0xc072 */
 		case 0x74: /* 0xc074 */
 		case 0x75: /* 0xc075 */
@@ -2079,8 +2083,6 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 		case 0x7b: /* 0xc07b */
 		case 0x7c: /* 0xc07c */
 		case 0x7d: /* 0xc07d */
-		case 0x7e: /* 0xc07e */
-		case 0x7f: /* 0xc07f */
 			UNIMPL_WRITE;
 
 		/* 0xc080 - 0xc08f */

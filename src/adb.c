@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.25 97/09/23 00:21:17 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.27 98/05/03 17:23:28 kentd Exp $";
 
 #include "adb.h"
 
@@ -47,7 +47,6 @@ word32	g_adb_repeat_rate = 3;
 
 word32	g_adb_interrupt_byte = 0;
 int	g_adb_state = ADB_IDLE;
-int	g_adb_c027_cnt = 0;
 
 word32	g_adb_cmd = -1;
 int	g_adb_cmd_len = 0;
@@ -82,9 +81,11 @@ int g_mouse_overflow_button = 0;
 int g_mouse_overflow_valid = 0;
 
 
+int	g_adb_mouse_valid_data = 0;
 int	g_adb_mouse_coord = 0;
 
 int	g_adb_data_int_sent = 0;
+int	g_adb_mouse_int_sent = 0;
 int	g_adb_kbd_srq_sent = 0;
 
 
@@ -208,17 +209,17 @@ adb_reset()
 	g_mouse_ctl_addr = 3;
 
 	g_adb_data_int_sent = 0;
+	g_adb_mouse_int_sent = 0;
 	g_adb_kbd_srq_sent = 0;
 
 	g_adb_data_pending = 0;
 	g_adb_interrupt_byte = 0;
 	g_adb_state = ADB_IDLE;
 	g_adb_mouse_coord = 0;
+	g_adb_mouse_valid_data = 0;
 
 	g_kbd_reg0_pos = 0;
 	g_kbd_reg3_16bit = 0x602;
-	
-	g_adb_c027_cnt = 0;
 }
 
 #define LEN_ADB_LOG	16
@@ -267,8 +268,8 @@ show_adb_log(void)
 	printf("kbd: dev: %x, ctl: %x; mouse: dev: %x, ctl: %x\n",
 		g_kbd_dev_addr, g_kbd_ctl_addr,
 		g_mouse_dev_addr, g_mouse_ctl_addr);
-	printf("adb_data_int_sent: %d, adb_kbd_srq_sent: %d\n",
-		g_adb_data_int_sent, g_adb_kbd_srq_sent);
+	printf("adb_data_int_sent: %d, adb_kbd_srq_sent: %d, mouse_int: %d\n",
+		g_adb_data_int_sent, g_adb_kbd_srq_sent, g_adb_mouse_int_sent);
 	printf("g_adb_state: %d, g_adb_interrupt_byte: %02x\n",
 		g_adb_state, g_adb_interrupt_byte);
 }
@@ -322,11 +323,33 @@ adb_add_data_int()
 }
 
 void
+adb_add_mouse_int()
+{
+	if(g_c027_val & ADB_C027_MOUSE_INT) {
+		if(!g_adb_mouse_int_sent) {
+			/* printf("Mouse int sent\n"); */
+			g_adb_mouse_int_sent = 1;
+			add_irq();
+		}
+	}
+}
+
+void
 adb_clear_data_int()
 {
 	if(g_adb_data_int_sent) {
 		remove_irq();
 		g_adb_data_int_sent = 0;
+	}
+}
+
+void
+adb_clear_mouse_int()
+{
+	if(g_adb_mouse_int_sent) {
+		remove_irq();
+		g_adb_mouse_int_sent = 0;
+		/* printf("Mouse int clear, button: %d\n", a2_mouse_button); */
 	}
 }
 
@@ -345,7 +368,6 @@ adb_send_bytes(int num_bytes, word32 val0, word32 val1, word32 val2)
 
 	g_adb_state = ADB_SENDING_DATA;
 	g_adb_data_pending = num_bytes;
-	g_adb_c027_cnt = 1;
 	adb_add_data_int();
 
 	for(i = 0; i < num_bytes; i++) {
@@ -399,9 +421,8 @@ adb_response_packet(int num_bytes, word32 val)
 	} else {
 		g_adb_interrupt_byte |= 0x80;
 	}
-	g_adb_c027_cnt = 0;
 
-	printf("adb_response packet: %d: %08x. c027_cnt = 0\n",
+	adb_printf("adb_response packet: %d: %08x\n",
 		num_bytes, val);
 
 	adb_add_data_int();
@@ -420,7 +441,7 @@ adb_kbd_reg0_data(int a2code, int is_up)
 
 	g_kbd_reg0_data[g_kbd_reg0_pos] = a2code + (is_up << 7);
 
-	printf("g_kbd_reg0_data[%d] = %02x\n", g_kbd_reg0_pos,
+	adb_printf("g_kbd_reg0_data[%d] = %02x\n", g_kbd_reg0_pos,
 		g_kbd_reg0_data[g_kbd_reg0_pos]);
 
 	g_kbd_reg0_pos++;
@@ -590,7 +611,7 @@ adb_read_c026()
 			}
 			adb_clear_data_int();
 		}
-		if(ret && g_adb_data_pending) {
+		if(g_adb_data_pending) {
 			if(g_adb_state != ADB_IN_CMD) {
 				g_adb_state = ADB_SENDING_DATA;
 			}
@@ -608,7 +629,6 @@ adb_read_c026()
 		if(g_adb_data_pending <= 0) {
 			g_adb_data_pending = 0;
 			g_adb_state = ADB_IDLE;
-			g_adb_c027_cnt = 0;
 			adb_clear_data_int();
 		}
 		break;
@@ -705,18 +725,15 @@ adb_write_c026(int val)
 			break;
 		case 0x0e:	/* Read avail char sets */
 			adb_printf("Performing read avail char sets cmd!\n");
-			adb_send_bytes(9,
-				0x08000102,	/* number of ch sets=0x8 */
-				0x03040506,
-				0x07000000);
+			adb_send_bytes(2,	/* just 2 bytes */
+				0x08000000,	/* number of ch sets=0x8 */
+				0, 0);
 			/* set_halt(1); */
 			break;
 		case 0x0f:	/* Read avail kbd layouts */
 			adb_printf("Performing read avail kbd layouts cmd!\n");
-			adb_send_bytes(0xb,	/* number of kbd layouts=0xa */
-				0x0a000102,
-				0x03040506,
-				0x07080900);
+			adb_send_bytes(0x2,	/* number of kbd layouts=0xa */
+				0x0a000000, 0, 0);
 			/* set_halt(1); */
 			break;
 		case 0x10:	/* Reset */
@@ -968,38 +985,24 @@ adb_read_c027()
 
 	ret = (g_c027_val & ADB_C027_NEG_MASK);
 
-	if(g_mouse_overflow_valid || g_mouse_delta_x || g_mouse_delta_y ||
-					(g_mouse_button != a2_mouse_button)) {
-
-#if 0
-		adb_printf("new mouse data!: a2_x,y: %d, %d phys x,y: %d,%d, "
-			"b a2: %d, b phys: %d\n",
-			a2_mouse_x, a2_mouse_y, g_mouse_cur_x, g_mouse_cur_y,
-			a2_mouse_button, mouse_button);
-#endif
-
-		if(g_mouse_ctl_addr == g_mouse_dev_addr) {
-			/* mouse is where we expect it, pass on data */
-			ret |= ADB_C027_MOUSE_DATA;
-		}
+	if(g_adb_mouse_valid_data) {
+		ret |= ADB_C027_MOUSE_DATA;
 	}
 
 	if(g_adb_interrupt_byte != 0) {
 		ret |= ADB_C027_DATA_VALID;
-		g_adb_c027_cnt = 0;
 	} else if(g_adb_data_pending > 0) {
-		if((g_adb_c027_cnt <= 0) && (g_adb_state != ADB_IN_CMD)) {
+		if((g_adb_state != ADB_IN_CMD)) {
 			ret |= ADB_C027_DATA_VALID;
 		}
-		g_adb_c027_cnt = 0;
 	}
 
 	if(g_adb_mouse_coord) {
 		ret |= ADB_C027_MOUSE_COORD;
 	}
 
-	adb_printf("Read c027: %02x, int_byte: %02x, d_pend: %d, c027_cnt:%d\n",
-		ret, g_adb_interrupt_byte, g_adb_data_pending, g_adb_c027_cnt);
+	adb_printf("Read c027: %02x, int_byte: %02x, d_pend: %d\n",
+		ret, g_adb_interrupt_byte, g_adb_data_pending);
 #if 0
 	adb_log(0xc027, ret);
 #endif
@@ -1020,9 +1023,10 @@ adb_write_c027(int val)
 	old_val = g_c027_val;
 
 	g_c027_val = (val & ADB_C027_NEG_MASK);
-	if(g_c027_val & ADB_C027_MOUSE_INT) {
-		printf("Can't support mouse interrupts!\n");
-		/* set_halt(1); */
+	new_int = g_c027_val & ADB_C027_MOUSE_INT;
+	old_int = old_val & ADB_C027_MOUSE_INT;
+	if(!new_int && old_int) {
+		adb_clear_mouse_int();
 	}
 
 	new_int = g_c027_val & ADB_C027_DATA_INT;
@@ -1120,6 +1124,14 @@ update_mouse(int x, int y, int button_state, int button_valid)
 		g_mouse_button = button_state;
 	}
 
+	if(g_mouse_moved || button_valid) {
+		if( (g_mouse_ctl_addr == g_mouse_dev_addr) &&
+						((g_adb_mode & 0x2) == 0)) {
+			g_adb_mouse_valid_data = 1;
+			adb_add_mouse_int();
+		}
+	}
+
 	return g_mouse_moved;
 }
 
@@ -1131,13 +1143,10 @@ mouse_read_c024()
 	word32	ret;
 	int	mouse_button;
 
-	if(g_adb_mode & 0x2) {
-		/* mouse is off, return 0 */
-		return 0;
-	}
-
-	if(g_mouse_dev_addr != g_mouse_ctl_addr) {
-		/* ucontroller thinks mouse is elsewhere, so no autopoll */
+	if(((g_adb_mode & 0x2) != 0) || (g_mouse_dev_addr != g_mouse_ctl_addr)){
+		/* mouse is off, return 0, or mouse is not autopoll */
+		g_adb_mouse_valid_data = 0;
+		adb_clear_mouse_int();
 		return 0;
 	}
 
@@ -1193,9 +1202,15 @@ mouse_read_c024()
 			g_mouse_delta_x -= delta;
 		}
 
-		ret = (delta & 0x7f);
+		ret = 0x80 | (delta & 0x7f);
 
 		irq_printf("Read c024, mouse x: %02x\n", ret);
+	}
+
+	if(!g_mouse_overflow_valid && !g_mouse_delta_x && !g_mouse_delta_y &&
+			(g_mouse_button == a2_mouse_button)) {
+		g_adb_mouse_valid_data = 0;
+		adb_clear_mouse_int();
 	}
 
 	g_adb_mouse_coord ^= 1;

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.242 97/11/16 19:46:35 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.244 98/05/02 02:07:29 kentd Exp $";
 
 #include <math.h>
 
@@ -84,6 +84,8 @@ extern byte doc_ram[];
 extern int g_iwm_motor_on;
 extern int g_fast_disk_emul;
 extern int g_apple35_sel;
+
+extern int g_audio_enable;
 
 void U_STACK_TRACE();
 
@@ -659,11 +661,14 @@ check_engine_asm_defines()
 extern int g_screen_redraw_skip_amt;
 extern int g_use_shmem;
 
+char g_display_env[512];
+
 int
 main(int argc, char **argv)
 {
 	int	skip_amt;
 	int	diff;
+	int	tmp1;
 	int	i;
 
 	/* parse args */
@@ -684,6 +689,16 @@ main(int argc, char **argv)
 			skip_amt = strtol(argv[i+1], 0, 0);
 			printf("Using %d as skip_amt\n", skip_amt);
 			g_screen_redraw_skip_amt = skip_amt;
+			i++;
+		} else if(!strcmp("-audio", argv[i])) {
+			tmp1 = strtol(argv[i+1], 0, 0);
+			printf("Using %d as audio enable val\n", tmp1);
+			g_audio_enable = tmp1;
+			i++;
+		} else if(!strcmp("-display", argv[i])) {
+			printf("Using %s as display\n", argv[i+1]);
+			sprintf(g_display_env, "DISPLAY=%s", argv[i+1]);
+			putenv(&g_display_env[0]);
 			i++;
 		} else if(!strcmp("-noshm", argv[i])) {
 			printf("Not using X shared memory\n");
@@ -726,9 +741,10 @@ main(int argc, char **argv)
 
 	load_roms();
 
+	video_init();
+
 	sound_init();
 
-	video_init();
 	iwm_init();
 	scc_init();
 	setup_bram();		/* load_roms must be called first! */
@@ -1450,7 +1466,7 @@ vbl_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.32");
+		update_status_line(6, "KEGS v0.33");
 
 		g_status_refresh_needed = 1;
 

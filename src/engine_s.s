@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.122 97/11/11 23:51:27 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.125 98/01/13 22:33:59 kentd Exp $"
 
 	.code
 
@@ -1346,7 +1346,7 @@ dispatch
 	dep	kbank,15,8,arg0
 #endif
 
-	fldws	(halt_sim_ptr),fscr1
+	fldws	0(halt_sim_ptr),fscr1
 
 
 
@@ -1381,26 +1381,27 @@ no_debug_toolbox
 	dep	kbank,15,16,pc
 
 	fcmp,>=,sgl fcycles,fcycles_stop		;C=0 if can cont
-
 	extru	pc,23,16,scratch2
 
-	fcmp,!=,sgl fscr1,0				;C=0 if can cont
-
 	sh3add	scratch2,0,scratch2
+	fcmp,!=,sgl fscr1,0				;C=0 if can cont
 
 	extru	pc,31,8,scratch4
 	ldwx	scratch2(page_info_ptr),scratch1
+
 	ftest,acc2			;null next if can cont
 	b,n	dispatch_done_clr_ret0			;done if must stop
 
-	bb,<,n	scratch1,BANK_IO_BIT,dispatch_instr_io
 	ldbx	scratch4(scratch1),instr
 
 	extrs	pc,29,6,scratch3
-	add	scratch4,scratch1,scratch1
+	bb,<	scratch1,BANK_IO_BIT,dispatch_instr_io
+
 	ldwx,s	instr(inst_tab_ptr),link
 
+	add	scratch4,scratch1,scratch1
 	comib,=,n -1,scratch3,dispatch_instr_pieces
+
 	depi	0,31,3,link
 
 #ifndef LOG_PC
@@ -2440,6 +2441,7 @@ size_tab
 	.export slow_memory,data
 	.export rom_fc_ff,data
 	.export memory,data
+	.export dummy_memory1,data
 slow_memory	.block	128*1024
 dummy_memory1	.block	3*1024
 rom_fc_ff	.block	256*1024

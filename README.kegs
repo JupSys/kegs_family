@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.32
+KEGS: Kent's Emulated GS version 0.33
 
 What the heck is this?
 ----------------------
@@ -7,7 +7,8 @@ What the heck is this?
 KEGS is an Apple //gs emulator for HP Unix series 700 workstations.  It
 does not work on PCs; it does not work under any Microsoft OS.  An Apple
 //gs is not a Macintosh.  It uses X-Windows and the built-in audio on
-the workstation to emulate an Apple //gs.  The ROMs and GS/OS (the Apple
+the workstation to emulate an Apple //gs.  It supports limited serial port
+emulation through sockets.  The ROMs and GS/OS (the Apple
 //gs operating system) are not included with KEGS since they are not
 freely distributable.  KEGS is a little user-hostile now, so if
 something doesn't work, let me know what went wrong, and I'll try to
@@ -16,7 +17,7 @@ help you out.  See my email address at the end of this file.
 KEGS features:
 -------------
 
-Fast 65816 emulation (about 6MHz on a 712/80, and 15-20MHz on a C180).
+Fast 65816 emulation (about 7MHz on a 712/80, and 17-20MHz on a C180).
 Emulates low-level 5.25" and 3.5" drive accesses (even nibble-copiers work!).
 Emulates classic Apple II sound and 32-voice Ensoniq sound.
 	All sound is played in 16-bit stereo at 48KHz.
@@ -27,6 +28,8 @@ Emulates all Apple //gs memory "tricks" for full compatibility.
 Low-level ADB keyboard and mouse emulation enables Wolfenstein 3D to run.
 Clock chip emulation makes the Unix time available to the Apple //gs.
 Emulated battery RAM remembers control panel settings.
+Limited SCC (serial port) emulation to enable PR#1/2 IN#1/2 and other
+	serial programs to work, but it is still a bit buggy.
 
 KEGS always emulates a 4MB Apple //gs.  I may make the amount of Apple //gs
 memory a command line option in the future.
@@ -184,46 +187,56 @@ cd'ing into the src directory and typing "make".  See the README.compile
 file for more info about compiling.
 
 If you want the display to go somewhere different, make sure the shell
-environment variable $DISPLAY is set.  By default, the audio will be
-sent to the internal workstation speaker unless $SPEAKER=external.
-Audio will be sent through the HP Alib routines (see audio(5)).  You can
-get KEGS to use the direct audio hardware using the command-line option
-"-hpdev", but this can cause panics on HPUX 10.X without the latest
-audio patches.
+environment variable $DISPLAY is set, or give the command-line argument
+"-display {foo}".
+
+By default, the audio will be active if the display is the local
+workstation, else it will be disabled.  The command-line arguments
+"-audio 0" forces audio off, and "-audio 1" forces audio on (even if the
+display is remote).  Audio is sent to the internal workstation speaker
+unless $SPEAKER=external.  Audio will be sent through the HP Alib
+routines (see audio(5)).  You can get KEGS to use the direct audio
+hardware using the command-line option "-hpdev", but this can cause
+panics on HPUX 10.X before 10.20ACE without the later audio patches.
 
 KEGS will open a new window and use the terminal window you started it from
-for debug control.  I will call this the "debug" window.
-It also sends debug info here.   I've reduced the debug info it prints,
+for debug control.  I will call this the "debug" window since
+KEGS sends debug info here.   I've reduced the debug info it prints,
 but you may catch some I forgot to remove.  Let me know what you were
 running, and what it was saying, and I will fix it.
 
-KEGS also forks off a subprocess to help handle the sound.  If KEGS
-crashes in a unusual way (a coredump, for instance), you may have
-to manually kill the subprocess.  ("ps -ef|grep kegs;kill xxxxx").
+KEGS also forks off a subprocess to help handle the sound if audio is
+active.  If KEGS crashes in a unusual way (a coredump, for instance),
+you may have to manually kill the subprocess.  ("ps -ef|grep kegs;kill
+xxxxx").
 
 Assuming all goes well, KEGS will then boot your disk image.  You may have to
 move your mouse into the simulation window to get the colors right.
+Tip: Hitting "F8" locks the mouse (and hides the X cursor) until you
+hit "F8" again.
 
 If you discover KEGS freezing soon after starting, and no startup beep,
 then the workstation sound system has gotten itself wedged.  Try to kill
 any kegs processes and try again.  If it still hangs and plays no sound,
 try -hpdev, or try killing the Aserver processes.  If both of the Aserver
-processes don't die, you must reboot your workstation to use KEGS.
+processes don't die, you must reboot your workstation to use KEGS or
+use the "-audio 0" option.
 
 Debugging KEGS:
 --------------
 
 KEGS has a lot of debug "traps"--on an unexpected event, it stops the
-emulation, and puts the terminal window in a debugger that is similar
-to the GS ROM monitor debugger (but not exactly).  Thus, if you think
-it should continue after what ever stopped it, type "g" then return in
-the terminal window.  You can look at the message before it stopped to
-get an idea of why it stopped.  For instance, KEGS stops on accesses to
-non-existent memory.  Many buggy programs do this occasionally.  In most
-cases, try "g", and if it doesn't continue, let me know.  Copy the terminal
-output and mail it to me.  You can "chain" the g's together--so if you
-want it to skip 10 breakpoints, just say "gggggggggg" then hit return.
-You may need to do this with some Ensoniq problems.
+emulation, and puts the terminal window in a debugger that is similar to
+the GS ROM monitor debugger (but not exactly).  Thus, if you think it
+should continue after what ever stopped it, type "g" then return in the
+terminal window.  You can look at the message before it stopped to get
+an idea of why it stopped.  For instance, KEGS stops on accesses to
+non-existent memory.  Many buggy programs do this occasionally, like
+Appleworks GS.  In most cases, try "g", and if it doesn't continue, let
+me know.  Copy the terminal output and mail it to me.  You can "chain"
+the g's together--so if you want it to skip 10 breakpoints, just say
+"gggggggggg" then hit return.  You may need to do this with some Ensoniq
+problems.
 
 If this is really bothersome running some programs, try the "-ignbadacc"
 command-line option.  It tells KEGS to not print messages about bad
@@ -257,7 +270,7 @@ the debugger in the future.
 
 KEGS has no pop-up menus or other interactive interfaces (other than
 the debug window).  Input to the debug window is only acted upon when
-the emulation is stopped by hitting a breakpoint or pressing the right
+the emulation is stopped by hitting a breakpoint or pressing the right-most
 mouse button.
 
 Quitting KEGS:
@@ -293,6 +306,14 @@ KEGS command-line option summary:
 	effective -skip of 7 which is 7.5 fps.  You can override this
 	default by specifying a -skip explicitly.  A skip of 7 leads
 	to fairly jerky animation.
+-audio [0/1]: Forces audio [off/on].  By default, audio is on unless
+	the X display is a remote machine or shared memory is off.
+	This switch can override the default.  -audio 0 causes KEGS to
+	not fork the background audio process, but Ensoniq emulation
+	is still 100% accurate, just the sound is not sent to the
+	workstation speaker.
+-display {machine:0.0}: Same as setting the environment variable DISPLAY.
+	Sends X display to {machine:0.0}.
 
 
 Command/Option keys:
@@ -350,8 +371,8 @@ to_pro -800 wolfdemo.bxy
 which creates an 800K Unix file called "POOF1".  POOF1 is now an
 image that can be loaded into KEGS, and when you catalog it, it will
 have wolfdemo.bxy on it.  Warning: to_pro was compiled on HP-UX 10.20,
-and will not run on earlier versions of HP-UX--you have to compile it
-to make it work.  Sorry.
+and will not run on earlier versions of HP-UX--you have to re-compile it
+(which is easy) to make it work.  Sorry.
 
 To create a 4MB image:
 
@@ -394,7 +415,7 @@ KEGS by an Apple //gs OS.
 Since ProDOS cannot handle > 32MB images, make sure you run to_pro with
 arguments under 32767.  I personally haven't tried a partition bigger
 than 30000K (about 2.5MB short of the maximum).  Well, you can use bigger
-images if you format them HFS, but I don't trust the HFS driver.
+images if you format them HFS, but I don't trust the GS/OS HFS driver.
 
 To_pro automatically sets the ProDOS filetype of files ending in ".shk"
 to $E0.
@@ -579,6 +600,7 @@ ProDOS 8 text file lister, useful for viewing text files.
    ------
 
 Wolfenstein 3D for the Apple //gs.  No kidding!  Must be run from GS/OS.
+This is an old demo-version.  I'll package up the release version soon.
 
    SOUND22:
    -------
@@ -634,11 +656,11 @@ Although KEGS should support copy-protected programs, it does not
 support a nibblized image format so it cannot load them.  Oh well.
 I'll fix this soon, too.
 
-KEGS does not support serial port emulation.  It will do so soon so that the
-Apple //gs can print.
+KEGS's serial port emulation is very limited now, and only for
+adventurous souls.
 
 On a ROM03, KEGS makes a patch to the ROM image (inside emulation, not
-to the Unix file) to fix a small bug in the ROM code.  I then patch the ROM
+to the Unix file) to fix a bug in the ROM code.  I then patch the ROM
 self-tests to make the ROM checksum pass.  But other programs, like
 the Apple //gs Diagnostic Disk, will detect a ROM checksum mismatch.
 Don't worry about it.
@@ -653,9 +675,6 @@ sound and video overhead.
 
 In Rastan, the music plays at a slow tempo UNLESS you are moving--then
 it plays the music just fine.
-
-The Merlin 16 assembler does not seem to work right.  I fixed a bug
-with this once, but I appear to have broken it again.
 
 Under GS/OS, the 5.25" drive emulation does not seem to work right.
 I'm working on fixing this.
@@ -693,6 +712,39 @@ can use the low-level /dev/audio sound output routines by running
 with the "-hpdev" option to KEGS.  Warning: On 10.X, make sure you
 have the latest audio patches installed if you use -hpdev, or else you
 may panic the machine!
+
+If your display is not using shared memory, audio defaults to off unless
+you override it with "-audio 1".
+
+SCC emulation:
+-------------
+
+KEGS emulates the two serial ports on a //gs as being two Unix sockets.
+Port 1 (printer port) is at socket address 6501, and port 2 (modem)
+is at socket address 6502.
+
+In KEGS, from APPLESOFT, if you PR#1, all output will then be sent to
+socket port 6501.  You can see it by connecting to the port using
+any method you like, but a simple, easy way is to use telnet.  In
+another Unix window, do: "telnet localhost 6501" and then you
+will see all the output going to the "printer".
+
+Under APPLESOFT, you can PR#1 and IN#1.  This gets input from the
+socket also.  You can type in the telnet window, it will be sent on
+to the emulated //gs.  Telnet on hpux defaults to "line mode" which
+buffers keys you type until you hit return.  This can be a bit distracting,
+and can be disabled by hitting Ctrl-] and then "mode char".  This
+causes a few {{ chars to show up in KEGS--just ignore this for now.
+
+That's about it.  Proterm and Appleworks GS can talk to the modem port
+fine, but it's limited in its usefulness.  I have printed from
+Printshop, but it's a bit pointless since it's sending out Imagewriter
+printer codes which don't look like anything.  You can "print" from
+BASIC by using something like PR#1 in KEGS and
+"telnet localhost 6501 | tee file.out" in another window.
+
+Feel free to let me know what doesn't work, but a lot is known not
+to work.  GNO's tty interface does not work.
 
 
 KEGS status area:
@@ -758,7 +810,7 @@ act:	Some instructions are handled by the main interpreter loop returning
 		number over the last second.  Should be low.
 hev:	This is really getting too complicated.  This tracks HALT_EVENTs.
 		See the code.
-esi:	This counts the number of superhires scan-line interrupts were
+esi:	This counts the number of superhires scan-line interrupts
 		taken in the last second.
 edi:	This counts the number of Ensoniq "special events" over the last
 		second.  A sound that stops playing always causes a KEGS
@@ -814,6 +866,24 @@ graphics hardware with two color-maps, so it is no problem, but if your
 workstation does not, then the colormap will "flash" when you enter
 the window.  
 
+Key summary:
+-----------
+
+F7:    Toggle fast_disk_emul on/off
+F8/F9: Toggle X window pointer hiding on/off (it's both since the F9
+	key doesn't work on my keyboard...sigh).
+F10:   Attempt to change the a2vid_palette.  If you notice some lines on
+	the superhires screen looking a little "off", this may help.
+F11:	Swap X & Y axis of the joystick.
+F12:	Invert the sense of the joystick.
+
+Alt_R, Meta_r, Menu, Print:         Option key
+Alt_L, Meta_L, Cancel, Scroll_lock:  Command key
+
+There is no way to enter a //gs Keypad '=' in KEGS right now, unless
+you have a Unix keyboard with an '=' key on it (mine doesn't).
+
+
 Documentation To-Do:
 -------------------
 
@@ -826,7 +896,7 @@ Describe my changes to SPEEDTEST.
 KEGS To-Do:
 ----------
 
-Serial port emulation (printing, comm)
+Better serial port emulation (printing, comm)
 3200 color mode.
 Nibblized images.
 

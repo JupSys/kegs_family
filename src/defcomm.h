@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.75 97/09/13 23:49:30 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.77 98/04/20 23:55:41 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -44,12 +44,13 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.75 97/09/13 23:49:30
 #define BANK_IO_BIT		31
 #define BANK_SHADOW_BIT		30
 #define BANK_SHADOW2_BIT	29
-#define BANK_IO			(1 << (31 - BANK_IO_BIT))
+#define BANK_IO_TMP		(1 << (31 - BANK_IO_BIT))
 #define BANK_SHADOW		(1 << (31 - BANK_SHADOW_BIT))
 #define BANK_SHADOW2		(1 << (31 - BANK_SHADOW2_BIT))
+#define SET_BANK_IO		(BANK_IO_TMP | (word32)&dummy_memory1[0])
 
 
-#define BANK_BAD_MEM		0xff
+#define BANK_BAD_MEM		(0xff | (word32)&dummy_memory1[0])
 
 
 #define LEN_FIFO_BUF	160

@@ -1,4 +1,25 @@
 
+Changes in KEGS v0.33 since v0.32
+
+- Fixed bug in engine_s.s that prevented compiling on pre-10.20 systems.
+- ADB mouse interrupts work now.  Fixed "bug" where GSHK would think
+   mouse button was depressed at startup. (GS/OS is looking at mouse
+   button 1 status, which accidentally was reading as down).
+- ADB emulation of read char_sets and read_kbd_layouts now matches a real
+   //gs.
+- optimization to allow dereferencing page_info[] even if BANK_IO is set,
+   to get a small speed improvement in engines_s:dispatch().
+- SCC logs are 'Z' at the disas prompt.
+- Tool decoded is 'T' at the disas prompt.
+- SCC changes to support slot 1 == port 6501 and slot 2 == port 6502,
+   with limited interrupt support.  Most serial tasks won't work still,
+   but some do.  PR#1/2 and IN#1/2 work fine.  getty under GNO doesn't.
+- -audio [0/1] forces audio off/on.  This just stops the sound playing--
+   internally all Ensoniq interrupts/etc are fully emulated.  If display
+   is not using shared memory (i.e., it's remote), audio defaults to off.
+   (but can be forced on with -audio 1).
+- -display {foo} sends X display to {foo}.
+
 Changes in KEGS v0.32 since v0.31
 
 - Faster dispatch loop, for a 10-15% overall performance improvement

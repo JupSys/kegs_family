@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.103 97/11/02 16:41:38 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.109 98/05/05 21:31:59 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -83,7 +83,9 @@ void adb_error(void);
 void adb_add_kbd_srq(void);
 void adb_clear_kbd_srq(void);
 void adb_add_data_int(void);
+void adb_add_mouse_int(void);
 void adb_clear_data_int(void);
+void adb_clear_mouse_int(void);
 void adb_send_bytes(int num_bytes, word32 val0, word32 val1, word32 val2);
 void adb_send_1byte(word32 val);
 void adb_response_packet(int num_bytes, word32 val);
@@ -129,6 +131,9 @@ void do_clock_data(void);
 /* dis.c */
 int get_num(void);
 void do_debug_intfc(void);
+word32 dis_get_memory_ptr(word32 addr);
+void show_one_toolset(FILE *toolfile, int toolnum, word32 addr);
+void show_toolset_tables(word32 a2bank, word32 addr);
 void do_gen_test(int got_num, int base_seed);
 void set_bp(word32 addr);
 void show_bp(void);
@@ -149,11 +154,23 @@ void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, c
 /* scc.c */
 void scc_init(void);
 void scc_reset(void);
+void scc_update(void);
 void show_scc_state(void);
-word32 scc_read_reg(int port);
-void scc_write_reg(int port, word32 val);
-word32 scc_read_data(int port);
-void scc_write_data(int port, word32 val);
+void scc_log(int regnum, word32 val, double dcycs);
+void show_scc_log(void);
+word32 scc_read_reg(int port, double dcycs);
+void scc_write_reg(int port, word32 val, double dcycs);
+void scc_set_rx_int(int port);
+void scc_clr_rx_int(int port);
+void scc_set_tx_int(int port);
+void scc_clr_tx_int(int port);
+void scc_add_to_readbuf(int port, word32 val);
+void scc_add_to_writebuf(int port, word32 val);
+void scc_accept_socket(int port);
+void scc_try_fill_readbuf(int port);
+void scc_try_to_empty_writebuf(int port);
+word32 scc_read_data(int port, double dcycs);
+void scc_write_data(int port, word32 val, double dcycs);
 
 /* iwm.c */
 void iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525);

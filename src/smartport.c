@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.5 97/09/21 15:30:47 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.6 98/01/13 22:44:44 kentd Exp $";
 
 #include "defc.h"
 
@@ -570,8 +570,9 @@ do_c70d(word32 arg0)
 		engine.acc = (engine.acc & 0xff00) + 0x01;
 		engine.psr |= 0x01;	/* set carry */
 		engine.pc = (rts_addr + 3 + ext) & 0xffff;
-		if(cmd != 0x4a) {
+		if(cmd != 0x4a && cmd != 0x48) {
 			/* Finder does 0x4a call before formatting disk */
+			/* Many things do 0x48 call to see online drives */
 			printf("Just did smtport cmd:%02x rts_addr:%04x, "
 				"cmdlst:%06x\n", cmd, rts_addr, cmd_list);
 			set_halt(1);

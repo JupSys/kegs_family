@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.61 97/09/23 00:07:29 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.63 98/05/05 01:35:52 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -161,7 +161,11 @@ do_debug_intfc()
 				doc_show_ensoniq_state(osc);
 				break;
 			case 'T':
-				show_toolbox_log();
+				if(got_num) {
+					show_toolset_tables(a2bank, a2);
+				} else {
+					show_toolbox_log();
+				}
 				break;
 			case 'V':
 				printf("g_irq_pending: %d\n", g_irq_pending);
@@ -211,6 +215,7 @@ do_debug_intfc()
 				do_debug_list();
 				break;
 			case 'Z':
+				show_scc_log();
 				show_scc_state();
 				break;
 			case 'S':
@@ -328,6 +333,64 @@ do_debug_intfc()
 	}
 	printf("Console closed.\n");
 }
+
+word32
+dis_get_memory_ptr(word32 addr)
+{
+	word32	tmp1, tmp2, tmp3;
+
+	tmp1 = get_memory_c(addr, 0);
+	tmp2 = get_memory_c(addr + 1, 0);
+	tmp3 = get_memory_c(addr + 2, 0);
+
+	return (tmp3 << 16) + (tmp2 << 8) + tmp1;
+}
+
+void
+show_one_toolset(FILE *toolfile, int toolnum, word32 addr)
+{
+	word32	rout_addr;
+	int	num_routs;
+	int	i;
+
+	num_routs = dis_get_memory_ptr(addr);
+	fprintf(toolfile, "Tool 0x%02x, table: 0x%06x, num_routs:%03x\n",
+		toolnum, addr, num_routs);
+
+	for(i = 1; i < num_routs; i++) {
+		rout_addr = dis_get_memory_ptr(addr + 4*i);
+		fprintf(toolfile, "%06x = %02x%02x\n", rout_addr, i, toolnum);
+	}
+}
+
+void
+show_toolset_tables(word32 a2bank, word32 addr)
+{
+	FILE	*toolfile;
+	word32	tool_addr;
+	int	num_tools;
+	int	i;
+
+	addr = (a2bank << 16) + (addr & 0xffff);
+
+	toolfile = fopen("tool_set_info", "w");
+	if(toolfile == 0) {
+		fprintf(stderr, "fopen of tool_set_info failed: %d\n", errno);
+		exit(2);
+	}
+
+	num_tools = dis_get_memory_ptr(addr);
+	fprintf(toolfile, "There are 0x%02x tools using ptr at %06x\n",
+			num_tools, addr);
+
+	for(i = 1; i < num_tools; i++) {
+		tool_addr = dis_get_memory_ptr(addr + 4*i);
+		show_one_toolset(toolfile, i, tool_addr);
+	}
+
+	fclose(toolfile);
+}
+
 
 #ifndef TEST65
 void

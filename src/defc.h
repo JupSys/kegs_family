@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.48 97/06/15 14:45:56 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.50 98/04/20 21:51:16 kentd Exp $";
 #endif
 
 #include "defcomm.h"
