@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.33 99/06/22 23:35:33 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.34 99/06/27 22:58:33 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -671,6 +671,7 @@ void
 set_halt_act(int val)
 {
 	halt_sim |= val;
+	g_fcycles_stop = (float)0.0;
 }
 
 void

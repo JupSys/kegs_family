@@ -1,4 +1,14 @@
 
+Changes in KEGS v0.52 since v0.51 (6/27/99)
+- Small speed-up of interpreter loop to avoid checking the global variable
+	"halt_sim" after every instruction.
+- Smartport fixes to avoid halts when the SCSI CD player NDA is installed.
+- Fix to autodetect X visual depth (it didn't work at all in v0.51).
+- Fix to HP binary--KEGS v0.51 hit an HP linker bug which caused the
+	executable to not run correctly.  (It didn't obey an assembly-
+	language alignment command correctly).  Re-ordering the object
+	list works around the problem.
+
 Changes in KEGS v0.51 since v0.50 (6/1/99)
 - Fixed many bugs that crept into scanline interrupts over the last few months.
 - RAM size is now settable on the commandline: -mem 0x400000 will use

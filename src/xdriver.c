@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.146 99/06/01 00:41:28 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.147 99/06/27 23:40:12 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -811,8 +811,7 @@ x_try_find_visual(Display *display, int depth, int screen_num,
 
 	vid_printf("visuals matched: %d\n", visualsMatched);
 	if(visualsMatched == 0) {
-		fprintf(stderr, "no visuals!\n");
-		exit(2);
+		return (Visual *)0;
 	}
 
 	visual_chosen = -1;
