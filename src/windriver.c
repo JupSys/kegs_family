@@ -8,7 +8,10 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.8 2004-03-23 17:25:37-05 kentd Exp $";
+const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.9 2004-10-14 13:28:23-04 kentd Exp $";
+
+/* Based on code from Chea Chee Keong from KEGS32, which is available at */
+/*  http://www.geocities.com/akilgard/kegs32 */
 
 #define WIN32_LEAN_AND_MEAN	/* Tell windows we want less header gunk */
 #define STRICT			/* Tell Windows we want compile type checks */

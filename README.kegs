@@ -6,13 +6,14 @@ What is this?
 -------------
 
 KEGS is an Apple IIgs emulator for Mac OS X, Linux, and Win32.
-The Apple IIgs was the last released computer in the Apple II line.
-It first was sold in 1986.
+The Apple IIgs was the most powerful computer in the Apple II line.
+It first was sold in 1986.  It has the capability to run almost all
+Apple II, Apple IIe, and Apple IIc programs.
 
 KEGS supports all Apple IIgs graphics modes (which include all Apple //e
 modes), plus plays all Apple IIgs sounds accurately.  It supports
-limited serial port emulation through sockets, or can use real serial ports
-on Windows and Mac OS X.
+limited serial port emulation through TCP/IP connections, or can use real
+serial ports on Windows and Mac OS X.
 
 The ROMs and GS/OS (the Apple IIgs operating system) are not included
 with KEGS since they are not freely distributable.  KEGS is a little
@@ -20,28 +21,31 @@ user-hostile now, so if something doesn't work, let me know what went
 wrong, and I'll try to help you out.  See my email address at the end of
 this file.
 
+I'd like to thank Chea Chee Keong who created KEGS32, the first Windows
+port of KEGS.  That version, which has a better Windows-interface but which
+is based on older core code, is at http://www.geocities.com/akilgard/kegs2.
+
 KEGS features:
 -------------
 
 Fast 65816 emulation:
-	About 80MHz on a P4 1.7GHz or a G4 1GHz.
+	About 80MHz on a Pentium 4 1.7GHz or a Mac G4 1GHz.
 Emulates low-level 5.25" and 3.5" drive accesses (even nibble-copiers work!).
 Emulates classic Apple II sound and 32-voice Ensoniq sound.
 	All sound is played in 16-bit stereo at 48KHz (44100 on a Mac).
 Emulates all Apple IIgs graphics modes, including border effects.
 	Can handle mixed-displays (superhires at the top, lores at the bottom).
 	Always does 60 full screen video updates per second.
-	Even supports 3200-color pictures.
+	Supports 3200-color pictures.
 Mouse and joystick support.
-Emulates all Apple IIgs memory "tricks" for full compatibility.
 Low-level ADB keyboard and mouse emulation enables Wolfenstein 3D to run.
 Clock chip emulation makes the host time available to the Apple IIgs.
 Emulated battery RAM remembers control panel settings.
 Limited SCC (serial port) emulation to enable PR#1/2 IN#1/2 and other
 	serial programs to work.
 
-KEGS by default emulates a 8MB Apple IIgs, but you can change this with
-the "-mem" command line option.
+KEGS by default emulates a 8MB Apple IIgs, but you can change this from
+the Configuration Panel.
 
 KEGS is so accurate, even the built-in ROM selftests pass (you must be in
 2.8MHz speed mode to pass the self-tests).
@@ -87,8 +91,9 @@ or fc/0000 - ff/ffff from a ROM 03 GS, and put that in a file called
 Running KEGS:
 ------------
 
-The distribution comes in 3 parts: a source-only distribution (kegs.xxx.tar.gz),
-along with two binary distributions for Mac and Windows.
+The distribution comes with the full source code for all platforms in
+the src/ directory, the Windows executable as kegswin.exe, and the Mac OS X
+executable as KEGSMAC.
 
 See the README.compile file for more info about compiling for Linux.
 
@@ -102,8 +107,8 @@ with the Finder (or using the Terminal).
 
 Start kegs by Double-clicking the KEGSMAC icon on a MAC, or by running
 the executable (kegswin on Windows, and kegs on Linux).  KEGSMAC can
-be run by the Terminal window as well (which enables access to more debug
-information) by typing: "./KEGSMAC.app/Contents/MacOS/KEGSMAC".
+be run by the Terminal window on a Mac as well (which enables access to
+more debug information) by typing: "./KEGSMAC.app/Contents/MacOS/KEGSMAC".
 
 Assuming all goes well, KEGS will then boot up but probably not find any
 disk images.  See below for how to tell KEGS what disk images to use.
@@ -132,12 +137,14 @@ a directory level.  When you find the image you want, just press Return.
 If the image has partitions that KEGS supports, another selection
 dialog will have you select which partition to mount.  You will probably
 only have partitions on direct devices you mount.  For instance, on a
-Mac, /dev/disk1 is usually the CDROM drive.
+Mac, /dev/disk1 can sometimes be the CDROM drive.
 
 KEGS can handle "raw", .dsk, .po, 2IMG, 5.25" ".nib" images, some Mac
 Diskcopy images and partitioned images.  The .dsk and .po formats you often
 find on the web are really "raw" formats, and so they work fine.  KEGS uses
 the host file permissions to encode the read/write status of the image.
+KEGS can open any image file compressed with gzip (with the extension ".gz")
+automatically as a read-only disk image.
 
 An image is the representation of an Apple IIgs disk, but in a file on
 your computer.  For 3.5" disks, for example, a raw image would be exactly
@@ -151,6 +158,9 @@ are executable files for Macintosh only.  You need a macintosh to execute
 those programs, which creates Disk Copy image files with no special extensions
 (and with spaces in the names).  Once you get those files back to your
 host machine, you can use them by listing them in kegs_conf.
+
+You can also get Apple II programs in ".dsk" format from a variety of
+sites on the internet, and these should all work on KEGS as well.
 
 KEGS also supports partitioned devices.  For instance, if you have a CD-ROM
 on your computer, just pop an Apple II CD in, and KEGS can mount it, if
@@ -210,17 +220,26 @@ so that the mouse will be moving like the paddle on the screen.  "Little
 Brick Out" is on the DOS 3.3 master disk.  The joystick does not work
 properly if the pointer is constrained in the window.
 
-If you have a real joystick on Linux, start KEGS with "-joystick" and 
-you should be able to use it.  Real joysticks should also work on Windows.
+You can also select from a "Keypad Joystick" or a real joystick from
+the Configuration panel.  Press return on the "Joystick Configuration"
+entry, and then select between Mouse Joystick, Keypad Joystick, or one
+of two native joysticks.  The Keypad Joystick uses your keypad number
+keys as a joystick, where keypad 7 means move to the upper left, and
+keypad 3 means move to the lower right.  Pressing multiple keys together
+averages the results, allowing finer control than just 8 directions.
+Also, joystick scaling is selectable here for games which require
+a greater range of motion to work correctly, along with trim adjustment
+which moves the centering point.  Adjusting scaling usually means you
+will need to adjust the trim as well.
 
 The left mouse button is the mouse button for KEGS.  The right mouse
 button (if you have it) or F6 toggles between four speed modes.  Mode 0
 (the default) means run as fast as possible.  Mode 1 means run at 1MHz.
 Mode 2 means run at 2.8MHz.  Mode 3 means run at 8.0MHz (about the speed
 of a ZipGS accelerator).  Most Apple //e (or earlier) games need to be
-run at 1MHz.  Many Apple IIgs demos must run at 2.8MHz or they crash.  Try
-running ornery programs at 2.8MHz.  3200 pictures generally only display
-correctly at 2.8MHz or sometimes 8.0MHz.
+run at 1MHz.  Many Apple IIgs demos must run at 2.8MHz or they will not
+operate correctly.  Try running ornery programs at 2.8MHz.  3200 pictures
+generally only display correctly at 2.8MHz or sometimes 8.0MHz.
 
 The middle mouse button or Shift-F6 causes KEGS to stop emulation, and enter
 the debugger.  You can continue with "g" then return in the debug window.
@@ -272,6 +291,10 @@ type:
 
 e1/0010B
 
+The format is "bank/address" then "B", where the B must be in caps and
+the address must use lower-case hex.  For Apple IIe programs, just use a
+bank of 0.
+
 To list all breakpoints, just type 'B' with no number in front of it.
 To delete a breakpoint, enter its address followed by 'D', so
 
@@ -296,27 +319,17 @@ watchpoints).
 Frederic Devernay has written a nice help screen available in the
 debugger when you type "h".
 
+Useful locations for setting breakpoints:
+0/3f0B		- Break handler
+0/c000B		- Keyboard latch, programs read keys from this address
+
+
+
 KEGS command-line option summary:
 --------------------------------
 
--mem {mem_amt}: KEGS will use mem_amt as the amount of expansion RAM in
-	the IIgs.  This memory is in addition to the 256KB on a ROM 01
-	motherboard, or 1MB on a ROM 03.  The memory is in bytes,
-	and it will be rounded down to the nearest 64KB.  "-mem 0x800000"
-	will use 8MB of expansion RAM (the default).
--badrd:	Causes KEGS to halt on any access to invalid memory addresses.
-	Useful for debugging.  By default, KEGS allows reads to invalid
-	memory since the Finder does some (especially when you open the
-	About window, and then close it).  But KEGS warns you about these
-	accesses in the debug window.  In general, these warnings
-	indicate buggy programs.  If the warnings get severe, it's
-	a good sign you should quit KEGS and start over before the
-	emulated program crashes.  -badrd would be the default for KEGS
-	if it wasn't for the Finder's About window's problem.
--ignbadacc:	Causes KEGS to allow reads & writes to invalid memory
-	addresses without printing any warnings.  Useful for running
-	extremely buggy programs so you don't have to see all the warning
-	messages scroll by.
+There are others, but the Configuration panel provides a better way to
+set them so they are no longer listed here.
 -skip:	KEGS will "skip" that many screen redraws between refreshes.
 	-skip 0 will do 60 frames per second, -skip 1 will do 30 fps,
 	-skip 5 will do 10 fps.
@@ -352,8 +365,8 @@ Command/Option keys:
 -------------------
 
 If you have a workstation keyboard with the new Windows keys, you can
-use them as the command/option keys.  This is what I use.  Since many people
-don't have the PC keyboard, there are several alternatives.
+use them as the command/option keys.  This is what I use on my Mac.  Since
+many people don't have the PC keyboard, there are several alternatives.
 
 The following keys are Option (closed-apple) (not all keyboards have all
 keys):  F2, Meta_R, Alt_R, Cancel, Print_screen, Mode_switch, Option,
@@ -544,7 +557,7 @@ equivalent speed.  Many games will be unplayable at the unlimited
 setting.  Setting the IIgs control panel speed to "slow" will slow down
 to 1MHz.
 
-Sound output has an interesting relationship to KEGS timing.  KEGS must
+Sound output has an important relationship to KEGS timing.  KEGS must
 play one second of sound per second of emulated time.  Normally, this
 works out exactly right.  But as noted above, if KEGS can't maintain the
 needed speed, it extends the emulated second.  If it extends the second
@@ -696,8 +709,7 @@ the above lets it work fine. This seems to be a bug in the demo.
 KEGS bugs:
 ---------
 
-KEGS's serial port emulation is very limited now, and only for
-adventurous souls.
+KEGS's serial port emulation is very limited now.
 
 On a ROM03, KEGS makes a patch to the ROM image (inside emulation, not
 to the Unix file) to fix a bug in the ROM code.  Both ROM01 and ROM03
@@ -875,7 +887,7 @@ Fix the Ensoniq bugs to make sound more accurate.
 If you have any problems/questions/etc., just let me know.
 
 Special thanks to Jeff Smoot of climbingwashington.com for letting me use
-the picture of a keg in the Mac icon.
+the picture of a keg for the Mac icon.
 
 Kent Dickey
 kadickey@alumni.princeton.edu

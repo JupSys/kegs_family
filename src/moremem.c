@@ -8,11 +8,9 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.234 2004-10-05 20:13:07-04 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.244 2004-10-16 02:47:04-04 kentd Exp $";
 
 #include "defc.h"
-
-extern int daylight;
 
 extern char g_kegs_version_str[];
 
@@ -28,27 +26,48 @@ extern word32 slow_mem_changed[];
 extern int g_num_breakpoints;
 extern word32 g_breakpts[];
 
-extern int halt_sim;
 extern double g_last_vbl_dcycs;
 
 extern Page_info page_info_rd_wr[];
 
-extern int scr_mode;
-
 extern int Verbose;
-extern int Halt_on;
 extern double g_paddle_trig_dcycs;
 extern int g_rom_version;
+extern int g_user_page2_shadow;
 
-extern int g_paddle_button[4];
 
 extern Fplus *g_cur_fplus_ptr;
 
 /* from iwm.c */
-extern int head_35;
-extern int g_apple35_sel;
-extern int cur_drive;
+int	g_num_shadow_all_banks = 0;
 
+#define IOR(val) ( (val) ? 0x80 : 0x00 )
+
+
+extern int g_cur_a2_stat;
+
+int	g_em_emubyte_cnt = 0;
+int	g_paddle_buttons = 0;
+
+int	g_c023_val = 0;
+int	g_c023_scan_int_irq_pending = 0;
+int	g_c023_1sec_int_irq_pending = 0;
+int	g_c029_val_some = 0x41;
+int	g_c02b_val = 0x08;
+int	g_c02d_int_crom = 0;
+int	g_c031_disk35 = 0;
+int	g_c033_data = 0;
+int	g_c034_val = 0;
+int	g_c035_shadow_reg = 0x08;
+int	g_c036_val_speed = 0x80;
+int	g_c03ef_doc_ptr = 0;
+int	g_c041_val = 0;		/* C041_EN_25SEC_INTS, C041_EN_MOVE_INTS */
+int	g_c046_val = 0;
+int	g_c046_25sec_irq_pend = 0;
+int	g_c046_vbl_irq_pending = 0;
+int	g_c05x_annuncs = 0;
+int	g_c068_statereg = 0;
+int	g_c08x_wrdefram = 0;
 int	g_zipgs_unlock = 0;
 int	g_zipgs_reg_c059 = 0x5f;
 	// 7=LC cache dis, 6==5ms paddle del en, 5==5ms ext del en,
@@ -63,63 +82,39 @@ int	g_zipgs_reg_c05b = 0x40;
 int	g_zipgs_reg_c05c = 0x00;
 	// 7:1==slot delay enable (for 52-54ms), 0==speaker 5ms delay
 
-int	g_emubyte_cnt = 0;
+#define EMUSTATE(a)	{ #a, &a }
 
-int	statereg;
-int	halt_on_c02a = 0;
-int	g_shadow_all_banks = 0;
-int	g_num_shadow_all_banks = 0;
+Emustate_list g_emustate_list[] = {
+	EMUSTATE(g_cur_a2_stat),
+	EMUSTATE(g_paddle_buttons),
 
-extern Engine_reg engine;
-
-#define IOR(val) ( (val) ? 0x80 : 0x00 )
-
-int	linear_vid = 1;
-int	bank1latch = 0;
-
-int	wrdefram = 0;
-int	int_crom[8] = { 0, 0, 0, 0,  0, 0, 0, 0 };
-
-extern int g_cur_a2_stat;
-
-int	annunc_0 = 0;
-int	annunc_1 = 0;
-int	annunc_2 = 0;
-
-int	shadow_reg = 0x08;
-
-int	stop_on_c03x = 0;
-
-extern int doc_ptr;
-
-int	shadow_text = 1;
-
-int	g_border_color = 0;
-
-int	speed_fast = 1;
-word32	g_slot_motor_detect = 0;
-int	power_on_clear = 0;
-
-
-int	g_c023_val = 0;
-int	c023_scan_int_irq_pending = 0;
-int	c023_1sec_int_irq_pending = 0;
-
-int	c02b_val = 0x08;
-
-int	c039_write_val = 0;
-
-int	c041_en_25sec_ints = 0;
-int	c041_en_vbl_ints = 0;
-int	c041_en_switch_ints = 0;
-int	c041_en_move_ints = 0;
-int	c041_en_mouse = 0;
-
-int	g_c046_val = 0;
-
-int	c046_25sec_irq_pend = 0;
-int	c046_vbl_irq_pending = 0;
-
+	EMUSTATE(g_em_emubyte_cnt),
+	EMUSTATE(g_c023_val),
+	EMUSTATE(g_c023_scan_int_irq_pending),
+	EMUSTATE(g_c023_1sec_int_irq_pending),
+	EMUSTATE(g_c029_val_some),
+	EMUSTATE(g_c02b_val),
+	EMUSTATE(g_c02d_int_crom),
+	EMUSTATE(g_c031_disk35),
+	EMUSTATE(g_c033_data),
+	EMUSTATE(g_c034_val),
+	EMUSTATE(g_c035_shadow_reg),
+	EMUSTATE(g_c036_val_speed),
+	EMUSTATE(g_c03ef_doc_ptr),
+	EMUSTATE(g_c041_val),
+	EMUSTATE(g_c046_val),
+	EMUSTATE(g_c046_25sec_irq_pend),
+	EMUSTATE(g_c046_vbl_irq_pending),
+	EMUSTATE(g_c05x_annuncs),
+	EMUSTATE(g_c068_statereg),
+	EMUSTATE(g_c08x_wrdefram),
+	EMUSTATE(g_zipgs_unlock),
+	EMUSTATE(g_zipgs_reg_c059),
+	EMUSTATE(g_zipgs_reg_c05a),
+	EMUSTATE(g_zipgs_reg_c05b),
+	EMUSTATE(g_zipgs_reg_c05c),
+	{ 0, 0, }
+};
 
 #define UNIMPL_READ	\
 	halt_printf("UNIMP READ to addr %08x\n", loc);	\
@@ -174,10 +169,11 @@ fixup_bank0_2000_4000()
 		if(g_cur_a2_stat & ALL_STAT_PAGE2) {
 			mem0rd += 0x10000;
 			mem0wr += 0x10000;
-			if((shadow_reg & 0x12) == 0 || (shadow_reg & 0x8) == 0){
+			if((g_c035_shadow_reg & 0x12) == 0 ||
+					(g_c035_shadow_reg & 0x8) == 0) {
 				mem0wr += BANK_SHADOW2;
 			}
-		} else if((shadow_reg & 0x02) == 0) {
+		} else if((g_c035_shadow_reg & 0x02) == 0) {
 			mem0wr += BANK_SHADOW;
 		}
 		
@@ -187,10 +183,11 @@ fixup_bank0_2000_4000()
 		}
 		if(RAMWRT) {
 			mem0wr += 0x10000;
-			if((shadow_reg & 0x12) == 0 || (shadow_reg & 0x8) == 0){
+			if((g_c035_shadow_reg & 0x12) == 0 ||
+					(g_c035_shadow_reg & 0x8) == 0) {
 				mem0wr += BANK_SHADOW2;
 			}
-		} else if((shadow_reg & 0x02) == 0) {
+		} else if((g_c035_shadow_reg & 0x02) == 0) {
 			mem0wr += BANK_SHADOW;
 		}
 	}
@@ -223,7 +220,7 @@ fixup_bank0_0400_0800()
 			mem0rd += 0x10000;
 		}
 	}
-	if((shadow_reg & 0x01) == 0) {
+	if((g_c035_shadow_reg & 0x01) == 0) {
 		mem0wr += shadow;
 	}
 
@@ -256,12 +253,12 @@ fixup_intcx()
 	int	no_io_shadow;
 	int	off;
 	int	start_k;
-	int	indx;
+	word32	mask;
 	int	j, k;
 
 	rom10000 = &(g_rom_fc_ff_ptr[0x30000]);
 
-	no_io_shadow = (shadow_reg & 0x40);
+	no_io_shadow = (g_c035_shadow_reg & 0x40);
 
 	start_k = 0;
 	if(no_io_shadow) {
@@ -280,10 +277,10 @@ fixup_intcx()
 		SET_PAGE_INFO_RD(0xc0 + off, SET_BANK_IO);
 
 		for(j = 0xc1; j < 0xc8; j++) {
-			indx = j & 0xf;
+			mask = 1 << (j & 0xf);
 			if(j < 0xc8) {
 				rom_inc = SET_BANK_IO;
-				if((int_crom[indx] == 0) || INTCX) {
+				if(((g_c02d_int_crom & mask) == 0) || INTCX) {
 					rom_inc = rom10000 + (j << 8);
 				} else {
 					// User-slot rom
@@ -295,7 +292,7 @@ fixup_intcx()
 		}
 		for(j = 0xc8; j < 0xd0; j++) {
 			/* c800 - cfff */
-			if(int_crom[3] == 0 || INTCX) {
+			if(((g_c02d_int_crom & (1 << 3)) == 0) || INTCX) {
 				rom_inc = rom10000 + (j << 8);
 			} else {
 				/* c800 space not necessarily mapped */
@@ -323,9 +320,9 @@ fixup_wrdefram(int new_wrdefram)
 	byte	*wrptr;
 	int	j;
 	
-	wrdefram = new_wrdefram;
+	g_c08x_wrdefram = new_wrdefram;
 
-	if(shadow_reg & 0x40) {
+	if(g_c035_shadow_reg & 0x40) {
 		/* do nothing */
 		return;
 	}
@@ -416,14 +413,14 @@ fixup_altzp()
 	mem0rd = &(g_memory_ptr[0xd000]);
 	mem0wr = mem0rd;
 
-	if(shadow_reg & 0x40) {
+	if(g_c035_shadow_reg & 0x40) {
 		if(ALTZP) {
 			mem0rd += 0x10000;
 		}
 		fixup_any_bank_any_page(0xd0, 0x10, mem0rd - 0x1000,
 						mem0rd - 0x1000);
 	} else {
-		if(!wrdefram) {
+		if(!g_c08x_wrdefram) {
 			mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
 		}
 		if(ALTZP) {
@@ -442,7 +439,7 @@ fixup_altzp()
 
 	mem0rd = &(g_memory_ptr[0xe000]);
 	mem0wr = mem0rd;
-	if(!wrdefram) {
+	if(!g_c08x_wrdefram) {
 		mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
 	}
 	if(ALTZP) {
@@ -534,7 +531,8 @@ fixup_ramwrt()
 	if(ramwrt) {
 		shadow = BANK_SHADOW2;
 	}
-	if(((shadow_reg & 0x20) != 0) || g_rom_version < 3) {
+	if( ((g_c035_shadow_reg & 0x20) != 0) ||
+				((g_rom_version < 3) && !g_user_page2_shadow)) {
 		shadow = 0;
 	}
 	for(j = 8; j < 0x0c; j++) {
@@ -547,10 +545,11 @@ fixup_ramwrt()
 
 	shadow = 0;
 	if(ramwrt) {
-		if((shadow_reg & 0x14) == 0 || (shadow_reg & 0x08) == 0) {
+		if((g_c035_shadow_reg & 0x14) == 0 ||
+					(g_c035_shadow_reg & 0x08) == 0) {
 			shadow = BANK_SHADOW2;
 		}
-	} else if((shadow_reg & 0x04) == 0) {
+	} else if((g_c035_shadow_reg & 0x04) == 0) {
 		shadow = BANK_SHADOW;
 	}
 	for(j = 0x40; j < 0x60; j++) {
@@ -558,7 +557,7 @@ fixup_ramwrt()
 	}
 
 	shadow = 0;
-	if(ramwrt && (shadow_reg & 0x08) == 0) {
+	if(ramwrt && (g_c035_shadow_reg & 0x08) == 0) {
 		/* shr shadowing */
 		shadow = BANK_SHADOW2;
 	}
@@ -597,7 +596,7 @@ fixup_lcbank2()
 			mem0rd -= 0x1000;	/* lcbank1, use 0xc000-cfff */
 		}
 		mem0wr = mem0rd;
-		if((k < 2) && !wrdefram) {
+		if((k < 2) && !g_c08x_wrdefram) {
 			mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
 		}
 		if((k < 2) && RDROM) {
@@ -623,7 +622,7 @@ fixup_rdrom()
 		if((k == 0) && ALTZP) {
 			mem0rd += 0x10000;
 		}
-		if((shadow_reg & 0x40) == 0) {
+		if((g_c035_shadow_reg & 0x40) == 0) {
 			if(RDROM) {
 				mem0rd = &(g_rom_fc_ff_ptr[0x30000]);
 			}
@@ -640,8 +639,8 @@ set_statereg(double dcycs, int val)
 {
 	int	xor;
 
-	xor = val ^ statereg;
-	statereg = val;
+	xor = val ^ g_c068_statereg;
+	g_c068_statereg = val;
 	if(xor == 0) {
 		return;
 	}
@@ -700,7 +699,7 @@ fixup_shadow_txt1()
 	fixup_bank0_0400_0800();
 
 	mem0wr = &(g_memory_ptr[0x10000]);
-	if((shadow_reg & 0x01) == 0) {
+	if((g_c035_shadow_reg & 0x01) == 0) {
 		mem0wr += BANK_SHADOW2;
 	}
 	for(j = 4; j < 8; j++) {
@@ -722,7 +721,8 @@ fixup_shadow_txt2()
 		mem0wr += 0x10000;
 		shadow = BANK_SHADOW2;
 	}
-	if(((shadow_reg & 0x20) == 0) && (g_rom_version >= 3)) {
+	if(((g_c035_shadow_reg & 0x20) == 0) &&
+			((g_rom_version >= 3) || g_user_page2_shadow)) {
 		mem0wr += shadow;
 	}
 	for(j = 8; j < 0xc; j++) {
@@ -731,7 +731,8 @@ fixup_shadow_txt2()
 
 	/* and bank 1 */
 	mem0wr = &(g_memory_ptr[0x10000]);
-	if(((shadow_reg & 0x20) == 0) && (g_rom_version >= 3)) {
+	if(((g_c035_shadow_reg & 0x20) == 0) &&
+			((g_rom_version >= 3) || g_user_page2_shadow)) {
 		mem0wr += BANK_SHADOW2;
 	}
 	for(j = 8; j < 0xc; j++) {
@@ -749,7 +750,7 @@ fixup_shadow_hires1()
 
 	/* and bank 1 */
 	mem0wr = &(g_memory_ptr[0x10000]);
-	if((shadow_reg & 0x12) == 0 || (shadow_reg & 0x8) == 0) {
+	if((g_c035_shadow_reg & 0x12) == 0 || (g_c035_shadow_reg & 0x8) == 0) {
 		mem0wr += BANK_SHADOW2;
 	}
 	for(j = 0x20; j < 0x40; j++) {
@@ -767,10 +768,11 @@ fixup_shadow_hires2()
 	mem0wr = &(g_memory_ptr[0x00000]);
 	if(RAMWRT) {
 		mem0wr += 0x10000;
-		if((shadow_reg & 0x14) == 0 || (shadow_reg & 0x8) == 0) {
+		if((g_c035_shadow_reg & 0x14) == 0 ||
+					(g_c035_shadow_reg & 0x8) == 0) {
 			mem0wr += BANK_SHADOW2;
 		}
-	} else if((shadow_reg & 0x04) == 0) {
+	} else if((g_c035_shadow_reg & 0x04) == 0) {
 		mem0wr += BANK_SHADOW;
 	}
 	for(j = 0x40; j < 0x60; j++) {
@@ -779,7 +781,7 @@ fixup_shadow_hires2()
 
 	/* and bank 1 */
 	mem0wr = &(g_memory_ptr[0x10000]);
-	if((shadow_reg & 0x14) == 0 || (shadow_reg & 0x8) == 0) {
+	if((g_c035_shadow_reg & 0x14) == 0 || (g_c035_shadow_reg & 0x8) == 0) {
 		mem0wr += BANK_SHADOW2;
 	}
 	for(j = 0x40; j < 0x60; j++) {
@@ -797,7 +799,7 @@ fixup_shadow_shr()
 	mem0wr = &(g_memory_ptr[0x00000]);
 	if(RAMWRT) {
 		mem0wr += 0x10000;
-		if((shadow_reg & 0x8) == 0) {
+		if((g_c035_shadow_reg & 0x8) == 0) {
 			mem0wr += BANK_SHADOW2;
 		}
 	}
@@ -807,7 +809,7 @@ fixup_shadow_shr()
 
 	/* and bank 1, only pages 0x60 - 0xa0 */
 	mem0wr = &(g_memory_ptr[0x10000]);
-	if((shadow_reg & 0x8) == 0) {
+	if((g_c035_shadow_reg & 0x8) == 0) {
 		mem0wr += BANK_SHADOW2;
 	}
 	for(j = 0x60; j < 0xa0; j++) {
@@ -823,7 +825,7 @@ fixup_shadow_iolc()
 
 	for(k = 0; k < 2; k++) {
 		mem0rd = &(g_memory_ptr[k << 16]);
-		if(shadow_reg & 0x40) {
+		if(g_c035_shadow_reg & 0x40) {
 			fixup_any_bank_any_page((k << 8) + 0xc0, 0x10,
 				mem0rd + 0xd000, mem0rd + 0xd000);
 			if(k == 0 && ALTZP) {
@@ -844,7 +846,7 @@ fixup_shadow_iolc()
 				mem0rd += 0x10000;
 			}
 			mem0wr = mem0rd;
-			if(!wrdefram) {
+			if(!g_c08x_wrdefram) {
 				mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
 			}
 			if(RDROM) {
@@ -861,12 +863,12 @@ update_shadow_reg(int val)
 {
 	int	xor;
 
-	if(shadow_reg == val) {
+	if(g_c035_shadow_reg == val) {
 		return;
 	}
 
-	xor = shadow_reg ^ val;
-	shadow_reg = val;
+	xor = g_c035_shadow_reg ^ val;
+	g_c035_shadow_reg = val;
 
 	if(xor & 8) {
 		fixup_shadow_hires1();
@@ -888,7 +890,7 @@ update_shadow_reg(int val)
 	if(xor & 1) {
 		fixup_shadow_txt1();
 	}
-	if((xor & 0x20) && g_rom_version >= 3) {
+	if((xor & 0x20) && ((g_rom_version >= 3) || g_user_page2_shadow)) {
 		fixup_shadow_txt2();
 	}
 	if(xor & 0x40) {
@@ -908,7 +910,7 @@ fixup_shadow_all_banks()
 	/* only do banks 3 - num_banks by 2, shadowing into e1 */
 
 	shadow = 0;
-	if(g_shadow_all_banks && ((shadow_reg & 0x08) == 0)) {
+	if((g_c036_val_speed & 0x10) && ((g_c035_shadow_reg & 0x08) == 0)) {
 		shadow = BANK_SHADOW2;
 	}
 	num_banks = g_mem_size_total >> 16;
@@ -968,7 +970,7 @@ setup_pageinfo()
 
 	fixup_bank0_2000_4000();
 	fixup_bank0_0400_0800();
-	fixup_wrdefram(wrdefram);
+	fixup_wrdefram(g_c08x_wrdefram);
 	fixup_altzp();
 	fixup_ramrd();
 	fixup_ramwrt();
@@ -989,7 +991,7 @@ show_bankptrs_bank0rdwr()
 	show_bankptrs(1);
 	show_bankptrs(0xe0);
 	show_bankptrs(0xe1);
-	printf("statereg: %02x\n", statereg);
+	printf("statereg: %02x\n", g_c068_statereg);
 }
 
 void
@@ -1053,8 +1055,6 @@ show_addr(byte *ptr)
 	dcycs = g_last_vbl_dcycs + *cyc_ptr;
 
 
-int dummy = 0;
-
 int
 io_read(word32 loc, double *cyc_ptr)
 {
@@ -1063,10 +1063,10 @@ io_read(word32 loc, double *cyc_ptr)
 #if 0
 	double	fcyc, new_fcyc;
 #endif
+	word32	mask;
 	int new_lcbank2;
 	int new_wrdefram;
 	int tmp;
-	int slot;
 	int i;
 
 	CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr, fcyc, new_fcyc);
@@ -1098,7 +1098,7 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x16: /* c016: ALTZP */
 			return IOR(ALTZP);
 		case 0x17: /* c017: rdc3rom */
-			return IOR(int_crom[3]);
+			return IOR(g_c02d_int_crom & (1 << 3));
 		case 0x18: /* c018: rd80c0l */
 			return IOR((g_cur_a2_stat & ALL_STAT_ST80));
 		case 0x19: /* c019: rdvblbar */
@@ -1138,23 +1138,19 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x28: /* 0xc028 */
 			UNIMPL_READ;
 		case 0x29: /* 0xc029 */
-			return((g_cur_a2_stat & 0xa0) | (linear_vid<<6) |
-				(bank1latch));
+			return((g_cur_a2_stat & 0xa0) | g_c029_val_some);
 		case 0x2a: /* 0xc02a */
 #if 0
 			printf("Reading c02a...returning 0\n");
 #endif
 			return 0;
 		case 0x2b: /* 0xc02b */
-			return c02b_val;
+			return g_c02b_val;
 		case 0x2c: /* 0xc02c */
 			/* printf("reading c02c, returning 0\n"); */
 			return 0;
 		case 0x2d: /* 0xc02d */
-			tmp = 0;
-			for(i = 0; i < 8; i++) {
-				tmp = tmp | (int_crom[i] << i);
-			}
+			tmp = g_c02d_int_crom;
 			return tmp;
 		case 0x2e: /* 0xc02e */
 		case 0x2f: /* 0xc02f */
@@ -1166,20 +1162,18 @@ io_read(word32 loc, double *cyc_ptr)
 			return doc_read_c030(dcycs);
 		case 0x31: /* 0xc031 */
 			/* 3.5" control */
-			return (head_35 << 7) | (g_apple35_sel << 6);
+			return g_c031_disk35;
 		case 0x32: /* 0xc032 */
 			/* scan int */
 			return 0;
 		case 0x33: /* 0xc033 = CLOCKDATA*/
-			return clock_read_c033();
+			return g_c033_data;
 		case 0x34: /* 0xc034 = CLOCKCTL */
-			return clock_read_c034();
+			return g_c034_val;
 		case 0x35: /* 0xc035 */
-			return shadow_reg;
+			return g_c035_shadow_reg;
 		case 0x36: /* 0xc036 = CYAREG */
-			tmp = (speed_fast << 7) + (power_on_clear << 6) +
-				(g_shadow_all_banks << 4) + g_slot_motor_detect;
-			return tmp;
+			return g_c036_val_speed;
 		case 0x37: /* 0xc037 */
 			return 0;
 		case 0x38: /* 0xc038 */
@@ -1196,20 +1190,16 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x3d: /* 0xc03d */
 			return doc_read_c03d(dcycs);
 		case 0x3e: /* 0xc03e */
-			return (doc_ptr & 0xff);
+			return (g_c03ef_doc_ptr & 0xff);
 		case 0x3f: /* 0xc03f */
-			return (doc_ptr >> 8);
+			return (g_c03ef_doc_ptr >> 8);
 
 		/* 0xc040 - 0xc04f */
 		case 0x40: /* 0xc040 */
 			/* cassette */
 			return 0;
 		case 0x41: /* 0xc041 */
-			tmp = ((c041_en_25sec_ints << 4) +
-				(c041_en_vbl_ints << 3) +
-				(c041_en_switch_ints << 2) +
-				(c041_en_move_ints << 1) + (c041_en_mouse) );
-			return tmp;
+			return g_c041_val;
 		case 0x45: /* 0xc045 */
 			halt_printf("Mega II mouse read: c045\n");
 			return 0;
@@ -1218,13 +1208,13 @@ io_read(word32 loc, double *cyc_ptr)
 			g_c046_val = (tmp & 0xbf) + ((tmp & 0x80) >> 1);
 			return tmp;
 		case 0x47: /* 0xc047 */
-			if(c046_vbl_irq_pending) {
+			if(g_c046_vbl_irq_pending) {
 				remove_irq();
-				c046_vbl_irq_pending = 0;
+				g_c046_vbl_irq_pending = 0;
 			}
-			if(c046_25sec_irq_pend) {
+			if(g_c046_25sec_irq_pend) {
 				remove_irq();
-				c046_25sec_irq_pend = 0;
+				g_c046_25sec_irq_pend = 0;
 			}
 			g_c046_val &= 0xe7;	/* clear vbl_int, 1/4sec int*/
 			return 0;
@@ -1237,17 +1227,17 @@ io_read(word32 loc, double *cyc_ptr)
 			/* write to $c04f to start.  Then read $c04f to get */
 			/* emulator ($16=sweet16, $fe=bernie II). */
 			/* Then read again to get version: $21 == 2.1 */
-			switch(g_emubyte_cnt) {
+			switch(g_em_emubyte_cnt) {
 			case 1:
-				g_emubyte_cnt = 2;
+				g_em_emubyte_cnt = 2;
 				return 'K';
 			case 2:
-				g_emubyte_cnt = 0;
+				g_em_emubyte_cnt = 0;
 				tmp = g_kegs_version_str[0] - '0';
 				i = g_kegs_version_str[2] - '0';
 				return ((tmp & 0xf) << 4) + (i & 0xf);
 			default:
-				g_emubyte_cnt = 0;
+				g_em_emubyte_cnt = 0;
 				return 0;
 			}
 		case 0x44: /* 0xc044 */
@@ -1266,62 +1256,62 @@ io_read(word32 loc, double *cyc_ptr)
 				g_cur_a2_stat &= (~ALL_STAT_TEXT);
 				change_display_mode(dcycs);
 			}
-			return 0;
+			return float_bus(dcycs);
 		case 0x51: /* 0xc051 */
 			if((g_cur_a2_stat & ALL_STAT_TEXT) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_TEXT);
 				change_display_mode(dcycs);
 			}
-			return 0;
+			return float_bus(dcycs);
 		case 0x52: /* 0xc052 */
 			if(g_cur_a2_stat & ALL_STAT_MIX_T_GR) {
 				g_cur_a2_stat &= (~ALL_STAT_MIX_T_GR);
 				change_display_mode(dcycs);
 			}
-			return 0;
+			return float_bus(dcycs);
 		case 0x53: /* 0xc053 */
 			if((g_cur_a2_stat & ALL_STAT_MIX_T_GR) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_MIX_T_GR);
 				change_display_mode(dcycs);
 			}
-			return 0;
+			return float_bus(dcycs);
 		case 0x54: /* 0xc054 */
-			set_statereg(dcycs, statereg & (~0x40));
-			return 0;
+			set_statereg(dcycs, g_c068_statereg & (~0x40));
+			return float_bus(dcycs);
 		case 0x55: /* 0xc055 */
-			set_statereg(dcycs, statereg | 0x40);
-			return 0;
+			set_statereg(dcycs, g_c068_statereg | 0x40);
+			return float_bus(dcycs);
 		case 0x56: /* 0xc056 */
 			if(g_cur_a2_stat & ALL_STAT_HIRES) {
 				g_cur_a2_stat &= (~ALL_STAT_HIRES);
 				fixup_hires_on();
 				change_display_mode(dcycs);
 			}
-			return 0;
+			return float_bus(dcycs);
 		case 0x57: /* 0xc057 */
 			if((g_cur_a2_stat & ALL_STAT_HIRES) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_HIRES);
 				fixup_hires_on();
 				change_display_mode(dcycs);
 			}
-			return 0;
+			return float_bus(dcycs);
 		case 0x58: /* 0xc058 */
 			if(g_zipgs_unlock < 4) {
-				annunc_0 = 0;
+				g_c05x_annuncs &= (~1);
 			}
 			return 0;
 		case 0x59: /* 0xc059 */
 			if(g_zipgs_unlock >= 4) {
 				return g_zipgs_reg_c059;
 			} else {
-				annunc_0 = 1;
+				g_c05x_annuncs |= 1;
 			}
 			return 0;
 		case 0x5a: /* 0xc05a */
 			if(g_zipgs_unlock >= 4) {
 				return g_zipgs_reg_c05a;
 			} else {
-				annunc_1 = 0;
+				g_c05x_annuncs &= (~2);
 			}
 			return 0;
 		case 0x5b: /* 0xc05b */
@@ -1330,21 +1320,21 @@ io_read(word32 loc, double *cyc_ptr)
 				tmp = (word64_tmp >> 9) & 1;
 				return (tmp << 7) + (g_zipgs_reg_c05b & 0x7f);
 			} else {
-				annunc_1 = 1;
+				g_c05x_annuncs |= 2;
 			}
 			return 0;
 		case 0x5c: /* 0xc05c */
 			if(g_zipgs_unlock >= 4) {
 				return g_zipgs_reg_c05c;
 			} else {
-				annunc_2 = 0;
+				g_c05x_annuncs &= (~4);
 			}
 			return 0;
 		case 0x5d: /* 0xc05d */
 			if(g_zipgs_unlock >= 4) {
 				halt_printf("Reading ZipGS $c05d!\n");
 			} else {
-				annunc_2 = 1;
+				g_c05x_annuncs |= 4;
 			}
 			return 0;
 		case 0x5e: /* 0xc05e */
@@ -1367,24 +1357,25 @@ io_read(word32 loc, double *cyc_ptr)
 
 		/* 0xc060 - 0xc06f */
 		case 0x60: /* 0xc060 */
-			return IOR(g_paddle_button[3]);
+			return IOR(g_paddle_buttons & 8);
 		case 0x61: /* 0xc061 */
-			return IOR(adb_is_cmd_key_down() || g_paddle_button[0]);
+			return IOR(adb_is_cmd_key_down() ||
+							g_paddle_buttons & 1);
 		case 0x62: /* 0xc062 */
 			return IOR(adb_is_option_key_down() ||
-							g_paddle_button[1]);
+							g_paddle_buttons & 2);
 		case 0x63: /* 0xc063 */
-			return IOR(g_paddle_button[2]);
+			return IOR(g_paddle_buttons & 4);
 		case 0x64: /* 0xc064 */
-			return read_paddles(0, dcycs);
+			return read_paddles(dcycs, 0);
 		case 0x65: /* 0xc065 */
-			return read_paddles(1, dcycs);
+			return read_paddles(dcycs, 1);
 		case 0x66: /* 0xc066 */
-			return read_paddles(2, dcycs);
+			return read_paddles(dcycs, 2);
 		case 0x67: /* 0xc067 */
-			return read_paddles(3, dcycs);
+			return read_paddles(dcycs, 3);
 		case 0x68: /* 0xc068 = STATEREG */
-			return statereg;
+			return g_c068_statereg;
 		case 0x69: /* 0xc069 */
 			/* Reserved reg, return 0 */
 			return 0;
@@ -1414,24 +1405,24 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x8c: case 0x8d: case 0x8e: case 0x8f:
 			new_lcbank2 = ((loc & 0x8) >> 1) ^ 0x4;
 			new_wrdefram = (loc & 1);
-			if(new_wrdefram != wrdefram) {
+			if(new_wrdefram != g_c08x_wrdefram) {
 				fixup_wrdefram(new_wrdefram);
 			}
 			switch(loc & 0x3) {
 			case 0x1: /* 0xc081 */
 			case 0x2: /* 0xc082 */
 				/* Read rom, set lcbank2 */
-				set_statereg(dcycs, (statereg & ~(0x04)) |
+				set_statereg(dcycs, (g_c068_statereg & ~(0x04))|
 					(new_lcbank2 | 0x08));
 				break;
 			case 0x0: /* 0xc080 */
 			case 0x3: /* 0xc083 */
 				/* Read ram (clear RDROM), set lcbank2 */
-				set_statereg(dcycs, (statereg & ~(0x0c)) |
+				set_statereg(dcycs, (g_c068_statereg & ~(0x0c))|
 					(new_lcbank2));
 				break;
 			}
-			return 0xa0;
+			return float_bus(dcycs);
 		/* 0xc090 - 0xc09f */
 		case 0x90: case 0x91: case 0x92: case 0x93:
 		case 0x94: case 0x95: case 0x96: case 0x97:
@@ -1495,14 +1486,14 @@ io_read(word32 loc, double *cyc_ptr)
 		}
 	case 1: case 2: case 3: case 4: case 5: case 6:
 		/* c100 - c6ff */
-		slot = ((loc >> 8) & 7);
-		if(INTCX || (int_crom[slot] == 0)) {
+		mask = (1 << ((loc >> 8) & 7));
+		if(INTCX || ((g_c02d_int_crom & mask) == 0)) {
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
-		return (dummy++) & 0xff;
+		return float_bus(dcycs);
 	case 7:
 		/* c700 */
-		if(INTCX || (int_crom[7] == 0)) {
+		if(INTCX || ((g_c02d_int_crom & (1 << 7)) == 0)) {
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
 		tmp = g_rom_fc_ff_ptr[0x3c500 + (loc & 0xff)];
@@ -1511,12 +1502,12 @@ io_read(word32 loc, double *cyc_ptr)
 		}
 		return tmp;
 	case 8: case 9: case 0xa: case 0xb: case 0xc: case 0xd: case 0xe:
-		if(INTCX || (int_crom[3] == 0)) {
+		if(INTCX || ((g_c02d_int_crom & (1 << 3)) == 0)) {
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
 		UNIMPL_READ;
 	case 0xf:
-		if(INTCX || (int_crom[3] == 0)) {
+		if(INTCX || ((g_c02d_int_crom & (1 << 3)) == 0)) {
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
 		if((loc & 0xfff) == 0xfff) {
@@ -1540,8 +1531,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 	int	new_tmp;
 	int	new_lcbank2;
 	int	new_wrdefram;
-	int	i;
-	int	tmp, tmp2;
+	int	tmp;
 	int	fixup;
 
 	CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr, fcyc, new_fcyc);
@@ -1564,38 +1554,40 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			}
 			return;
 		case 0x02: /* 0xc002 */
-			set_statereg(dcycs, statereg & ~0x20);
+			set_statereg(dcycs, g_c068_statereg & ~0x20);
 			return;
 		case 0x03: /* 0xc003 */
-			set_statereg(dcycs, statereg | 0x20);
+			set_statereg(dcycs, g_c068_statereg | 0x20);
 			return;
 		case 0x04: /* 0xc004 */
-			set_statereg(dcycs, statereg & ~0x10);
+			set_statereg(dcycs, g_c068_statereg & ~0x10);
 			return;
 		case 0x05: /* 0xc005 */
-			set_statereg(dcycs, statereg | 0x10);
+			set_statereg(dcycs, g_c068_statereg | 0x10);
 			return;
 		case 0x06: /* 0xc006 */
-			set_statereg(dcycs, statereg & ~0x01);
+			set_statereg(dcycs, g_c068_statereg & ~0x01);
 			return;
 		case 0x07: /* 0xc007 */
-			set_statereg(dcycs, statereg | 0x01);
+			set_statereg(dcycs, g_c068_statereg | 0x01);
 			return;
 		case 0x08: /* 0xc008 */
-			set_statereg(dcycs, statereg & ~0x80);
+			set_statereg(dcycs, g_c068_statereg & ~0x80);
 			return;
 		case 0x09: /* 0xc009 */
-			set_statereg(dcycs, statereg | 0x80);
+			set_statereg(dcycs, g_c068_statereg | 0x80);
 			return;
 		case 0x0a: /* 0xc00a */
-			if(int_crom[3] != 0) {
-				int_crom[3] = 0;
+			tmp = 1 << 3;
+			if((g_c02d_int_crom & tmp) != 0) {
+				g_c02d_int_crom &= ~tmp;
 				fixup_intcx();
 			}
 			return;
 		case 0x0b: /* 0xc00b */
-			if(int_crom[3] == 0) {
-				int_crom[3] = 1;
+			tmp = 1 << 3;
+			if((g_c02d_int_crom & tmp) == 0) {
+				g_c02d_int_crom |= tmp;
 				fixup_intcx();
 			}
 			return;
@@ -1655,28 +1647,30 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			return;
 		case 0x23: /* 0xc023 */
 			if((val & 0x19) != 0) {
-				halt_printf("c023 write of %02x!!!\n",val);
+				halt_printf("c023 write of %02x!!!\n", val);
 			}
 			tmp = (g_c023_val & 0x70) | (val & 0x0f);
-			if(((tmp & 0x22)==0x22) && !c023_scan_int_irq_pending){
-				c023_scan_int_irq_pending = 1;
+			if(((tmp & 0x22) == 0x22) &&
+						!g_c023_scan_int_irq_pending) {
+				g_c023_scan_int_irq_pending = 1;
 				add_irq();
 			}
-			if(!(tmp & 2) && c023_scan_int_irq_pending) {
-				c023_scan_int_irq_pending = 0;
+			if(!(tmp & 2) && g_c023_scan_int_irq_pending) {
+				g_c023_scan_int_irq_pending = 0;
 				remove_irq();
 			}
-			if(((tmp & 0x44)==0x44)&& !c023_1sec_int_irq_pending){
-				c023_1sec_int_irq_pending = 1;
+			if(((tmp & 0x44) == 0x44) &&
+						!g_c023_1sec_int_irq_pending) {
+				g_c023_1sec_int_irq_pending = 1;
 				add_irq();
 			}
-			if(!(tmp & 0x4) && c023_1sec_int_irq_pending) {
-				c023_1sec_int_irq_pending = 0;
+			if(!(tmp & 0x4) && g_c023_1sec_int_irq_pending) {
+				g_c023_1sec_int_irq_pending = 0;
 				remove_irq();
 			}
 
-			if(c023_1sec_int_irq_pending ||
-					c023_scan_int_irq_pending) {
+			if(g_c023_1sec_int_irq_pending ||
+					g_c023_scan_int_irq_pending) {
 				tmp |= 0x80;
 			}
 			g_c023_val = tmp;
@@ -1691,12 +1685,11 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			adb_write_c027(val);
 			return;
 		case 0x29: /* 0xc029 */
-			bank1latch = val & 1;
-			linear_vid = (val >> 6) & 1;
-			new_tmp = val & 0xa0;
-			if(bank1latch == 0) {
+			g_c029_val_some = val & 0x41;
+			if((val & 1) == 0) {
 				halt_printf("c029: %02x\n", val);
 			}
+			new_tmp = val & 0xa0;
 			if(new_tmp != (g_cur_a2_stat & 0xa0)) {
 				g_cur_a2_stat = (g_cur_a2_stat & (~0xa0)) +
 					new_tmp;
@@ -1709,7 +1702,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 #endif
 			return;
 		case 0x2b: /* 0xc02b */
-			c02b_val = val;
+			g_c02b_val = val;
 			if(val != 0x08 && val != 0x00) {
 				printf("Writing c02b with %02x\n", val);
 			}
@@ -1718,14 +1711,8 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			if((val & 0x9) != 0) {
 				halt_printf("Illegal c02d write: %02x!\n", val);
 			}
-			fixup = 0;
-			for(i = 0; i < 8; i++) {
-				tmp = ((val & (1 << i)) != 0);
-				if(int_crom[i] != tmp) {
-					fixup = 1;
-					int_crom[i] = tmp;
-				}
-			}
+			fixup = (val != g_c02d_int_crom);
+			g_c02d_int_crom = val;
 			if(fixup) {
 				vid_printf("Write c02d of %02x\n", val);
 				fixup_intcx();
@@ -1750,37 +1737,37 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			(void)doc_read_c030(dcycs);
 			return;
 		case 0x31: /* 0xc031 */
-			tmp = ((val & 0x80) != 0);
-			tmp2 = ((val & 0x40) != 0);
-			head_35 = tmp;
-			iwm_set_apple35_sel(tmp2);
-			iwm_printf("write c031: %02x, h: %d, 35: %d\n",
-				val, head_35, g_apple35_sel);
+			tmp = val ^ g_c031_disk35;
+			if(tmp & 0x40) {
+				/* apple35_sel changed, maybe speed change */
+				set_halt(HALT_EVENT);
+			}
+			g_c031_disk35 = val & 0xc0;
 			return;
 		case 0x32: /* 0xc032 */
 			tmp = g_c023_val & 0x7f;
 			if(((val & 0x40) == 0) && (tmp & 0x40)) {
 				/* clear 1 sec int */
 				irq_printf("Clear 1sec int\n");
-				if(c023_1sec_int_irq_pending) {
+				if(g_c023_1sec_int_irq_pending) {
 					remove_irq();
 				}
 				tmp &= 0xbf;
 				g_c023_val = tmp;
-				c023_1sec_int_irq_pending = 0;
+				g_c023_1sec_int_irq_pending = 0;
 			}
 			if(((val & 0x20) == 0) && (tmp & 0x20)) {
 				/* clear scan line int */
 				irq_printf("Clear scn int1\n");
-				if(c023_scan_int_irq_pending) {
+				if(g_c023_scan_int_irq_pending) {
 					remove_irq();
 				}
-				c023_scan_int_irq_pending = 0;
+				g_c023_scan_int_irq_pending = 0;
 				g_c023_val = tmp & 0xdf;
 				check_for_new_scan_int(dcycs);
 			}
-			if(c023_1sec_int_irq_pending ||
-					c023_scan_int_irq_pending) {
+			if(g_c023_1sec_int_irq_pending ||
+					g_c023_scan_int_irq_pending) {
 				g_c023_val |= 0x80;
 			}
 			if((val & 0x9f) != 0x9f) {
@@ -1788,12 +1775,12 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			}
 			return;
 		case 0x33: /* 0xc033 = CLOCKDATA*/
-			clock_write_c033(val);
+			g_c033_data = val;
 			return;
 		case 0x34: /* 0xc034 = CLOCKCTL */
+			tmp = val ^ g_c034_val;
 			clock_write_c034(val);
-			if((val & 0xf) != g_border_color) {
-				g_border_color = val & 0xf;
+			if(tmp & 0xf) {
 				change_border_color(dcycs, val & 0xf);
 			}
 			return;
@@ -1801,28 +1788,25 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			update_shadow_reg(val);
 			return;
 		case 0x36: /* 0xc036 = CYAREG */
-			tmp = (val>>7) & 1;
-			if(speed_fast != tmp) {
-				/* to recalculate times */
+			tmp = val ^ g_c036_val_speed;
+			g_c036_val_speed = (val & ~0x20);	/* clr bit 5 */
+			if(tmp & 0x80) {
+				/* to recalculate times since speed changing */
 				set_halt(HALT_EVENT);
 			}
-			speed_fast = tmp;
-			if((val & 0xf) != (int)g_slot_motor_detect) {
+			if(tmp & 0xf) {
+				/* slot_motor_detect changed */
 				set_halt(HALT_EVENT);
 			}
-			g_slot_motor_detect = (val & 0xf);
 
-			power_on_clear = (val >> 6) & 1;
 			if((val & 0x60) != 0) {
 				halt_printf("c036: %2x\n", val);
 			}
-			tmp = (val >> 4) & 1;
-			if(tmp != g_shadow_all_banks) {
+			if(tmp & 0x10) {	/* shadow in all banks! */
 				if(g_num_shadow_all_banks++ == 0) {
 					printf("Shadowing all banks...This "
 						"must be the NFC Megademo\n");
 				}
-				g_shadow_all_banks = tmp;
 				fixup_shadow_all_banks();
 			}
 			return;
@@ -1850,45 +1834,41 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			doc_write_c03d(val, dcycs);
 			return;
 		case 0x3e: /* 0xc03e */
-			doc_write_c03e(val);
+			g_c03ef_doc_ptr = (g_c03ef_doc_ptr & 0xff00) + val;
 			return;
 		case 0x3f: /* 0xc03f */
-			doc_write_c03f(val);
+			g_c03ef_doc_ptr = (g_c03ef_doc_ptr & 0xff) + (val << 8);
 			return;
 
 		/* 0xc040 - 0xc04f */
 		case 0x41: /* c041 */
-			c041_en_25sec_ints = ((val & 0x10) != 0);
-			c041_en_vbl_ints = ((val & 0x8) != 0);
-			c041_en_switch_ints = ((val & 0x4) != 0);
-			c041_en_move_ints = ((val & 0x2) != 0);
-			c041_en_mouse = ((val & 0x1) != 0);
+			g_c041_val = val & 0x1f;
 			if((val & 0xe7) != 0) {
 				halt_printf("write c041: %02x\n", val);
 			}
 
-			if(!c041_en_vbl_ints && c046_vbl_irq_pending) {
+			if(!(val & C041_EN_VBL_INTS) && g_c046_vbl_irq_pending){
 				/* there was an interrupt, but no more*/
 				remove_irq();
-				c046_vbl_irq_pending = 0;
+				g_c046_vbl_irq_pending = 0;
 			}
-			if(!c041_en_25sec_ints && c046_25sec_irq_pend) {
+			if(!(val & C041_EN_25SEC_INTS) &&g_c046_25sec_irq_pend){
 				/* there was an interrupt, but no more*/
 				remove_irq();
-				c046_25sec_irq_pend = 0;
+				g_c046_25sec_irq_pend = 0;
 			}
 			return;
 		case 0x46: /* c046 */
 			/* ignore writes to c046 */
 			return;
 		case 0x47: /* c047 */
-			if(c046_vbl_irq_pending) {
+			if(g_c046_vbl_irq_pending) {
 				remove_irq();
-				c046_vbl_irq_pending = 0;
+				g_c046_vbl_irq_pending = 0;
 			}
-			if(c046_25sec_irq_pend) {
+			if(g_c046_25sec_irq_pend) {
 				remove_irq();
-				c046_25sec_irq_pend = 0;
+				g_c046_25sec_irq_pend = 0;
 			}
 			g_c046_val &= 0xe7;	/* clear vblint, 1/4sec int*/
 			return;
@@ -1899,7 +1879,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x43: /* c043 */
 			return;
 		case 0x4f: /* c04f */
-			g_emubyte_cnt = 1;
+			g_em_emubyte_cnt = 1;
 			return;
 		case 0x40: /* c040 */
 		case 0x44: /* c044 */
@@ -1938,10 +1918,10 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			}
 			return;
 		case 0x54: /* 0xc054 */
-			set_statereg(dcycs, statereg & (~0x40));
+			set_statereg(dcycs, g_c068_statereg & (~0x40));
 			return;
 		case 0x55: /* 0xc055 */
-			set_statereg(dcycs, statereg | 0x40);
+			set_statereg(dcycs, g_c068_statereg | 0x40);
 			return;
 		case 0x56: /* 0xc056 */
 			if(g_cur_a2_stat & ALL_STAT_HIRES) {
@@ -1961,7 +1941,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			if(g_zipgs_unlock >= 4) {
 				g_zipgs_reg_c059 &= 0x4;  /* last reset cold */
 			} else {
-				annunc_0 = 0;
+				g_c05x_annuncs &= (~1);
 			}
 			return;
 		case 0x59: /* 0xc059 */
@@ -1969,11 +1949,11 @@ io_write(word32 loc, int val, double *cyc_ptr)
 				g_zipgs_reg_c059 = (val & 0xf8) |
 						(g_zipgs_reg_c059 & 0x7);
 			} else {
-				annunc_0 = 1;
+				g_c05x_annuncs |= 1;
 			}
 			return;
 		case 0x5a: /* 0xc05a */
-			annunc_1 = 0;
+			g_c05x_annuncs &= (~2);
 			if((val & 0xf0) == 0x50) {
 				g_zipgs_unlock++;
 			} else if((val & 0xf0) == 0xa0) {
@@ -1994,14 +1974,14 @@ io_write(word32 loc, int val, double *cyc_ptr)
 				}
 				g_zipgs_reg_c05b &= (~0x10);	// enable
 			} else {
-				annunc_1 = 1;
+				g_c05x_annuncs |= 2;
 			}
 			return;
 		case 0x5c: /* 0xc05c */
 			if(g_zipgs_unlock >= 4) {
 				g_zipgs_reg_c05c = val;
 			} else {
-				annunc_2 = 0;
+				g_c05x_annuncs &= (~4);
 			}
 			return;
 		case 0x5d: /* 0xc05d */
@@ -2012,7 +1992,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 				}
 				g_zipgs_reg_c05a = val | 0xf;
 			} else {
-				annunc_2 = 1;
+				g_c05x_annuncs |= 4;
 			}
 			return;
 		case 0x5e: /* 0xc05e */
@@ -2086,9 +2066,9 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x84: case 0x85: case 0x86: case 0x87:
 		case 0x88: case 0x89: case 0x8a: case 0x8b:
 		case 0x8c: case 0x8d: case 0x8e: case 0x8f:
-			new_lcbank2 = ((loc & 0x8) >> 1) ^ 0x4;
+			new_lcbank2 = ((loc >> 1) & 0x4) ^ 0x4;
 			new_wrdefram = (loc & 1);
-			if(new_wrdefram != wrdefram) {
+			if(new_wrdefram != g_c08x_wrdefram) {
 				fixup_wrdefram(new_wrdefram);
 			}
 			switch(loc & 0xf) {
@@ -2101,7 +2081,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			case 0xd: /* 0xc08d */
 			case 0xe: /* 0xc08e */
 				/* Read rom, set lcbank2 */
-				set_statereg(dcycs, (statereg & ~(0x04)) |
+				set_statereg(dcycs, (g_c068_statereg & ~(0x04))|
 					(new_lcbank2 | 0x08));
 				break;
 			case 0x0: /* 0xc080 */
@@ -2113,7 +2093,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			case 0xc: /* 0xc08c */
 			case 0xf: /* 0xc08f */
 				/* Read ram (clear RDROM), set lcbank2 */
-				set_statereg(dcycs, (statereg & ~(0x0c)) |
+				set_statereg(dcycs, (g_c068_statereg & ~(0x0c))|
 					(new_lcbank2));
 				break;
 			}
@@ -2127,11 +2107,12 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			UNIMPL_WRITE;
 
 		/* 0xc0a0 - 0xc0af */
-		case 0xa0: case 0xa1: case 0xa2: case 0xa3:
+		case 0xa0: case 0xa1: case 0xa3:
 		case 0xa4: case 0xa5: case 0xa6: case 0xa7:
 		case 0xa9: case 0xaa: case 0xab:
 		case 0xac: case 0xad: case 0xae: case 0xaf:
 			UNIMPL_WRITE;
+		case 0xa2:	/* Burger Times writes here on error */
 		case 0xa8:
 			/* Kurzweil SMP writes to 0xc0a8, ignore it */
 			return;
@@ -2279,9 +2260,9 @@ get_lines_since_vbl(double dcycs)
 
 	dcycs_since_last_vbl = dcycs - g_last_vbl_dcycs;
 
-	dlines_since_vbl = (262.0/DCYCS_IN_16MS) * dcycs_since_last_vbl;
+	dlines_since_vbl = dcycs_since_last_vbl * (1.0 / 65.0);
 	lines_since_vbl = (int)dlines_since_vbl;
-	dcyc_line_start = (double)lines_since_vbl * (DCYCS_IN_16MS/262.0);
+	dcyc_line_start = (double)lines_since_vbl * 65.0;
 
 	offset = ((int)(dcycs_since_last_vbl - dcyc_line_start)) & 0xff;
 

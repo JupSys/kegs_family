@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.32 2004-10-05 20:12:43-04 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.40 2004-10-17 12:53:50-04 kentd Exp $";
 
 #include "defc.h"
 #include <stdarg.h>
@@ -21,7 +21,7 @@ extern Iwm iwm;
 
 extern int g_track_bytes_35[];
 extern int g_track_nibs_35[];
-extern int g_apple35_sel;
+extern int g_c031_disk35;
 
 extern int g_cur_a2_stat;
 extern byte *g_slow_memory_ptr;
@@ -35,6 +35,13 @@ extern int g_raw_serial;
 extern int g_serial_out_masking;
 extern word32 g_mem_size_exp;
 extern int g_video_line_update_interval;
+extern int g_video_extra_check_inputs;
+extern int g_user_halt_bad;
+extern int g_joystick_type;
+extern int g_joystick_scale_factor_x;
+extern int g_joystick_scale_factor_y;
+extern int g_joystick_trim_amount_x;
+extern int g_joystick_trim_amount_y;
 
 extern int g_screen_index[];
 extern word32 g_full_refresh_needed;
@@ -58,6 +65,7 @@ const char *g_config_kegs_name_list[] = {
 
 int	g_highest_smartport_unit = -1;
 int	g_reparse_delay = 0;
+int	g_user_page2_shadow = 1;
 
 byte g_save_text_screen_bytes[0x800];
 word32 g_save_cur_a2_stat = 0;
@@ -108,9 +116,27 @@ Cfg_menu g_cfg_disk_menu[] = {
 { 0, 0, 0, 0, 0 },
 };
 
+Cfg_menu g_cfg_joystick_menu[] = {
+{ "Joystick Configuration", g_cfg_joystick_menu, 0, 0, CFGTYPE_MENU },
+{ "Joystick Emulation,0,Mouse Joystick,1,Keypad Joystick,2,Native Joystick 1,"
+	"3,Native Joystick 2", KNMP(g_joystick_type), CFGTYPE_INT },
+{ "Joystick Scale X,0x100,Standard,0x119,+10%,0x133,+20%,"
+	"0x150,+30%,0xb0,-30%,0xcd,-20%,0xe7,-10%",
+		KNMP(g_joystick_scale_factor_x), CFGTYPE_INT },
+{ "Joystick Scale Y,0x100,Standard,0x119,+10%,0x133,+20%,"
+	"0x150,+30%,0xb0,-30%,0xcd,-20%,0xe7,-10%",
+		KNMP(g_joystick_scale_factor_y), CFGTYPE_INT },
+{ "Joystick Trim X", KNMP(g_joystick_trim_amount_x), CFGTYPE_INT },
+{ "Joystick Trim Y", KNMP(g_joystick_trim_amount_y), CFGTYPE_INT },
+{ "", 0, 0, 0, 0 },
+{ "Back to Main Config", g_cfg_main_menu, 0, 0, CFGTYPE_MENU },
+{ 0, 0, 0, 0, 0 },
+};
+
 Cfg_menu g_cfg_main_menu[] = {
 { "KEGS Configuration", g_cfg_main_menu, 0, 0, CFGTYPE_MENU },
 { "Disk Configuration", g_cfg_disk_menu, 0, 0, CFGTYPE_MENU },
+{ "Joystick Configuration", g_cfg_joystick_menu, 0, 0, CFGTYPE_MENU },
 { "Force X-windows display depth", KNMP(g_force_depth), CFGTYPE_INT },
 { "Auto-update config.kegs,0,Manual,1,Immediately",
 		KNMP(g_config_kegs_auto_update), CFGTYPE_INT },
@@ -126,6 +152,13 @@ Cfg_menu g_cfg_main_menu[] = {
 { "3200 Color Enable,0,Auto (Full if fast enough),1,Full (Update every line),"
 	"8,Off (Update video every 8 lines)",
 		KNMP(g_video_line_update_interval), CFGTYPE_INT },
+{ "Keyboard and mouse poll rate,0,60 times per second,1,240 times per second",
+		KNMP(g_video_extra_check_inputs), CFGTYPE_INT },
+{ "Code Red Halts,0,Do not stop on bad accesses,1,Enter debugger on bad "
+		"accesses", KNMP(g_user_halt_bad), CFGTYPE_INT },
+{ "Enable Text Page 2 shadow,0,Disabled on ROM 01 (matches real hardware),"
+	"1,Enabled on ROM 01 and 03",
+		KNMP(g_user_page2_shadow), CFGTYPE_INT },
 { "Dump text screen to file", (void *)cfg_text_screen_dump, 0, 0, CFGTYPE_FUNC},
 { "", 0, 0, 0, 0 },
 { "Save changes to config.kegs", (void *)config_write_config_kegs_file, 0, 0, 
@@ -761,9 +794,9 @@ insert_disk(int slot, int drive, const char *name, int ejected, int force_size,
 		free(dsk->name_ptr);
 	}
 
-	name_len = strlen(name) + 1;
-	name_ptr = (char *)malloc(name_len);
-	strncpy(name_ptr, name, name_len);
+	name_len = strlen(name);
+	name_ptr = (char *)malloc(name_len + 1);
+	strncpy(name_ptr, name, name_len + 1);
 	dsk->name_ptr = name_ptr;
 
 	dsk->partition_name = 0;
@@ -786,22 +819,24 @@ insert_disk(int slot, int drive, const char *name, int ejected, int force_size,
 	dsk->fd = -1;
 	can_write = 1;
 
-	if((name_len > 4) && (strcmp(&name_ptr[name_len - 4], ".gz") == 0)) {
+	if((name_len > 3) && (strcmp(&name_ptr[name_len - 3], ".gz") == 0)) {
 
 		/* it's gzip'ed, try to gunzip it, then unlink the */
 		/*   uncompressed file */
 
 		can_write = 0;
 
-		uncomp_ptr = (char *)malloc(name_len);
-		strncpy(uncomp_ptr, name_ptr, name_len);
-		uncomp_ptr[name_len - 4] = 0;
+		uncomp_ptr = (char *)malloc(name_len + 1);
+		strncpy(uncomp_ptr, name_ptr, name_len + 1);
+		uncomp_ptr[name_len - 3] = 0;
 
-		system_len = name_len + 200;
+		system_len = 2*name_len + 100;
 		system_str = (char *)malloc(system_len + 1);
 		snprintf(system_str, system_len,
-			"set -o noclobber;gunzip -c %s > %s", name_ptr,
-			uncomp_ptr);
+			"set -o noclobber;gunzip -c %c%s%c > %c%s%c",
+			0x22, name_ptr, 0x22,
+			0x22, uncomp_ptr, 0x22);
+		/* 0x22 are " to allow spaces in filenames */
 		printf("I am uncompressing %s into %s for mounting\n",
 							name_ptr, uncomp_ptr);
 		ret = system(system_str);
@@ -816,6 +851,9 @@ insert_disk(int slot, int drive, const char *name, int ejected, int force_size,
 		}
 		free(system_str);
 		free(uncomp_ptr);
+		/* Reduce name_len by 3 so that subsequent compares for .po */
+		/*  look at the correct chars */
+		name_len -= 3;
 	}
 
 	if(dsk->fd < 0 && can_write) {
@@ -846,12 +884,20 @@ insert_disk(int slot, int drive, const char *name, int ejected, int force_size,
 
 	save_track = dsk->cur_qtr_track;	/* save arm position */
 	dsk->image_type = DSK_TYPE_PRODOS;
+	dsk->image_start = 0;
 
 	/* See if it is in 2IMG format */
 	ret = read(dsk->fd, (char *)&buf_2img[0], 512);
 	size = force_size;
 	if(size <= 0) {
 		size = cfg_get_fd_size(dsk->fd);
+	}
+
+	/* Try to guess that there is a Mac Binary header of 128 bytes */
+	/* See if image size & 0xfff = 0x080 which indicates extra 128 bytes */
+	if((size & 0xfff) == 0x080) {
+		printf("Assuming Mac Binary header on %s\n", dsk->name_ptr);
+		dsk->image_start += 0x80;
 	}
 	image_identified = 0;
 	if(buf_2img[0] == '2' && buf_2img[1] == 'I' && buf_2img[2] == 'M' &&
@@ -899,32 +945,31 @@ insert_disk(int slot, int drive, const char *name, int ejected, int force_size,
 			printf("Image named %s is in Mac diskcopy format\n",
 								dsk->name_ptr);
 			image_identified = 1;
-			dsk->image_start = 0x54;
+			dsk->image_start += 0x54;
 			dsk->image_size = exp_size;
 			dsk->image_type = DSK_TYPE_PRODOS;	/* ProDOS */
 		}
 	}
 	if(!image_identified) {
 		/* Assume raw image */
-		dsk->image_start = 0;
 		dsk->image_size = size;
 		dsk->image_type = DSK_TYPE_PRODOS;
 		if(dsk->disk_525) {
 			dsk->image_type = DSK_TYPE_DOS33;
-			if(name_len >= 5) {
-				cmp_o = dsk->name_ptr[name_len-2];
-				cmp_p = dsk->name_ptr[name_len-3];
-				cmp_dot = dsk->name_ptr[name_len-4];
+			if(name_len >= 4) {
+				cmp_o = dsk->name_ptr[name_len-1];
+				cmp_p = dsk->name_ptr[name_len-2];
+				cmp_dot = dsk->name_ptr[name_len-3];
 				if(cmp_dot == '.' &&
 					  (cmp_p == 'p' || cmp_p == 'P') &&
 					  (cmp_o == 'o' || cmp_o == 'O')) {
 					dsk->image_type = DSK_TYPE_PRODOS;
 				}
 
-				cmp_b = dsk->name_ptr[name_len-2];
-				cmp_i = dsk->name_ptr[name_len-3];
-				cmp_n = dsk->name_ptr[name_len-4];
-				cmp_dot = dsk->name_ptr[name_len-5];
+				cmp_b = dsk->name_ptr[name_len-1];
+				cmp_i = dsk->name_ptr[name_len-2];
+				cmp_n = dsk->name_ptr[name_len-3];
+				cmp_dot = dsk->name_ptr[name_len-4];
 				if(cmp_dot == '.' &&
 					  (cmp_n == 'n' || cmp_n == 'N') &&
 					  (cmp_i == 'i' || cmp_i == 'I') &&
@@ -1049,7 +1094,7 @@ eject_disk(Disk *dsk)
 	g_config_kegs_update_needed = 1;
 
 	motor_on = iwm.motor_on;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		motor_on = iwm.motor_on35;
 	}
 	if(motor_on) {
@@ -1593,6 +1638,14 @@ cfg_parse_menu(Cfg_menu *menu_ptr, int menu_pos, int highlight_pos, int change)
 			g_cfg_opt_buf[3] = 'D';	/* checkmark */
 			g_cfg_opt_buf[4] = '\t';
 		}
+	}
+
+	// If it's a menu, give it a special menu indicator
+	if(type == CFGTYPE_MENU) {
+		g_cfg_opt_buf[1] = '\t';
+		g_cfg_opt_buf[2] = 'M';		/* return-like symbol */
+		g_cfg_opt_buf[3] = '\t';
+		g_cfg_opt_buf[4] = ' ';
 	}
 
 	// Decide what to display on the "right" side

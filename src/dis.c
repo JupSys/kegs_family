@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.91 2004-09-21 11:21:15-04 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.96 2004-10-14 15:10:32-04 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -25,9 +25,8 @@ extern byte *g_rom_cards_ptr;
 extern word32 g_mem_size_base, g_mem_size_exp;
 extern int halt_sim;
 extern int enter_debug;
-extern int statereg;
+extern int g_c068_statereg;
 extern word32 stop_run_at;
-extern int stop_on_c03x;
 extern int Verbose;
 extern int Halt_on;
 extern int g_rom_version;
@@ -48,8 +47,9 @@ int g_stepping = 0;
 
 word32	list_kpc;
 int	hex_line_len;
-word32	a1,a2,a3,a4;
-int a1bank, a2bank, a3bank, a4bank;
+word32	a1,a2,a3;
+word32	g_a4, g_a4bank;
+int a1bank, a2bank, a3bank;
 char *line_ptr;
 int mode,old_mode;
 int got_num;
@@ -155,8 +155,8 @@ do_debug_intfc()
 	int	ret_val;
 
 	hex_line_len = 0x10;
-	a1 = 0; a2 = 0; a3 = 0; a4 = 0;
-	a1bank = 0; a2bank = 0; a3bank = 0; a4bank = 0;
+	a1 = 0; a2 = 0; a3 = 0; g_a4 = 0;
+	a1bank = 0; a2bank = 0; a3bank = 0; g_a4bank = 0;
 	list_kpc = engine.kpc;
 	g_stepping = 0;
 	mode = 0; old_mode = 0;
@@ -229,7 +229,11 @@ do_debug_intfc()
 				}
 				break;
 			case 'v':
-				video_show_debug_info();
+				if(got_num) {
+					dis_do_compare();
+				} else {
+					video_show_debug_info();
+				}
 				break;
 			case 'V':
 				printf("g_irq_pending: %d\n", g_irq_pending);
@@ -256,7 +260,12 @@ do_debug_intfc()
 					if(engine.psr & 0x100) {
 						engine.psr |= 0x30;
 					}
+				} else {
+					dis_do_memmove();
 				}
+				break;
+			case 'p':
+				dis_do_pattern_search();
 				break;
 			case 'x':
 				if(old_mode == '=') {
@@ -361,6 +370,10 @@ do_debug_intfc()
 				}
 				do_blank();
 				break;
+			case '<':
+				g_a4 = a2;
+				g_a4bank = a2bank;
+				break;
 			case 0x05: /* ctrl-e */
 				show_regs();
 				break;
@@ -382,10 +395,6 @@ do_debug_intfc()
 				break;
 			case 'w':
 				read_line(w_buff, W_BUF_LEN);
-				break;
-			case 'X':
-				stop_on_c03x = !stop_on_c03x;
-				printf("stop_on_c03x set to %d\n",stop_on_c03x);
 				break;
 			default:
 				printf("\nUnrecognized command: %s\n",linebuf);
@@ -661,7 +670,10 @@ read_line(char *buf, int len)
 	while(space_left > 0) {
 		ret = read(0,buf,1);
 		if(ret <= 0) {
-			printf("read <= 0\n");
+			printf("read <= 0, errno: %d\n", errno);
+			if(errno == EAGAIN || errno == EINTR) {
+				continue;
+			}
 			return(len-space_left);
 		}
 		space_left -= ret;
@@ -684,7 +696,7 @@ do_debug_list()
 		list_kpc = (a2bank << 16) + (a2 & 0xffff);
 	}
 	printf("%d=m %d=x %d=LCBANK\n", (engine.psr >> 5)&1,
-		(engine.psr >> 4) & 1, (statereg & 0x4) >> 2);
+		(engine.psr >> 4) & 1, (g_c068_statereg & 0x4) >> 2);
 	
 	size_mem_imm = 2;
 	if(engine.psr & 0x20) {
@@ -699,6 +711,47 @@ do_debug_list()
 			size_x_imm, 0, 0);
 		list_kpc += size;
 	}
+}
+
+void
+dis_do_memmove()
+{
+	word32	val;
+
+	printf("Memory move from %02x/%04x.%04x to %02x/%04x\n", a1bank, a1, a2, g_a4bank, g_a4);
+	while(a1 <= (a2 & 0xffff)) {
+		val = get_memory_c((a1bank << 16) + a1, 0);
+		set_memory_c((g_a4bank << 16) + g_a4, val, 0);
+		a1++;
+		g_a4++;
+	}
+	a1 = a1 & 0xffff;
+	g_a4 = g_a4 & 0xffff;
+}
+
+void
+dis_do_pattern_search()
+{
+	printf("Memory pattern search for %04x in %02x/%04x.%04x\n", g_a4, a1bank, a1, a2);
+}
+
+void
+dis_do_compare()
+{
+	word32	val1, val2;
+
+	printf("Memory Compare from %02x/%04x.%04x with %02x/%04x\n", a1bank, a1, a2, g_a4bank, g_a4);
+	while(a1 <= (a2 & 0xffff)) {
+		val1 = get_memory_c((a1bank << 16) + a1, 0);
+		val2 = get_memory_c((g_a4bank << 16) + g_a4, 0);
+		if(val1 != val2) {
+			printf("%02x/%04x: %02x vs %02x\n", a1bank, a1, val1, val2);
+		}
+		a1++;
+		g_a4++;
+	}
+	a1 = a1 & 0xffff;
+	g_a4 = g_a4 & 0xffff;
 }
 
 const char *g_kegs_rom_names[] = { "ROM", "ROM.01", "ROM.03", 0 };

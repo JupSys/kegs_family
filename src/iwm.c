@@ -8,14 +8,13 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.111 2003-11-03 22:14:10-05 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.114 2004-10-14 15:10:26-04 kentd Exp $";
 
 #include "defc.h"
 
 extern int Verbose;
 extern int g_vbl_count;
-extern int speed_fast;
-extern word32 g_slot_motor_detect;
+extern int g_c036_val_speed;
 
 const byte phys_to_dos_sec[] = {
 	0x00, 0x07, 0x0e, 0x06,  0x0d, 0x05, 0x0c, 0x04,
@@ -72,8 +71,8 @@ int	from_disk_byte_valid = 0;
 
 Iwm	iwm;
 
-int	g_apple35_sel = 0;
-int	head_35 = 0;
+extern int g_c031_disk35;
+
 int	g_iwm_motor_on = 0;
 
 int	g_check_nibblization = 0;
@@ -179,21 +178,23 @@ iwm_reset()
 	iwm.previous_write_bits = 0;
 
 	g_iwm_motor_on = 0;
-	g_apple35_sel = 0;
+	g_c031_disk35 = 0;
 }
 
 void
 draw_iwm_status(int line, char *buf)
 {
 	char	*flag[2][2];
+	int	apple35_sel;
 
 	flag[0][0] = " ";
 	flag[0][1] = " ";
 	flag[1][0] = " ";
 	flag[1][1] = " ";
 
+	apple35_sel = (g_c031_disk35 >> 6) & 1;
 	if(g_iwm_motor_on) {
-		flag[g_apple35_sel][iwm.drive_select] = "*";
+		flag[apple35_sel][iwm.drive_select] = "*";
 	}
 
 	sprintf(buf, "s6d1:%2d%s   s6d2:%2d%s   s5d1:%2d/%d%s   "
@@ -204,8 +205,7 @@ draw_iwm_status(int line, char *buf)
 		iwm.drive35[0].cur_qtr_track & 1, flag[1][0],
 		iwm.drive35[1].cur_qtr_track >> 1,
 		iwm.drive35[1].cur_qtr_track & 1, flag[1][1],
-		g_fast_disk_emul, g_slow_525_emul_wr,
-		(speed_fast << 7) + g_slot_motor_detect);
+		g_fast_disk_emul, g_slow_525_emul_wr, g_c036_val_speed);
 
 	video_update_status_line(line, buf);
 }
@@ -303,7 +303,7 @@ iwm_vbl_update(int doit_3_persec)
 	}
 
 	motor_on = iwm.motor_on;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		motor_on = iwm.motor_on35;
 	}
 
@@ -327,11 +327,11 @@ iwm_show_stats()
 {
 	printf("IWM stats: q7,q6: %d, %d, reset,enable2: %d,%d, mode: %02x\n",
 		iwm.q7, iwm.q6, iwm.reset, iwm.enable2, iwm.iwm_mode);
-	printf("motor: %d,%d, motor35:%d drive: %d, on: %d, head35: %d "
+	printf("motor: %d,%d, motor35:%d drive: %d, c031:%02x "
 		"phs: %d %d %d %d\n",
 		iwm.motor_on, iwm.motor_off, g_iwm_motor_on,
-		iwm.drive_select, g_apple35_sel,
-		head_35, iwm.iwm_phase[0], iwm.iwm_phase[1], iwm.iwm_phase[2],
+		iwm.drive_select, g_c031_disk35,
+		iwm.iwm_phase[0], iwm.iwm_phase[1], iwm.iwm_phase[2],
 		iwm.iwm_phase[3]);
 	printf("iwm.drive525[0].fd: %d, [1].fd: %d\n",
 		iwm.drive525[0].fd, iwm.drive525[1].fd);
@@ -355,7 +355,7 @@ iwm_touch_switches(int loc, double dcycs)
 	on = loc & 1;
 	drive = iwm.drive_select;
 	phase = loc >> 1;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		dsk = &(iwm.drive35[drive]);
 	} else {
 		dsk = &(iwm.drive525[drive]);
@@ -368,7 +368,7 @@ iwm_touch_switches(int loc, double dcycs)
 		iwm.iwm_phase[phase] = on;
 
 		if(iwm.motor_on) {
-			if(g_apple35_sel) {
+			if(g_c031_disk35 & 0x40) {
 				if(phase == 3 && on) {
 					iwm_do_action35(dcycs);
 				}
@@ -564,7 +564,7 @@ iwm_read_status35(double dcycs)
 	if(iwm.motor_on) {
 		/* Read status */
 		state = (iwm.iwm_phase[1] << 3) + (iwm.iwm_phase[0] << 2) +
-			(head_35 << 1) + iwm.iwm_phase[2];
+			((g_c031_disk35 >> 6) & 2) + iwm.iwm_phase[2];
 
 		iwm_printf("Iwm status read state: %02x\n", state);
 
@@ -666,7 +666,7 @@ iwm_do_action35(double dcycs)
 	if(iwm.motor_on) {
 		/* Perform action */
 		state = (iwm.iwm_phase[1] << 3) + (iwm.iwm_phase[0] << 2) +
-			(head_35 << 1) + iwm.iwm_phase[2];
+			((g_c031_disk35 >> 6) & 2) + iwm.iwm_phase[2];
 		switch(state) {
 		case 0x00:	/* Set step direction inward */
 			/* towards higher tracks */
@@ -715,17 +715,6 @@ iwm_do_action35(double dcycs)
 	}
 }
 
-void
-iwm_set_apple35_sel(int newval)
-{
-	if(g_apple35_sel != newval) {
-		/* Handle speed changes */
-		set_halt(HALT_EVENT);
-	}
-
-	g_apple35_sel = newval;
-}
-
 int
 iwm_read_c0ec(double dcycs)
 {
@@ -736,7 +725,7 @@ iwm_read_c0ec(double dcycs)
 
 	if(iwm.q7 == 0 && iwm.enable2 == 0 && iwm.motor_on) {
 		drive = iwm.drive_select;
-		if(g_apple35_sel) {
+		if(g_c031_disk35 & 0x40) {
 			dsk = &(iwm.drive35[drive]);
 			return iwm_read_data_35(dsk, g_fast_disk_emul, dcycs);
 		} else {
@@ -773,7 +762,7 @@ read_iwm(int loc, double dcycs)
 
 	state = (iwm.q7 << 1) + iwm.q6;
 	drive = iwm.drive_select;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		dsk = &(iwm.drive35[drive]);
 	} else {
 		dsk = &(iwm.drive525[drive]);
@@ -806,7 +795,7 @@ read_iwm(int loc, double dcycs)
 				iwm_printf("Read status under enable2: 1\n");
 				status = 1;
 			} else {
-				if(g_apple35_sel) {
+				if(g_c031_disk35 & 0x40) {
 					status = iwm_read_status35(dcycs);
 				} else {
 					status = dsk->write_prot;
@@ -868,7 +857,7 @@ write_iwm(int loc, int val, double dcycs)
 	state = (iwm.q7 << 1) + iwm.q6;
 	drive = iwm.drive_select;
 	fast_writes = g_fast_disk_emul;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		dsk = &(iwm.drive35[drive]);
 	} else {
 		dsk = &(iwm.drive525[drive]);
@@ -899,8 +888,11 @@ write_iwm(int loc, int val, double dcycs)
 			if(iwm.enable2) {
 				iwm_write_enable2(val, dcycs);
 			} else {
+#if 0
+// Flobynoid writes to 0xc0e9 causing these messages...
 				printf("Write iwm1, st: %02x, loc: %x: %02x\n",
 					state, loc, val);
+#endif
 			}
 		}
 		return;
@@ -2250,7 +2242,7 @@ iwm_show_track(int slot_drive, int track)
 
 	if(slot_drive < 0) {
 		drive = iwm.drive_select;
-		sel35 = g_apple35_sel;
+		sel35 = (g_c031_disk35 >> 6) & 1;
 	} else {
 		drive = slot_drive & 1;
 		sel35 = !((slot_drive >> 1) & 1);
@@ -2272,7 +2264,7 @@ iwm_show_track(int slot_drive, int track)
 	if(trk->track_len <= 0) {
 		printf("Track_len: %d\n", trk->track_len);
 		printf("No track for type: %d, drive: %d, qtrk: %02x\n",
-			g_apple35_sel, drive, qtr_track);
+			sel35, drive, qtr_track);
 		return;
 	}
 

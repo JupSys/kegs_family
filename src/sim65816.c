@@ -8,13 +8,16 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.349 2004-10-05 20:11:57-04 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.358 2004-10-15 03:11:37-04 kentd Exp $";
 
 #include <math.h>
 
 #define INCLUDE_RCSID_C
 #include "defc.h"
 #undef INCLUDE_RCSID_C
+
+#define PC_LOG_LEN	(8*1024)
+
 
 char g_argv0_path[256] = "./";
 
@@ -38,26 +41,22 @@ const char *g_kegs_default_paths[] = { "", "./", "${HOME}/",
 
 extern int g_stepping;
 
-extern int statereg;
+extern int g_c068_statereg;
 extern int g_cur_a2_stat;
 
-extern int wrdefram;
-extern int int_crom[8];
+extern int g_c08x_wrdefram;
+extern int g_c02d_int_crom;
 
-extern int shadow_text;
-
-extern int shadow_reg;
-extern int speed_fast;
-extern word32 g_slot_motor_detect;
+extern int g_c035_shadow_reg;
+extern int g_c036_val_speed;
 
 extern int g_c023_val;
-extern int c023_1sec_int_irq_pending;
-extern int c023_scan_int_irq_pending;
-extern int c041_en_25sec_ints;
-extern int c041_en_vbl_ints;
+extern int g_c023_1sec_int_irq_pending;
+extern int g_c023_scan_int_irq_pending;
+extern int g_c041_val;
 extern int g_c046_val;
-extern int c046_25sec_irq_pend;
-extern int c046_vbl_irq_pending;
+extern int g_c046_25sec_irq_pend;
+extern int g_c046_vbl_irq_pending;
 extern int g_zipgs_reg_c059;
 extern int g_zipgs_reg_c05a;
 extern int g_zipgs_reg_c05b;
@@ -71,9 +70,6 @@ extern int defs_instr_end_16;
 extern int op_routs_start;
 extern int op_routs_end;
 
-extern int updated_mod_latch;
-extern int capslock_key_down;
-
 Engine_reg engine;
 extern word32 table8[];
 extern word32 table16[];
@@ -83,7 +79,7 @@ extern byte doc_ram[];
 extern int g_iwm_motor_on;
 extern int g_fast_disk_emul;
 extern int g_slow_525_emul_wr;
-extern int g_apple35_sel;
+extern int g_c031_disk35;
 extern int g_config_control_panel;
 
 extern int g_audio_enable;
@@ -95,6 +91,7 @@ double	g_fcycles_stop = 0.0;
 int	halt_sim = 0;
 int	enter_debug = 0;
 int	g_rom_version = 0;
+int	g_user_halt_bad = 0;
 int	g_halt_on_bad_read = 0;
 int	g_ignore_bad_acc = 1;
 int	g_ignore_halts = 1;
@@ -106,12 +103,7 @@ int	g_iw2_emul = 0;
 int	g_serial_out_masking = 0;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.87";
-
-#if 0
-const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
-const double g_dcycles_in_16ms = DCYCS_IN_16MS;
-#endif
+const char g_kegs_version_str[] = "0.89";
 
 #define START_DCYCS	(0.0)
 
@@ -165,23 +157,24 @@ byte *g_rom_cards_ptr = 0;
 
 Page_info page_info_rd_wr[2*65536 + PAGE_INFO_PAD_SIZE];
 
-int kbd_in_end = 0;
-byte kbd_in_buf[LEN_KBD_BUF];
+Pc_log g_pc_log_array[PC_LOG_LEN + 2];
+Data_log g_data_log_array[PC_LOG_LEN + 2];
 
+Pc_log	*g_log_pc_ptr = &(g_pc_log_array[0]);
+Pc_log	*g_log_pc_start_ptr = &(g_pc_log_array[0]);
+Pc_log	*g_log_pc_end_ptr = &(g_pc_log_array[PC_LOG_LEN]);
 
-#define PC_LOG_LEN	(8*1024)
-
-Pc_log pc_log_array[PC_LOG_LEN + 2];
-
-Pc_log	*log_pc_ptr = &(pc_log_array[0]);
-Pc_log	*log_pc_start_ptr = &(pc_log_array[0]);
-Pc_log	*log_pc_end_ptr = &(pc_log_array[PC_LOG_LEN]);
+Data_log *g_log_data_ptr = &(g_data_log_array[0]);
+Data_log *g_log_data_start_ptr = &(g_data_log_array[0]);
+Data_log *g_log_data_end_ptr = &(g_data_log_array[PC_LOG_LEN]);
 
 
 void
 show_pc_log()
 {
 	FILE *pcfile;
+	Pc_log	*log_pc_ptr;
+	Data_log *log_data_ptr;
 	double	dcycs;
 	double	start_dcycs;
 	word32	instr;
@@ -190,6 +183,7 @@ show_pc_log()
 	word32	stack, direct;
 	word32	dbank;
 	word32	kpc;
+	int	data_wrap;
 	int	accsize, xsize;
 	int	num;
 	int	i;
@@ -199,14 +193,42 @@ show_pc_log()
 		fprintf(stderr,"fopen failed...errno: %d\n", errno);
 		exit(2);
 	}
+
+	log_pc_ptr = g_log_pc_ptr;
+	log_data_ptr = g_log_data_ptr;
 #if 0
 	fprintf(pcfile, "current pc_log_ptr: %p, start: %p, end: %p\n",
 		log_pc_ptr, log_pc_start_ptr, log_pc_end_ptr);
 #endif
 
 	start_dcycs = log_pc_ptr->dcycs;
+	dcycs = start_dcycs;
+
+	data_wrap = 0;
+	/* find first data entry */
+	while(data_wrap < 2 && (log_data_ptr->dcycs < dcycs)) {
+		log_data_ptr++;
+		if(log_data_ptr >= g_log_data_end_ptr) {
+			log_data_ptr = g_log_data_start_ptr;
+			data_wrap++;
+		}
+	}
+	fprintf(pcfile, "start_dcycs: %9.2f\n", start_dcycs);
 
 	for(i = 0; i < PC_LOG_LEN; i++) {
+		dcycs = log_pc_ptr->dcycs;
+		while((data_wrap < 2) && (log_data_ptr->dcycs <= dcycs) &&
+					(log_data_ptr->dcycs >= start_dcycs)) {
+			fprintf(pcfile, "DATA set %06x = %06x (%d) %9.2f\n",
+				log_data_ptr->addr, log_data_ptr->val,
+				log_data_ptr->size,
+				log_data_ptr->dcycs - start_dcycs);
+			log_data_ptr++;
+			if(log_data_ptr >= g_log_data_end_ptr) {
+				log_data_ptr = g_log_data_start_ptr;
+				data_wrap++;
+			}
+		}
 		dbank = (log_pc_ptr->dbank_kpc >> 24) & 0xff;
 		kpc = log_pc_ptr->dbank_kpc & 0xffffff;
 		instr = log_pc_ptr->instr;
@@ -216,9 +238,8 @@ show_pc_log()
 		yreg = log_pc_ptr->xreg_yreg & 0xffff;;
 		stack = (log_pc_ptr->stack_direct >> 16) & 0xffff;;
 		direct = log_pc_ptr->stack_direct & 0xffff;;
-		dcycs = log_pc_ptr->dcycs;
 
-		num = log_pc_ptr - log_pc_start_ptr;
+		num = log_pc_ptr - g_log_pc_start_ptr;
 
 		accsize = 2;
 		xsize = 2;
@@ -236,8 +257,8 @@ show_pc_log()
 
 		do_dis(pcfile, kpc, accsize, xsize, 1, instr);
 		log_pc_ptr++;
-		if(log_pc_ptr >= log_pc_end_ptr) {
-			log_pc_ptr = log_pc_start_ptr;
+		if(log_pc_ptr >= g_log_pc_end_ptr) {
+			log_pc_ptr = g_log_pc_start_ptr;
 		}
 	}
 
@@ -382,7 +403,7 @@ get_memory_io(word32 loc, double *cyc_ptr)
 	}
 
 	g_code_yellow++;
-	if(g_ignore_bad_acc) {
+	if(g_ignore_bad_acc && !g_user_halt_bad) {
 		/* print no message, just get out.  User doesn't want */
 		/*  to be bothered by buggy programs */
 		return 0;
@@ -391,7 +412,7 @@ get_memory_io(word32 loc, double *cyc_ptr)
 	printf("get_memory_io for addr: %06x\n", loc);
 	printf("stat for addr: %06x = %p\n", loc,
 				GET_PAGE_INFO_RD((loc >> 8) & 0xffff));
-	set_halt(g_halt_on_bad_read);
+	set_halt(g_halt_on_bad_read | g_user_halt_bad);
 
 	return 0;
 }
@@ -500,7 +521,7 @@ set_memory_io(word32 loc, int val, double *cyc_ptr)
 		return;
 	}
 
-	if(g_ignore_bad_acc) {
+	if(g_ignore_bad_acc && !g_user_halt_bad) {
 		/* print no message, just get out.  User doesn't want */
 		/*  to be bothered by buggy programs */
 		return;
@@ -581,15 +602,11 @@ my_exit(int ret)
 void
 do_reset()
 {
-	int	i;
 
-	statereg = 0x08 + 0x04 + 0x01; /* rdrom, lcbank2, intcx */
+	g_c068_statereg = 0x08 + 0x04 + 0x01; /* rdrom, lcbank2, intcx */
 
-	wrdefram = 1;
-	for(i = 1; i < 7; i++) {
-		int_crom[i] = 0;
-	}
-	int_crom[7] = 0;
+	g_c08x_wrdefram = 1;
+	g_c02d_int_crom = 0;
 
 	engine.psr = (engine.psr | 0x134) & ~(0x08);
 	engine.stack = 0x100 + (engine.stack & 0xff);
@@ -1252,8 +1269,8 @@ Fplus	*g_cur_fplus_ptr = 0;
 void
 show_pmhz()
 {
-	printf("Pmhz: %f, plus_1: %f, fast: %d, limit: %d\n",
-		g_projected_pmhz, g_cur_fplus_ptr->plus_1, speed_fast,
+	printf("Pmhz: %f, plus_1: %f, c036:%02x, limit: %d\n",
+		g_projected_pmhz, g_cur_fplus_ptr->plus_1, g_c036_val_speed,
 		g_limit_speed);
 
 }
@@ -1343,11 +1360,11 @@ run_prog()
 
 		motor_on = g_iwm_motor_on;
 		limit_speed = g_limit_speed;
-		apple35_sel = g_apple35_sel;
+		apple35_sel = g_c031_disk35 & 0x40;
 		zip_en = ((g_zipgs_reg_c05b & 0x10) == 0);
 		zip_follow_cps = ((g_zipgs_reg_c059 & 0x8) != 0);
 		zip_speed_0tof_new = g_zipgs_reg_c05a & 0xf0;
-		fast = speed_fast || (zip_en && !zip_follow_cps);
+		fast = (g_c036_val_speed & 0x80) || (zip_en && !zip_follow_cps);
 
 		if(zip_speed_0tof_new != zip_speed_0tof) {
 			zip_speed_0tof = zip_speed_0tof_new;
@@ -1355,7 +1372,7 @@ run_prog()
 		}
 
 		iwm_1 = motor_on && !apple35_sel &&
-				(g_slot_motor_detect & 0x4) &&
+				(g_c036_val_speed & 0x4) &&
 				(g_slow_525_emul_wr || !g_fast_disk_emul);
 		iwm_25 = (motor_on && apple35_sel) && !g_fast_disk_emul;
 		faster_than_28 = fast && (!iwm_1 && !iwm_25) && zip_en &&
@@ -1576,7 +1593,7 @@ take_irq(int is_it_brk)
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
 		va = 0xfffffe;
-		if(shadow_reg & 0x40) {
+		if(g_c035_shadow_reg & 0x40) {
 			/* I/O shadowing off...use ram locs */
 			va = 0x00fffe;
 		}
@@ -1598,13 +1615,13 @@ take_irq(int is_it_brk)
 		if(is_it_brk) {
 			/* break */
 			va = 0xffffe6;
-			if(shadow_reg & 0x40) {
+			if(g_c035_shadow_reg & 0x40) {
 				va = 0xffe6;
 			}
 		} else {
 			/* irq */
 			va = 0xffffee;
-			if(shadow_reg & 0x40) {
+			if(g_c035_shadow_reg & 0x40) {
 				va = 0xffee;
 			}
 		}
@@ -1966,16 +1983,16 @@ update_60hz(double dcycs, double dtime_now)
 	g_dtime_eff_pmhz_array[prev_vbl_index] = eff_pmhz;
 
 
-	if(c041_en_vbl_ints) {
+	if(g_c041_val & C041_EN_VBL_INTS) {
 		add_event_vbl();
 	}
 
 	g_25sec_cntr++;
 	if(g_25sec_cntr >= 16) {
 		g_25sec_cntr = 0;
-		if(c041_en_25sec_ints && !c046_25sec_irq_pend) {
+		if((g_c041_val & C041_EN_25SEC_INTS) && !g_c046_25sec_irq_pend){
 			g_c046_val |= 0x10;
-			c046_25sec_irq_pend = 1;
+			g_c046_25sec_irq_pend = 1;
 			add_irq();
 			irq_printf("Setting c046 .25 sec int to 1, "
 				"g_irq_pend: %d\n", g_irq_pending);
@@ -1987,8 +2004,8 @@ update_60hz(double dcycs, double dtime_now)
 		g_1sec_cntr = 0;
 		tmp = g_c023_val;
 		tmp |= 0x40;	/* set 1sec int */
-		if((tmp & 0x04) && !c023_1sec_int_irq_pending) {
-			c023_1sec_int_irq_pending = 1;
+		if((tmp & 0x04) && !g_c023_1sec_int_irq_pending) {
+			g_c023_1sec_int_irq_pending = 1;
 			tmp |= 0x80;
 			add_irq();
 			irq_printf("Setting c023 to %02x irq_pend: %d\n",
@@ -2016,15 +2033,15 @@ update_60hz(double dcycs, double dtime_now)
 	sound_update(dcycs);
 	clock_update();
 	scc_update(dcycs);
-	joystick_update_button();
+	paddle_update_buttons();
 }
 
 void
 do_vbl_int()
 {
-	if(c041_en_vbl_ints && !c046_vbl_irq_pending) {
+	if((g_c041_val & C041_EN_VBL_INTS) && !g_c046_vbl_irq_pending) {
 		g_c046_val |= 0x08;
-		c046_vbl_irq_pending = 1;
+		g_c046_vbl_irq_pending = 1;
 		add_irq();
 		irq_printf("Setting c046 vbl_int_status to 1, irq_pend: %d\n",
 			g_irq_pending);
@@ -2047,9 +2064,9 @@ do_scan_int(double dcycs, int line)
 	if(g_slow_memory_ptr[0x19d00 + line] & 0x40) {
 		/* valid interrupt, do it */
 		c023_val |= 0xa0;	/* vgc_int and scan_int */
-		if((c023_val & 0x02) && !c023_scan_int_irq_pending) {
+		if((c023_val & 0x02) && !g_c023_scan_int_irq_pending) {
 			add_irq();
-			c023_scan_int_irq_pending = 1;
+			g_c023_scan_int_irq_pending = 1;
 			irq_printf("Setting c023 to %02x, irq_pend: %d\n",
 				c023_val, g_irq_pending);
 		}

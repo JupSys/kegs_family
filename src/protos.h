@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.173 2004-03-23 17:26:19-05 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.178 2004-10-17 12:54:59-04 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -52,6 +52,7 @@ int get_memory16_act_stub_asm(word32 addr, int cycs);
 
 void set_memory_c(word32 addr, word32 val, int cycs);
 void set_memory16_c(word32 addr, word32 val, int cycs);
+void set_memory24_c(word32 addr, word32 val, int cycs);
 
 int enter_engine(Engine_reg *ptr);
 void clr_halt_act(void);
@@ -71,8 +72,8 @@ void scc_serial_win_empty_writebuf(int port);
 
 /* special joystick_driver.c prototypes */
 void joystick_init(void);
-void joystick_update(void);
-void joystick_update_button(void);
+void joystick_update(double dcycs);
+void joystick_update_buttons(void);
 
 
 /* END_HDR */
@@ -103,8 +104,10 @@ int adb_read_c027(void);
 void adb_write_c027(int val);
 int read_adb_ram(word32 addr);
 void write_adb_ram(word32 addr, int val);
+int adb_get_keypad_xy(int get_y);
 int update_mouse(int x, int y, int button_states, int buttons_valid);
 int mouse_read_c024(double dcycs);
+void mouse_compress_fifo(double dcycs);
 void adb_key_event(int a2code, int is_up);
 word32 adb_read_c000(void);
 word32 adb_access_c010(void);
@@ -127,9 +130,6 @@ void clk_write_bram(FILE *fconf);
 void update_cur_time(void);
 void clock_update(void);
 void clock_update_if_needed(void);
-word32 clock_read_c033(void);
-word32 clock_read_c034(void);
-void clock_write_c033(word32 val);
 void clock_write_c034(word32 val);
 void do_clock_data(void);
 
@@ -200,6 +200,9 @@ void xam_mem(int count);
 void show_hex_mem(int startbank, word32 start, int endbank, word32 end, int count);
 int read_line(char *buf, int len);
 void do_debug_list(void);
+void dis_do_memmove(void);
+void dis_do_pattern_search(void);
+void dis_do_compare(void);
 void load_roms(void);
 void do_debug_unix(void);
 void do_debug_load(void);
@@ -268,7 +271,6 @@ void iwm_move_to_track(Disk *dsk, int new_track);
 void iwm525_phase_change(int drive, int phase);
 int iwm_read_status35(double dcycs);
 void iwm_do_action35(double dcycs);
-void iwm_set_apple35_sel(int newval);
 int iwm_read_c0ec(double dcycs);
 int read_iwm(int loc, double dcycs);
 void write_iwm(int loc, int val, double dcycs);
@@ -334,9 +336,13 @@ int read_vid_counters(int loc, double dcycs);
 
 
 /* paddles.c */
+void paddle_fixup_joystick_type(void);
 void paddle_trigger(double dcycs);
 void paddle_trigger_mouse(double dcycs);
-int read_paddles(int paddle, double dcycs);
+void paddle_trigger_keypad(double dcycs);
+void paddle_update_trigger_dcycs(double dcycs);
+int read_paddles(double dcycs, int paddle);
+void paddle_update_buttons(void);
 
 
 /* sim65816.c */
@@ -433,8 +439,6 @@ int doc_read_c03c(double dcycs);
 int doc_read_c03d(double dcycs);
 void doc_write_c03c(int val, double dcycs);
 void doc_write_c03d(int val, double dcycs);
-void doc_write_c03e(int val);
-void doc_write_c03f(int val);
 void doc_show_ensoniq_state(int osc);
 
 
@@ -474,6 +478,7 @@ int video_rebuild_super_hires_palette(word32 scan_info, int line, int reparse);
 void redraw_changed_super_hires(int start_offset, int start_line, int num_lines, int in_reparse, byte *screen_data);
 void display_screen(void);
 void video_update_event_line(int line);
+void video_check_input_events(void);
 void video_update_through_line(int line);
 void video_refresh_lines(int st_line, int num_lines, int must_reparse);
 void refresh_border(void);
@@ -492,4 +497,5 @@ void video_update_color_array(int col_num, int a2_color);
 void video_update_colormap(void);
 void video_update_status_line(int line, const char *string);
 void video_show_debug_info(void);
+word32 float_bus(double dcycs);
 

@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.92 2004-10-05 20:12:56-04 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.97 2004-10-14 15:10:16-04 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -34,7 +34,10 @@ void U_STACK_TRACE();
 #define DCYCS_1_MHZ		((DCYCS_28_MHZ/28.0)*(65.0*7/(65.0*7+1.0)))
 #define CYCS_1_MHZ		((int)DCYCS_1_MHZ)
 
-#define DCYCS_IN_16MS_RAW	(DCYCS_1_MHZ / 60.0)
+/* #define DCYCS_IN_16MS_RAW	(DCYCS_1_MHZ / 60.0) */
+#define DCYCS_IN_16MS_RAW	(262.0 * 65.0)
+/* Use precisely 17030 instead of forcing 60 Hz since this is the number of */
+/*  1MHz cycles per screen */
 #define DCYCS_IN_16MS		((double)((int)DCYCS_IN_16MS_RAW))
 #define DRECIP_DCYCS_IN_16MS	(1.0 / (DCYCS_IN_16MS))
 
@@ -91,6 +94,13 @@ STRUCT(Pc_log) {
 	word32	xreg_yreg;
 	word32	stack_direct;
 	word32	pad;
+};
+
+STRUCT(Data_log) {
+	double	dcycs;
+	word32	addr;
+	word32	val;
+	word32	size;
 };
 
 STRUCT(Event) {
@@ -167,6 +177,11 @@ STRUCT(Cfg_listhdr) {
 	int	num_to_show;
 };
 
+STRUCT(Emustate_list) {
+	const char *str;
+	int	*iptr;
+};
+
 #ifdef __LP64__
 # define PTR2WORD(a)	((unsigned long)(a))
 #else
@@ -174,14 +189,20 @@ STRUCT(Cfg_listhdr) {
 #endif
 
 
-#define ALTZP	(statereg & 0x80)
-/* #define PAGE2 (statereg & 0x40) */
-#define RAMRD	(statereg & 0x20)
-#define RAMWRT	(statereg & 0x10)
-#define RDROM	(statereg & 0x08)
-#define LCBANK2	(statereg & 0x04)
-#define ROMB	(statereg & 0x02)
-#define INTCX	(statereg & 0x01)
+#define ALTZP	(g_c068_statereg & 0x80)
+/* #define PAGE2 (g_c068_statereg & 0x40) */
+#define RAMRD	(g_c068_statereg & 0x20)
+#define RAMWRT	(g_c068_statereg & 0x10)
+#define RDROM	(g_c068_statereg & 0x08)
+#define LCBANK2	(g_c068_statereg & 0x04)
+#define ROMB	(g_c068_statereg & 0x02)
+#define INTCX	(g_c068_statereg & 0x01)
+
+#define C041_EN_25SEC_INTS	0x10
+#define C041_EN_VBL_INTS	0x08
+#define C041_EN_SWITCH_INTS	0x04
+#define C041_EN_MOVE_INTS	0x02
+#define C041_EN_MOUSE		0x01
 
 #define EXTRU(val, pos, len) 				\
 	( ( (len) >= (pos) + 1) ? ((val) >> (31-(pos))) : \

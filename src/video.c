@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.126 2004-10-05 20:12:22-04 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.132 2004-10-17 12:54:10-04 kentd Exp $";
 
 #include <time.h>
 
@@ -41,12 +41,11 @@ extern byte *g_slow_memory_ptr;
 extern int g_screen_depth;
 extern int g_screen_mdepth;
 
-extern int statereg;
 extern double g_cur_dcycs;
 
 extern int g_line_ref_amt;
 
-extern int g_border_color;
+extern int g_c034_val;
 extern int g_config_control_panel;
 
 typedef byte Change;
@@ -71,6 +70,9 @@ Kimage g_kimage_border_sides;
 Kimage g_mainwin_kimage;
 
 extern double g_last_vbl_dcycs;
+
+double	g_video_dcycs_check_input = 0.0;
+int	g_video_extra_check_inputs = 0;
 
 int	g_need_redraw = 1;
 int	g_palette_change_summary = 0;
@@ -461,7 +463,8 @@ show_a2_line_stuff()
 			g_a2_line_right_edge[i]);
 	}
 
-	printf("new_a2_stat_cur_line: %d\n", g_new_a2_stat_cur_line);
+	printf("new_a2_stat_cur_line: %d, cur_a2_stat:%04x\n",
+		g_new_a2_stat_cur_line, g_cur_a2_stat);
 	for(i = 0; i < 200; i++) {
 		printf("cur_all[%d]: %03x new_all: %03x\n", i,
 			g_a2_cur_all_stat[i], g_a2_new_all_stat[i]);
@@ -500,17 +503,11 @@ word32	g_cycs_in_check_input = 0;
 void
 video_update()
 {
-	register word32 start_time;
-	register word32 end_time;
 	int	did_video;
 
 	update_border_info();
 
-	GET_ITIMER(start_time);
-	check_input_events();
-	GET_ITIMER(end_time);
-
-	g_cycs_in_check_input += (end_time - start_time);
+	video_check_input_events();
 
 	g_screen_redraw_skip_count--;
 	did_video = 0;
@@ -814,7 +811,7 @@ update_border_info()
 	if(g_border_last_vbl_changes || limit) {
 		/* add a dummy entry */
 		g_border_changes[limit].fcycs = DCYCS_IN_16MS + 21.0;
-		g_border_changes[limit].val = g_border_color;
+		g_border_changes[limit].val = (g_c034_val & 0xf);
 		limit++;
 	}
 	last_line_offset = (-1 << 8) + 44;
@@ -876,7 +873,7 @@ update_border_info()
 	}
 
 	g_num_border_changes = 0;
-	g_vbl_border_color = g_border_color;
+	g_vbl_border_color = (g_c034_val & 0xf);
 }
 
 void
@@ -2634,6 +2631,26 @@ video_update_event_line(int line)
 			add_event_vid_upd(1);	/* add event for new screen */
 		}
 	}
+
+	if(g_video_extra_check_inputs) {
+		if(g_video_dcycs_check_input < g_cur_dcycs) {
+			video_check_input_events();
+		}
+	}
+}
+
+void
+video_check_input_events()
+{
+	word32	start_time, end_time;
+
+	g_video_dcycs_check_input = g_cur_dcycs + 4000.0;
+
+	GET_ITIMER(start_time);
+	check_input_events();
+	GET_ITIMER(end_time);
+
+	g_cycs_in_check_input += (end_time - start_time);
 }
 
 void
@@ -3347,4 +3364,71 @@ video_show_debug_info()
 	tmp1 = get_lines_since_vbl(g_cur_dcycs);
 	printf("lines since vbl: %06x\n", tmp1);
 	printf("Last line updated: %d\n", g_vid_update_last_line);
+}
+
+word32
+float_bus(double dcycs)
+{
+	word32	val;
+	int	lines_since_vbl;
+	int	line, eff_line, line24;
+	int	all_stat;
+	int	byte_offset;
+	int	hires, page2;
+	int	addr;
+
+	lines_since_vbl = get_lines_since_vbl(dcycs);
+
+/* For floating bus, model hires style: Visible lines 0-191 are simply the */
+/* data being displayed at that time.  Lines 192-255 are lines 0 - 63 again */
+/*  and lines 256-261 are lines 58-63 again */
+/* For each line, figure out starting byte at -25 mod 128 bytes from this */
+/*  line's start */
+/* This emulates an Apple II style floating bus.  A reall IIgs does not */
+/*  drive anything meaningful during the 25 horizontal blanking lines, */
+/*  nor during veritical blanking.  The data seems to be 0 or related to */
+/*  the instruction fetches on a real IIgs during blankings */
+
+	line = lines_since_vbl >> 8;
+	byte_offset = lines_since_vbl & 0xff;
+	/* byte offset is from 0 to 65, where the visible screen is drawn */
+	/*  from 25 to 65 */
+
+	eff_line = line;
+	if(line >= 192) {
+		eff_line = line - 192;
+		if(line >= 256) {
+			eff_line = line - 262 + 64;
+		}
+	}
+	all_stat = g_cur_a2_stat;
+	hires = all_stat & ALL_STAT_HIRES;
+	if((all_stat & ALL_STAT_MIX_T_GR) && (line >= 160)) {
+		hires = 0;
+	}
+	page2 = EXTRU(all_stat, 31 - BIT_ALL_STAT_PAGE2, 1);
+	if(all_stat & ALL_STAT_ST80) {
+		page2 = 0;
+	}
+
+	line24 = (eff_line >> 3) & 0x1f;
+	addr = g_screen_index[line24] & 0x3ff;
+	addr = (addr & 0x380) + (((addr & 0x7f) - 25 + byte_offset) & 0x7f);
+	if(hires) {
+		addr = 0x2000 + addr + ((eff_line & 7) << 10) + (page2 << 13);
+	} else {
+		addr = 0x400 + addr + (page2 << 10);
+	}
+
+	val = g_slow_memory_ptr[addr];
+	if(byte_offset < 10) {
+		/* Bob Bishop's sample program seems to get confused by */
+		/*  these bytes--so mask some off to prevent seeing some */
+		val = 0;
+	}
+#if 0
+	printf("For %04x (%d) addr=%04x, val=%02x, dcycs:%9.2f\n",
+		lines_since_vbl, eff_line, addr, val, dcycs - g_last_vbl_dcycs);
+#endif
+	return val;
 }

@@ -1,4 +1,28 @@
 
+Changes in KEGS v0.89 since v0.88 (10/17/04)
+- Make old mouse button presses disappear after .5 seconds.
+- Add Keypad Joystick, along with configuration menu choices to enable it.
+	The keypad numbers move the joystick to the indicated direction,
+	with chording allowing in-between values.
+	The keypad '0' is button 0 and keypad '1' is button 1.
+- Also add jostick scaling factor and trim adjustment.
+- Allow user to increase keyboard and mouse scan rate to 240Hz from 60Hz
+	for some better game response.
+
+Changes in KEGS v0.88 since v0.87 (10/13/04)
+- Add configuration setting to debug halt on code red halts.  Also add
+	configuration mode (on by default) to shadow text page 2 on ROM 01,
+	which is an enhancement over a real IIgs.
+- Handle mac binary header on images.  Handle compressed .po images.
+- Fix refresh rate to 59.923Hz from 60Hz so that exactly 17030 1MHz cycles
+	pass in one screen refresh period.
+- Enhance trace-to-file function to also write out data values stored using
+	the Data_log info.
+- Debugger adds memory move and memory compare functions.
+- Support "floating bus" where reading certain $C0xx locations returns the
+	current video data.  This allows Bob Bishop's split-screen demos to
+	run and enables Drol's between-level animations to work fully.
+
 Changes in KEGS v0.87 since v0.86 (10/05/04)
 - Remove all of Jonathan Kalbfeld's and Gilles Tschopp's contributions.
 	All of Solaris audio is removed.
