@@ -42,7 +42,10 @@ make
 KEGS assumes perl is in your path. If it is somewhere else, you need to edit
 the "PERL = perl" line in the vars file and make it point to the correct place.
 
-A user recommends using "egcs -O6 -mpentium" for the best performance.
+For audio, KEGS needs access to /dev/dsp.  If the permissions do not allow
+KEGS to access /dev/dsp, it can fail with a cryptic error message.  As root,
+just do: "chmod 666 /dev/dsp".
+
 
 PowerPC Linux build instructions:
 ----------------------------

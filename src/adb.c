@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.53 2003-10-29 02:02:05-05 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.56 2003-11-04 02:21:56-05 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -58,7 +58,7 @@ word32	g_adb_layout_lang = 0x0;
 word32	g_adb_interrupt_byte = 0;
 int	g_adb_state = ADB_IDLE;
 
-word32	g_adb_cmd = -1;
+word32	g_adb_cmd = (word32)-1;
 int	g_adb_cmd_len = 0;
 int	g_adb_cmd_so_far = 0;
 word32	g_adb_cmd_data[16];
@@ -683,7 +683,7 @@ adb_write_c026(int val)
 				(g_adb_char_set << 12) +
 				(g_adb_layout_lang << 8) +
 				(g_adb_repeat_info << 0);
-			tmp = (0x82 << 24) + tmp;
+			tmp = (0x82U << 24) + tmp;
 			adb_send_bytes(4, tmp, 0, 0);
 			break;
 		case 0x0d:	/* Get Version */
@@ -1106,7 +1106,7 @@ update_mouse(int x, int y, int button_states, int buttons_valid)
 	if((button_states & 2) && !(g_mouse_buttons & 2) &&
 							(buttons_valid & 2)) {
 		/* middle button pressed */
-		halt_printf("Middle button pressed\n");
+		halt2_printf("Middle button pressed\n");
 	}
 
 	if(!g_mouse_overflow_valid && button1_changed) {
@@ -1500,7 +1500,7 @@ adb_physical_key_update(int a2code, int is_up)
 			break;
 		case 0x06: /* F6 - emulator speed */
 			if(SHIFT_DOWN) {
-				halt_printf("Shift-F6 pressed\n");
+				halt2_printf("Shift-F6 pressed\n");
 			} else {
 				adb_increment_speed();
 			}

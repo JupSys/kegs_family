@@ -76,8 +76,6 @@ You need to provide:
 		ROM 03 machine (262144 bytes long.)
 	3) A disk image to boot.  This can be either "raw" format or 2IMG.
 		See discussion below.  GS/OS would be best.
-	4) Edit the file called "config.kegs" describing what images you want
-		KEGS to use.
 
 Getting ROMs
 ------------
@@ -102,17 +100,19 @@ On all platforms except the Mac, you must start KEGS from a terminal
 window.  KEGS will open a new window and use the window you started it from
 as a "debug" window.  
 
+On a MAC, you need to place the "config.kegs" file someplace where KEGS
+can find it.  The simplest place is in your home directory, so copy it there
+with the Finder (or using the Terminal).
+
 Start kegs by Double-clicking the KEGSMAC icon on a MAC, or by running
-the executable (kegswin on Windows, and kegs on Linux).
+the executable (kegswin on Windows, and kegs on Linux).  KEGSMAC can
+be run by the Terminal window as well (which enables access to more debug
+information) by typing: "./KEGSMAC.app/Contents/MacOS/KEGSMAC".
 
-Assuming all goes well, KEGS will then boot your disk image.  See below
-for how to tell KEGS what disk images to use.  You may have to
-move your mouse into the simulation window to get the colors right.
-Tip: Hitting "F8" locks the mouse in the window (and hides the X cursor)
-until you hit "F8" again. (Windows does not support F8 yet).
-
-If you get dropped directly into Applesoft BASIC, then KEGS didn't find your
-disk image.
+Assuming all goes well, KEGS will then boot up but probably not find any
+disk images.  See below for how to tell KEGS what disk images to use.
+Tip: Hitting "F8" locks the mouse in the window (and hides the host cursor)
+until you hit "F8" again.
 
 Disk Images:
 -----------
@@ -244,21 +244,26 @@ Or press the middle-mouse button in the emulation window, and then type
 Debugging KEGS:
 --------------
 
-KEGS has a lot of debug "traps"--on an unexpected event, it stops the
-emulation, and puts the terminal window in a debugger that is similar to
-the GS ROM monitor debugger (but not exactly).  Thus, if you think it
-should continue after what ever stopped it, type "g" then return in the
-terminal window.  You can look at the message before it stopped to get
-an idea of why it stopped.  For instance, KEGS stops on accesses to
-non-existent memory.  Many buggy programs do this occasionally, like
-Appleworks GS (now I know why it seemed to crash alot).  In most cases,
-try "g", and if it doesn't continue, let me know.  Copy the terminal output
-and mail it to me.  You can "chain" the g's together--so if you want it to
-skip 10 breakpoints, just say "gggggggggg" then hit return.
+KEGS by default now continues emulation even when it detects buggy programs
+running.  (Now I know why Appleworks GS always seemed to crash!).
 
-If this is really bothersome running some programs, try the "-ignbadacc"
-command-line option.  It tells KEGS to not print messages about bad
-memory accesses.
+KEGS divides buggy programs into two severities: Code Yellow and Code Red.
+The status is displayed in words in the text area under the emulation window.
+If nothing's wrong, nothing is printed.
+
+A Yellow bug is a mild bug where an Apple IIgs program merely read an
+invalid location.  Although completely harmless, it indicates the potential
+for some Apple IIgs program bug which may become more severe shortly.
+For instance, closing the "About This Apple IIgs" window in the Finder
+causes a code yellow alert, but it seems quite harmless.
+
+A Code Red bug is a more serious problem.  The Apple IIgs program either
+tried to write non-existent memory, entered an invalid system state, or
+perhaps just tried to use an Apple IIgs feature which KEGS does not implement
+yet.  Note that entering GSBUG tends to cause a Code Red alert always, so if
+you intended to enter it, you can ignore it.  My recommendation is to
+save work immediately (to new files) and restart KEGS if you get into the
+Red mode.
 
 KEGS also supports breakpoints and watchpoints.  In the debug window, you
 set a breakpoint at an address by typing the address, followed by a 'B'
@@ -655,10 +660,10 @@ me know if you find a program which is not working correctly.
 
 Some old Apple II 5.25" games require the old C600 ROM image, and don't work
 with the default Apple IIgs ROM.  This is not KEGS's fault--these games
-don't run on a real Apple IIgs either.  Get an image of the 256 bytes from
-a C600 rom and place it in a file called "c600.rom".  KEGS will use that as
-the C600 ROM if you set slot 6 to "Your Card" in the Apple IIgs control
-panel.
+don't run on a real Apple IIgs either.  KEGS has built-in the old Apple II
+Disk PROM which you can enable by using the IIgs control panel to set
+Slot 6 to "Your Card".  This allows many more Apple II games to run, and
+is the recommended setting.
 
 
 KEGS bugs:
@@ -809,7 +814,6 @@ doc_ev:	Number of Ensoniq (DOC) events in the last second.  A sound
 		stopping is an event, but changing a parameter of a sound
 		while it is playing is also an event.
 st_snd:	 Number of sounds that were started in the last second.
-scan_osc:  Used to measure something, now it is always 0.
 snd_parms:	Number of times a sound parameter was changed while it
 		was playing.
 
@@ -913,12 +917,12 @@ is necessary as long as you're at a supported depth.
 
 Disk Image Details
 
-Images loaded into slot 6 (drive 1 or 2) are
-assumed to be 140K 5.25" disks, which is usually have the extension ".dsk".
-Images loaded into slot 5 (drive 1 or 2) are assumed to be 800K disk images
-and can be in any supported imahe format (including partitions, if you
-have 800K partitions).  Images loaded into slot 7 (drives
-1 through 32) can be in any format and can be any size up to 4GB.
+Images loaded into slot 6 (drive 1 or 2) are assumed to be 140K
+5.25" disks, which is usually have the extension ".dsk".  Images
+loaded into slot 5 (drive 1 or 2) are assumed to be 800K disk images
+and can be in any supported imahe format (including partitions, if
+you have 800K partitions).  Images loaded into slot 7 (drives 1
+through 32) can be in any format and can be any size up to 4GB.
 
 KEGS boots s7d1 by default.  You can change this using the emulated IIgs
 control panel, just like a real Apple IIgs.  KEGS emulates a IIgs with

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.110 2003-10-29 11:20:38-05 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.111 2003-11-03 22:14:10-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -796,7 +796,7 @@ read_iwm(int loc, double dcycs)
 					iwm_printf("read iwm st 0, m off!\n");
 /* HACK!!!! */
 					return 0xff;
-					return (((int)dcycs) & 0x7f) + 0x80;
+					//return (((int)dcycs) & 0x7f) + 0x80;
 				}
 			}
 			break;

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.331 2003-10-29 15:10:07-05 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.333 2003-11-04 02:22:27-05 kentd Exp $";
 
 #include <math.h>
 
@@ -96,12 +96,15 @@ int	halt_sim = 0;
 int	enter_debug = 0;
 int	g_rom_version = 0;
 int	g_halt_on_bad_read = 0;
-int	g_ignore_bad_acc = 0;
+int	g_ignore_bad_acc = 1;
+int	g_ignore_halts = 1;
+int	g_code_red = 0;
+int	g_code_yellow = 0;
 int	g_use_alib = 0;
 int	g_raw_serial = 1;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.80";
+const char g_kegs_version_str[] = "0.81";
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
@@ -374,6 +377,7 @@ get_memory_io(word32 loc, double *cyc_ptr)
 		return (doc_ram[loc & 0xffff]);
 	}
 
+	g_code_yellow++;
 	if(g_ignore_bad_acc) {
 		/* print no message, just get out.  User doesn't want */
 		/*  to be bothered by buggy programs */
@@ -716,10 +720,10 @@ kegsmain(int argc, char **argv)
 	for(i = 1; i < argc; i++) {
 		if(!strcmp("-badrd", argv[i])) {
 			printf("Halting on bad reads\n");
-			g_halt_on_bad_read = 1;
-		} else if(!strcmp("-ignbadacc", argv[i])) {
-			printf("Ignoring bad memory accesses\n");
-			g_ignore_bad_acc = 1;
+			g_halt_on_bad_read = 2;
+		} else if(!strcmp("-noignbadacc", argv[i])) {
+			printf("Not ignoring bad memory accesses\n");
+			g_ignore_bad_acc = 0;
 		} else if(!strcmp("-test", argv[i])) {
 			printf("Allowing testing\n");
 			g_testing_enabled = 1;
@@ -1678,6 +1682,7 @@ update_60hz(double dcycs, double dtime_now)
 	char	sim_mhz_buf[128];
 	char	total_mhz_buf[128];
 	char	*sim_mhz_ptr, *total_mhz_ptr;
+	char	*code_str1, *code_str2;
 	double	eff_pmhz;
 	double	planned_dcycs;
 	double	predicted_pmhz;
@@ -1797,16 +1802,27 @@ update_60hz(double dcycs, double dtime_now)
 			dtmp1, dtmp2, dtmp3, dtmp4, dtmp5, g_fvoices);
 		video_update_status_line(3, status_buf);
 
-		sprintf(status_buf, "snd_plays: %4d, doc_ev: %4d, st_snd: %4d "
-			"scan_osc: %4d, snd_parms: %4d",
+		code_str1 = "";
+		code_str2 = "";
+		if(g_code_yellow) {
+			code_str1 = "Code: Yellow";
+			code_str2 = "Emulated system state suspect, save work";
+		}
+		if(g_code_red) {
+			code_str1 = "Code: RED";
+			code_str2 = "Emulated system state probably corrupt";
+		}
+		sprintf(status_buf, "snd_plays:%4d, doc_ev:%4d, st_snd:%4d "
+			"snd_parms: %4d %s",
 			g_num_snd_plays, g_num_doc_events, g_num_start_sounds,
-			g_num_scan_osc, g_num_recalc_snd_parms);
+			g_num_recalc_snd_parms, code_str1);
 		video_update_status_line(4, status_buf);
 
 		draw_iwm_status(5, status_buf);
 
-		sprintf(status_buf, "KEGS v%-6s           "
-			"Press F4 for Configuration Menu", g_kegs_version_str);
+		sprintf(status_buf, "KEGS v%-6s       "
+			"Press F4 for Config Menu    %s",
+			g_kegs_version_str, code_str2);
 		video_update_status_line(6, status_buf);
 
 		g_status_refresh_needed = 1;

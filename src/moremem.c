@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.226 2003-10-29 15:09:55-05 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.227 2003-11-03 22:14:25-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -1476,13 +1476,16 @@ io_read(word32 loc, double *cyc_ptr)
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
 		return (dummy++) & 0xff;
-		UNIMPL_READ;
 	case 7:
 		/* c700 */
 		if(INTCX || (int_crom[7] == 0)) {
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
-		return g_rom_fc_ff_ptr[0x3c500 + (loc & 0xff)];
+		tmp = g_rom_fc_ff_ptr[0x3c500 + (loc & 0xff)];
+		if((loc & 0xff) == 0xfb) {
+			tmp = tmp & 0xbf;	/* clear bit 6 for ROM 03 */
+		}
+		return tmp;
 	case 8: case 9: case 0xa: case 0xb: case 0xc: case 0xd: case 0xe:
 		if(INTCX || (int_crom[3] == 0)) {
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.117 2003-10-29 13:24:29-05 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.118 2003-11-03 22:15:42-05 kentd Exp $";
 
 #include <time.h>
 
@@ -30,8 +30,8 @@ byte g_cur_border_colors[270];
 byte g_new_special_border[64][64];
 byte g_cur_special_border[64][64];
 
-word32	g_a2_screen_buffer_changed = -1;
-word32	g_full_refresh_needed = -1;
+word32	g_a2_screen_buffer_changed = (word32)-1;
+word32	g_full_refresh_needed = (word32)-1;
 
 word32 g_cycs_in_40col = 0;
 word32 g_cycs_in_xredraw = 0;

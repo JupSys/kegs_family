@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.19 2003-11-03 01:49:41-05 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.23 2003-11-04 10:46:36-05 kentd Exp $";
 
 #include "defc.h"
 #include <stdarg.h>
@@ -112,12 +112,12 @@ Cfg_menu g_cfg_main_menu[] = {
 		KNMP(g_config_kegs_auto_update), CFGTYPE_INT },
 { "Serial Ports,0,Only use sockets 6501-6502,1,Use real ports if avail",
 		KNMP(g_raw_serial), CFGTYPE_INT },
-{ "Dump text screen to file", cfg_text_screen_dump, 0, 0, CFGTYPE_FUNC },
+{ "Dump text screen to file", (void *)cfg_text_screen_dump, 0, 0, CFGTYPE_FUNC},
 { "", 0, 0, 0, 0 },
-{ "Save changes to config.kegs", config_write_config_kegs_file, 0, 0, 
+{ "Save changes to config.kegs", (void *)config_write_config_kegs_file, 0, 0, 
 		CFGTYPE_FUNC },
 { "", 0, 0, 0, 0 },
-{ "Exit Config (or press F4)", cfg_exit, 0, 0, CFGTYPE_FUNC },
+{ "Exit Config (or press F4)", (void *)cfg_exit, 0, 0, CFGTYPE_FUNC },
 { 0, 0, 0, 0, 0 },
 };
 
@@ -1282,6 +1282,37 @@ cfg_maybe_insert_disk(int slot, int drive, const char *namestr)
 	return 0;
 }
 
+int
+cfg_stat(char *path, struct stat *sb)
+{
+	int	removed_slash;
+	int	len;
+	int	ret;
+
+	removed_slash = 0;
+	len = 0;
+
+#ifdef _WIN32
+	/* Windows doesn't like to stat paths ending in a /, so remove it */
+	len = strlen(path);
+	if((len > 1) && (path[len - 1] == '/') ) {
+		path[len - 1] = 0;	/* remove the slash */
+		removed_slash = 1;
+	}
+#endif
+
+	ret = stat(path, sb);
+
+#ifdef _WIN32
+	/* put the slash back */
+	if(removed_slash) {
+		path[len - 1] = '/';
+	}
+#endif
+
+	return ret;
+}
+
 void
 cfg_htab_vtab(int x, int y)
 {
@@ -1847,7 +1878,7 @@ cfg_file_readdir(const char *pathptr)
 				str[len+1] = 0;
 			}
 		}
-		ret = stat(str, &stat_buf);
+		ret = cfg_stat(str, &stat_buf);
 		is_dir = 0;
 		if(ret == 0) {
 			fmt = stat_buf.st_mode & S_IFMT;
@@ -1889,7 +1920,7 @@ cfg_file_readdir(const char *pathptr)
 		/* Else, see if it is a directory or a file */
 		snprintf(&g_cfg_tmp_path[0], CFG_PATH_MAX, "%s%s",
 				&g_cfg_file_cachedreal[0], direntptr->d_name);
-		ret = stat(&g_cfg_tmp_path[0], &stat_buf);
+		ret = cfg_stat(&g_cfg_tmp_path[0], &stat_buf);
 		len = strlen(g_cfg_tmp_path);
 		is_dir = 0;
 		is_gz = 0;
@@ -2166,7 +2197,8 @@ cfg_file_selected()
 		strncpy(&g_cfg_file_path[0], &g_cfg_file_curpath[0],
 							CFG_PATH_MAX);
 	}
-	ret = stat(&g_cfg_file_path[0], &stat_buf);
+
+	ret = cfg_stat(&g_cfg_file_path[0], &stat_buf);
 	fmt = stat_buf.st_mode & S_IFMT;
 	cfg_printf("Stat'ing %s, st_mode is: %08x\n", &g_cfg_file_path[0],
 			(int)stat_buf.st_mode);
@@ -2242,12 +2274,13 @@ cfg_file_handle_key(int key)
 	case 0x08:	/* left arrow */
 	case 0x7f:	/* delete key */
 		if(g_cfg_file_pathfield) {
-			printf("left arrow/delete\n");
+			// printf("left arrow/delete\n");
 			len = strlen(&g_cfg_file_curpath[0]) - 1;
 			if(len >= 0) {
 				g_cfg_file_curpath[len] = 0;
 			}
 		}
+		break;
 	default:
 		printf("key: %02x\n", key);
 	}
@@ -2420,7 +2453,7 @@ config_control_panel()
 					cfg_file_init();
 					break;
 				case CFGTYPE_FUNC:
-					fn_ptr = (void (*))ptr;
+					fn_ptr = (void (*)())ptr;
 					(*fn_ptr)();
 					break;
 				}

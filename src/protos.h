@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.167 2003-10-29 12:20:07-05 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.169 2003-11-04 01:48:46-05 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -149,6 +149,7 @@ int cfg_partition_read_block(int fd, void *buf, int blk, int blk_size);
 int cfg_partition_find_by_name_or_num(int fd, const char *partnamestr, int part_num, Disk *dsk);
 int cfg_partition_make_list(int fd);
 int cfg_maybe_insert_disk(int slot, int drive, const char *namestr);
+int cfg_stat(char *path, struct stat *sb);
 void cfg_htab_vtab(int x, int y);
 void cfg_home(void);
 void cfg_cleol(void);
@@ -195,6 +196,7 @@ void do_debug_load(void);
 int do_dis(FILE *outfile, word32 kpc, int accsize, int xsize, int op_provided, word32 instr);
 void show_line(FILE *outfile, word32 kaddr, word32 operand, int size, char *string);
 void halt_printf(const char *fmt, ...);
+void halt2_printf(const char *fmt, ...);
 
 /* scc.c */
 void scc_init(void);
@@ -355,6 +357,7 @@ double remove_event_doc(int osc);
 double remove_event_scc(int type);
 void show_all_events(void);
 void show_pmhz(void);
+void setup_zip_speeds(void);
 void run_prog(void);
 void add_irq(void);
 void remove_irq(void);

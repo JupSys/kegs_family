@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.5 2003-11-03 01:29:52-05 kentd Exp $";
+const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.6 2003-11-04 01:32:26-05 kentd Exp $";
 
 #define WIN32_LEAN_AND_MEAN	/* Tell windows we want less header gunk */
 #define STRICT			/* Tell Windows we want compile type checks */
@@ -24,6 +24,7 @@ const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.5 2003-11-03 01:29
 
 extern int Verbose;
 
+extern int g_warp_pointer;
 extern int g_screen_depth;
 extern int g_force_depth;
 int g_screen_mdepth = 0;
@@ -189,6 +190,7 @@ int g_a2_key_to_wsym[][3] = {
 void
 win_event_mouse(WPARAM wParam, LPARAM lParam)
 {
+	POINT	pt;
 	word32	flags;
 	int	buttons;
 	int	x, y;
@@ -205,6 +207,14 @@ win_event_mouse(WPARAM wParam, LPARAM lParam)
 	printf("Mouse at %d, %d fl: %08x, but: %d\n", x, y, flags, buttons);
 #endif
 	motion = update_mouse(x, y, buttons, 7);
+
+	if(motion && g_warp_pointer) {
+		/* move mouse to center of screen */
+		pt.x = X_A2_WINDOW_WIDTH/2;
+		pt.y = X_A2_WINDOW_HEIGHT/2;
+		ClientToScreen(g_hwnd_main, &pt);
+		SetCursorPos(pt.x, pt.y);
+	}
 }
 
 void
@@ -587,4 +597,9 @@ x_auto_repeat_off(int must)
 void
 x_warp_pointer(int do_warp)
 {
+	if(do_warp) {
+		ShowCursor(0);
+	} else {
+		ShowCursor(1);
+	}
 }

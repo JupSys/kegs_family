@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.176 2003-10-29 12:32:41-05 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.177 2003-11-03 23:22:56-05 kentd Exp $";
 
 # if !defined(__CYGWIN__) && !defined(__POWERPC__)
 /* No shared memory on Cygwin */
@@ -337,6 +337,16 @@ show_colormap(char *str, Colormap cmap, int index1, int index2, int index3)
 	}
 }
 
+void
+x_badpipe(int signum)
+{
+	/* restore normal sigpipe handling */
+	signal(SIGPIPE, SIG_DFL);
+
+	/* attempt to xset r */
+	system("xset r");
+	my_exit(5);
+}
 
 void
 dev_video_init()
@@ -366,6 +376,8 @@ dev_video_init()
 
 	printf("Preparing X Windows graphics system\n");
 	ret = 0;
+
+	signal(SIGPIPE, x_badpipe);
 
 	g_num_a2_keycodes = 0;
 	for(i = 0; i <= 0x7f; i++) {

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.47 2003-10-20 21:08:00-04 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.48 2003-11-04 02:22:15-05 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -26,6 +26,8 @@ const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.47 2003-10-20 21:08:
 #endif
 
 extern int halt_sim;
+extern int g_code_red;
+extern int g_ignore_halts;
 extern double g_fcycles_stop;
 extern double g_last_vbl_dcycs;
 extern int g_wait_pending;
@@ -726,8 +728,12 @@ get_itimer()
 void
 set_halt_act(int val)
 {
-	halt_sim |= val;
-	g_fcycles_stop = (double)0.0;
+	if(val == 1 && g_ignore_halts) {
+		g_code_red++;
+	} else {
+		halt_sim |= val;
+		g_fcycles_stop = (double)0.0;
+	}
 }
 
 void
