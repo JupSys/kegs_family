@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.82 99/05/04 23:38:12 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.83 99/06/01 00:30:39 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -32,9 +32,6 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.82 99/05/04 23:38:12
 #define JOYSTICK_MOUSE		1
 #define JOYSTICK_LINUX		2
 #define JOYSTICK_KEYPAD		3
-
-#define MEM_SIZE_EXP	(4*1024*1024)
-#define MEM_SIZE	(128*1024 + MEM_SIZE_EXP)
 
 #define DEF_CYCLES	(40*1000)
 

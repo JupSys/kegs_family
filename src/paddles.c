@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_paddles_c[] = "@(#)$Header: paddles.c,v 1.2 99/05/10 00:33:49 kentd Exp $";
+const char rcsid_paddles_c[] = "@(#)$Header: paddles.c,v 1.3 99/05/31 17:21:44 kentd Exp $";
 
 #include "defc.h"
 
@@ -46,8 +46,7 @@ paddle_trigger(double dcycs)
 	}
 }
 
-
-int
+void
 paddle_trigger_mouse(double dcycs)
 {
 	int	val_x;
@@ -83,7 +82,7 @@ paddle_trigger_mouse(double dcycs)
 	g_paddle_button[3] = 1;
 }
 
-int
+void
 paddle_trigger_linux(double dcycs)
 {
 	joystick_update();

@@ -11,11 +11,12 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.15 99/05/30 22:35:16 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.16 99/05/31 23:41:26 kentd Exp $";
 
 #include "defc.h"
 
 extern int Verbose;
+extern int Halt_on;
 extern int g_rom_version;
 extern int g_io_amt;
 extern int g_highest_smartport_unit;
@@ -25,8 +26,6 @@ int g_cycs_in_io_read = 0;
 extern Engine_reg engine;
 
 extern Iwm iwm;
-
-int halt_on_c70d_writes = 0;
 
 #define MAX_BLOCK_SIZE		0x4000
 
@@ -497,7 +496,7 @@ do_c70d(word32 arg0)
 		}
 		engine.pc = (rts_addr + 3 + ext) & 0xffff;
 
-		set_halt(halt_on_c70d_writes);
+		HALT_ON(HALT_ON_C70D_WRITES, "c70d Write done\n");
 		return;
 		break;
 	case 0x03:	/* Format == 0x03 and 0x43 */
@@ -525,7 +524,7 @@ do_c70d(word32 arg0)
 		}
 		engine.pc = (rts_addr + 3 + ext) & 0xffff;
 
-		set_halt(halt_on_c70d_writes);
+		HALT_ON(HALT_ON_C70D_WRITES, "c70d Write done\n");
 		return;
 		break;
 	case 0x04:	/* Control == 0x04 and 0x44 */

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.29 99/03/22 22:22:53 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.32 99/06/01 01:21:03 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -639,25 +639,15 @@ do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub)
 int	g_ret1;
 int	g_ret2;
 
-byte *
-memalloc_align(int size)
-{
-	word32	addr;
-
-	addr = (word32)(malloc(size + 256));
-	addr = (addr + 255) & (~0xff);
-	return (byte *)addr;
-}
 
 void
-memory_ptrs_init()
+fixed_memory_ptrs_init()
 {
-	/* set slow_memory_ptr, rom_fc_ff_ptr, memory_ptr, dummy_memory1_ptr */
+	/* set g_slow_memory_ptr, g_rom_fc_ff_ptr, g_dummy_memory1_ptr */
 
-	g_slow_memory_ptr = memalloc_align(128*1024);
-	g_dummy_memory1_ptr = memalloc_align(1024);
-	g_memory_ptr = memalloc_align(MEM_SIZE);
-	g_rom_fc_ff_ptr = memalloc_align(256*1024);
+	g_slow_memory_ptr = memalloc_align(128*1024, 0);
+	g_dummy_memory1_ptr = memalloc_align(256, 1024);
+	g_rom_fc_ff_ptr = memalloc_align(256*1024, 1024);
 
 #if 0
 	printf("g_memory_ptr: %08x, dummy_mem: %08x, slow_mem_ptr: %08x\n",
@@ -668,6 +658,12 @@ memory_ptrs_init()
 		(word32)&(page_info_rd_wr[0]),
 		(word32)&(page_info_rd_wr[PAGE_INFO_PAD_SIZE+0x1ffff].rd_wr));
 #endif
+}
+
+word32
+get_itimer()
+{
+	return 0;
 }
 
 void

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_engine_c_h[] = "@(#)$Header: protos_engine_c.h,v 1.1 99/02/15 20:43:39 kentd Exp $";
+const char rcsid_protos_engine_c_h[] = "@(#)$Header: protos_engine_c.h,v 1.3 99/06/01 00:56:25 kentd Exp $";
 #endif
 
 /* engine_c.c */
@@ -31,8 +31,8 @@ void set_memory16_c(word32 addr, word32 val, int cycs);
 void set_memory24_c(word32 addr, word32 val, int cycs);
 word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
 word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
-byte *memalloc_align(int size);
-void memory_ptrs_init(void);
+void fixed_memory_ptrs_init(void);
+word32 get_itimer(void);
 void set_halt_act(int val);
 void clr_halt_act(void);
 word32 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr);

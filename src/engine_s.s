@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.136 99/03/22 22:22:42 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.138 99/06/01 00:56:12 kentd Exp $"
 
 	.code
 
@@ -177,14 +177,10 @@ rcsid_engine_s_s
 	.import	g_dummy_memory1_ptr,data
 	.import	g_rom_fc_ff_ptr,data
 
-	.export	memory_ptrs_init,code
-memory_ptrs_init
+	.export	fixed_memory_ptrs_init,code
+fixed_memory_ptrs_init
 	LDC(slow_memory,arg0)
 	LDC(g_slow_memory_ptr,arg1)
-	stw	arg0,(arg1)
-
-	LDC(memory,arg0)
-	LDC(g_memory_ptr,arg1)
 	stw	arg0,(arg1)
 
 	LDC(dummy_memory1,arg0)
@@ -198,8 +194,8 @@ memory_ptrs_init
 	bv	0(link)
 	nop
 
-	.export get_itimer_asm,code
-get_itimer_asm
+	.export get_itimer,code
+get_itimer
 	bv	0(link)
 	mfctl	%cr16,ret0
 
@@ -2444,12 +2440,8 @@ g_engine_c_mode
 	.align	0x100
 	.export slow_memory,data
 	.export rom_fc_ff,data
-	.export memory,data
 	.export dummy_memory1,data
 slow_memory	.block	128*1024
 dummy_memory1	.block	3*1024
 rom_fc_ff	.block	256*1024
-dummy_memory2	.block	3*1024
-memory		.block	MEM_SIZE
-dummy_memory3	.block	1024
 

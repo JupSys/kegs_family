@@ -11,19 +11,13 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.282 99/05/30 22:34:08 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.286 99/06/01 00:32:21 kentd Exp $";
 
 #include <math.h>
 
 #define INCLUDE_RCSID_C
 #include "defc.h"
 #undef INCLUDE_RCSID_C
-
-#define DO_CYCLE_CALC
-
-#define DO_VARIABLE_TIMING
-/*
-*/
 
 
 #define MAX_EVENTS	64
@@ -65,8 +59,6 @@ extern int c046_vbl_int_status;
 extern int c046_25sec_irq_pend;
 extern int c046_vbl_irq_pending;
 
-extern int halt_on_c023, halt_on_c041, halt_on_c047;
-
 extern int g_engine_c_mode;
 extern int defs_instr_start_8;
 extern int defs_instr_start_16;
@@ -96,18 +88,15 @@ void U_STACK_TRACE();
 
 int halt_sim;
 int enter_debug;
-int halt_on_irq = 0;
-int halt_on_decimal_ops = 0;
 int	g_rom_version = 0;
 int	g_halt_on_bad_read = 0;
 int	g_ignore_bad_acc = 0;
 int	g_use_alib = 0;
 
-const double g_drecip_cycles_in_16ms_1mhz = (60.0/(CYCS_1_MHZ));
-const double g_dcycles_in_16ms_1mhz = ((double)(CYCS_1_MHZ)) / 60.0;
-
-double g_drecip_cycles_in_16ms = (60.0/(CYCS_1_MHZ));
-double g_dcycles_in_16ms = ((double)(CYCS_1_MHZ)) / 60.0;
+#if 0
+const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
+const double g_dcycles_in_16ms = DCYCS_IN_16MS;
+#endif
 
 #define START_DCYCS	(0.0)
 
@@ -141,11 +130,10 @@ int g_25sec_cntr = 0;
 int g_1sec_cntr = 0;
 
 int Verbose = 0;
+int Halt_on = 0;
 
-const int mem_size = MEM_SIZE;
-const int mem_size_expansion = MEM_SIZE_EXP;
-
-extern byte memory[MEM_SIZE];
+word32 g_mem_size_base = 256*1024;	/* size of motherboard memory */
+word32 g_mem_size_exp = 4*1024*1024;	/* size of expansion RAM card */
 
 extern word32 slow_mem_changed[];
 
@@ -348,7 +336,7 @@ get_memory_io(word32 loc, Cyc *cyc_ptr)
 	}
 
 	/* Else it's an illegal addr...skip if memory sizing */
-	if(loc >= mem_size) {
+	if(loc >= (g_mem_size_base + g_mem_size_exp)) {
 		if((loc & 0xfffe) == 0) {
 #if 0
 			printf("get_io assuming mem sizing, not halting\n");
@@ -466,7 +454,7 @@ set_memory_io(word32 loc, int val, Cyc *cyc_ptr)
 	}
 
 	/* Else it's an illegal addr */
-	if(loc >= mem_size) {
+	if(loc >= (g_mem_size_base + g_mem_size_exp)) {
 		if((loc & 0xfffe) == 0) {
 #if 0
 			printf("set_io assuming mem sizing, not halting\n");
@@ -566,6 +554,7 @@ my_exit(int ret)
 	printf("exiting\n");
 	exit(ret);
 }
+
 
 int screen_index[] = {
 		0x000, 0x080, 0x100, 0x180, 0x200, 0x280, 0x300, 0x380,
@@ -671,11 +660,42 @@ check_engine_asm_defines()
 	CHECK(fplusptr, fplusptr->plus_x_minus_1, FPLUS_X_MINUS_1, val1, val2);
 }
 
+byte *
+memalloc_align(int size, int skip_amt)
+{
+	byte	*bptr;
+	word32	addr;
+	word32	offset;
+
+	skip_amt = MAX(256, skip_amt);
+	bptr = malloc(size + skip_amt);
+	addr = ((word32)bptr) & 0xff;
+
+	/* must align bptr to be 256-byte aligned */
+	/* this code should work even if ptrs are > 32 bits */
+
+	offset = ((addr + skip_amt - 1) & (~0xff)) - addr;
+	return (bptr + offset);
+}
+
+void
+memory_ptr_init()
+{
+	word32	mem_size;
+
+	mem_size = g_mem_size_base + g_mem_size_exp;
+	g_memory_ptr = memalloc_align(mem_size, 3*1024);
+
+	printf("RAM size is 0 - %06x (%.2fMB)\n", mem_size,
+		(double)mem_size/(1024.0*1024.0));
+}
+
 extern int g_screen_redraw_skip_amt;
 extern int g_use_shmem;
 
 char g_display_env[512];
-int	g_visual_depth = 8;
+int	g_force_depth = -1;
+int	g_screen_depth = 8;
 
 int
 main(int argc, char **argv)
@@ -704,13 +724,21 @@ main(int argc, char **argv)
 			g_use_alib = 1;
 		} else if(!strcmp("-24", argv[i])) {
 			printf("Using 24-bit visual\n");
-			g_visual_depth = 24;
+			g_force_depth = 24;
 		} else if(!strcmp("-16", argv[i])) {
 			printf("Using 16-bit visual\n");
-			g_visual_depth = 16;
+			g_force_depth = 16;
 		} else if(!strcmp("-15", argv[i])) {
 			printf("Using 15-bit visual\n");
-			g_visual_depth = 15;
+			g_force_depth = 15;
+		} else if(!strcmp("-mem", argv[i])) {
+			if((i+1) >= argc) {
+				printf("Missing argument\n");
+				exit(1);
+			}
+			g_mem_size_exp = strtol(argv[i+1], 0, 0) & 0x00ff0000;
+			printf("Using %d as memory size\n", g_mem_size_exp);
+			i++;
 		} else if(!strcmp("-skip", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
@@ -762,10 +790,7 @@ main(int argc, char **argv)
 	}
 
 	check_engine_asm_defines();
-	memory_ptrs_init();
-
-	init_reg();
-	clear_halt();
+	fixed_memory_ptrs_init();
 
 	if(sizeof(word32) != 4) {
 		printf("sizeof(word32) = %d, must be 4!\n",
@@ -793,9 +818,14 @@ main(int argc, char **argv)
 		}
 	}
 
-	initialize_events();
 
 	load_roms();
+	memory_ptr_init();
+
+	init_reg();
+	clear_halt();
+
+	initialize_events();
 
 	video_init();
 
@@ -885,7 +915,7 @@ add_event_entry(double dcycs, int type)
 	this_event->type = type;
 	
 	if((dcycs < 0.0) || (dcycs > (g_cur_dcycs + 50*1000*1000.0)) ||
-						(dcycs < g_cur_dcycs)) {
+			((dcycs < g_cur_dcycs) && (type != EV_SCAN_INT))) {
 		printf("add_event: dcycs: %f, type: %05x, cur_dcycs: %f!\n",
 			dcycs, type, g_cur_dcycs);
 		dcycs = g_cur_dcycs + 1000.0;
@@ -1001,8 +1031,7 @@ add_event_vbl()
 {
 	double	dcycs;
 
-	dcycs = g_dcycles_in_16ms * (192.0/262.0);
-	dcycs += g_last_vbl_dcycs;
+	dcycs = g_last_vbl_dcycs + (DCYCS_IN_16MS * (192.0/262.0));
 	add_event_entry(dcycs, EV_VBL_INT);
 }
 
@@ -1048,7 +1077,6 @@ double	g_dtime_pmhz_array[60];
 double	g_dtime_eff_pmhz_array[60];
 int	speed_changed = 0;
 int	g_limit_speed = 0;
-double	g_calc_dcycles;
 double	sim_time[60];
 double	g_sim_sum = 0.0;
 
@@ -1371,7 +1399,7 @@ take_irq(int is_it_brk)
 	engine.kbank = 0;
 
 	engine.pc = new_pc;
-	set_halt(halt_on_irq);
+	HALT_ON(HALT_ON_IRQ, "Halting on IRQ\n");
 
 }
 
@@ -1436,11 +1464,14 @@ extern int g_a2vid_palette;
 
 extern int g_status_refresh_needed;
 
-int	g_iwm_limit = 0;
 
 void
 update_60hz(double dcycs, double dtime_now)
 {
+	char	status_buf[1024];
+	char	sim_mhz_buf[128];
+	char	total_mhz_buf[128];
+	char	*sim_mhz_ptr, *total_mhz_ptr;
 	double	eff_pmhz;
 	double	planned_dcycs;
 	double	predicted_pmhz;
@@ -1451,31 +1482,27 @@ update_60hz(double dcycs, double dtime_now)
 	double	dtime_till_expected;
 	double	dtime_diff;
 	double	dtime_this_vbl;
-	double	dcycs_this_vbl;
 	double	dadjcycs_this_vbl;
-	double	old_drecip_cycles_in_16ms;
-	int	cycs_int;
 	double	dadj_cycles_1sec;
-	char	status_buf[1024];
-	char	sim_mhz_buf[128];
-	char	total_mhz_buf[128];
-	char	*sim_mhz_ptr, *total_mhz_ptr;
+	int	cycs_int;
 	int	cur_vbl_index;
 	int	prev_vbl_index;
-	int	iwm_limit;
-
-	irq_printf("vbl interrupt!\n");
 
 	g_vbl_count++;
 
-#if 0
-	printf("vbl_60hz: vbl: %d, dcycs: %f, last_vbl_dcycs: %f\n",
+	/* NOTE: this event is defined to occur before line 0 */
+	/* It's actually happening at the start of the border for line (-1) */
+	/* All other timings should be adjusted for this */
+
+	irq_printf("vbl_60hz: vbl: %d, dcycs: %f, last_vbl_dcycs: %f\n",
 		g_vbl_count, dcycs, g_last_vbl_dcycs);
-#endif
 
-	dcycs_this_vbl = (double)(dcycs - g_last_vbl_dcycs);
+	planned_dcycs = DCYCS_IN_16MS;
 
-	g_last_vbl_dcycs = floor(dcycs);
+	g_last_vbl_dcycs = g_last_vbl_dcycs + planned_dcycs;
+
+	add_event_entry(g_last_vbl_dcycs + planned_dcycs, EV_60HZ);
+	check_for_one_event_type(EV_60HZ);
 
 	cur_vbl_index = g_vbl_index_count;
 
@@ -1484,7 +1511,6 @@ update_60hz(double dcycs, double dtime_now)
 	g_cur_sim_dtime = 0.0;
 	g_sim_sum = g_sim_sum - sim_time[cur_vbl_index] + dtime_this_vbl_sim;
 	sim_time[cur_vbl_index] = dtime_this_vbl_sim;
-
 
 	dadj_cycles_1sec = g_dadjcycs - g_dadjcycs_array[cur_vbl_index];
 
@@ -1559,7 +1585,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.50");
+		update_status_line(6, "KEGS v0.51");
 
 		g_status_refresh_needed = 1;
 
@@ -1595,7 +1621,6 @@ update_60hz(double dcycs, double dtime_now)
 
 		g_fvoices = (float)0.0;
 	}
-
 
 	dtime_this_vbl = dtime_now - g_dtime_last_vbl;
 	if(dtime_this_vbl < 0.001) {
@@ -1648,9 +1673,6 @@ update_60hz(double dcycs, double dtime_now)
 	g_recip_projected_pmhz_unl.plus_x_minus_1 =
 					(float)1.01 - recip_predicted_pmhz;
 
-
-	planned_dcycs = (DCYCS_1_MHZ) / 60.0;
-
 	if(dtime_till_expected < -0.125) {
 		/* If we were way off, get back on track */
 		/* this happens because our sim took much longer than */
@@ -1659,7 +1681,6 @@ update_60hz(double dcycs, double dtime_now)
 			g_dtime_expected, dtime_now);
 
 		dtime_diff = -dtime_till_expected;
-		/* dcycs += DCYCS_1_MHZ * dtime_diff; */
 
 		irq_printf("dtime_till_exp: %f, dtime_diff: %f, dcycs: %f\n",
 			dtime_till_expected, dtime_diff, dcycs);
@@ -1667,35 +1688,16 @@ update_60hz(double dcycs, double dtime_now)
 		g_dtime_expected += dtime_diff;
 	}
 
-	iwm_limit = 0;
-
 	if(dtime_till_expected > (3/60.0)) {
 		/* we're running fast, usleep */
-		if(iwm_limit) {
-			/* don't sleep if we're IWM limited */
-			g_dtime_expected -= (dtime_till_expected - (1/60.0));
-		} else {
-			micro_sleep(dtime_till_expected - (1/60.0));
-		}
+		micro_sleep(dtime_till_expected - (1/60.0));
 	}
-
-	g_calc_dcycles = planned_dcycs;
 
 	g_dtime_this_vbl_array[prev_vbl_index] = dtime_this_vbl;
 	g_dtime_exp_array[prev_vbl_index] = g_dtime_expected;
 	g_dtime_pmhz_array[prev_vbl_index] = predicted_pmhz;
 	g_dtime_eff_pmhz_array[prev_vbl_index] = eff_pmhz;
 
-
-	old_drecip_cycles_in_16ms = g_drecip_cycles_in_16ms;
-
-	g_dcycles_in_16ms = (double)planned_dcycs;
-	g_drecip_cycles_in_16ms = (1.0/(double)planned_dcycs);
-
-	irq_printf("planned_dcycs for vbl: %f\n", planned_dcycs);
-
-	add_event_entry(dcycs + planned_dcycs, EV_60HZ);
-	check_for_one_event_type(EV_60HZ);
 
 	if(c041_en_vbl_ints) {
 		add_event_vbl();
@@ -1731,7 +1733,7 @@ update_60hz(double dcycs, double dtime_now)
 	}
 
 	iwm_vbl_update();
-	video_update(old_drecip_cycles_in_16ms);
+	video_update();
 	sound_update(dcycs);
 	clock_update();
 	scc_update(dcycs);
@@ -1767,7 +1769,7 @@ do_scan_int()
 			irq_printf("Setting c023_scan_int to 1, irq_pend: %d\n",
 				g_irq_pending);
 		}
-		set_halt(halt_on_c023);
+		HALT_ON(HALT_ON_SCAN_INT, "In do_scan_int\n");
 	}
 }
 
@@ -1809,9 +1811,8 @@ check_scan_line_int(double dcycs, int cur_video_line)
 		}
 		if(g_slow_memory_ptr[0x19d00+i] & 0x40) {
 			irq_printf("Adding scan_int for line %d\n", i);
-			delay = (g_dcycles_in_16ms/262.0) *
-				((double)(line - start));
-			add_event_entry(dcycs + delay, EV_SCAN_INT);
+			delay = (DCYCS_IN_16MS/262.0) * ((double)line);
+			add_event_entry(g_last_vbl_dcycs + delay, EV_SCAN_INT);
 			g_scan_int_events = 1;
 			check_for_one_event_type(EV_SCAN_INT);
 			break;

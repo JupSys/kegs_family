@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.123 99/05/04 23:38:32 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.127 99/06/01 00:56:23 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -38,8 +38,8 @@ void do_gen_test(int got_num, int base_seed);
 
 
 /* engine.s and engine_c.c */
-void memory_ptrs_init();
-word32 get_itimer_asm(void);
+void fixed_memory_ptrs_init();
+word32 get_itimer(void);
 
 word32 get_memory_c(word32 addr, int cycs);
 word32 get_memory16_c(word32 addr, int cycs);
@@ -267,8 +267,8 @@ int read_vid_counters(int loc, double dcycs);
 
 /* paddles.c */
 void paddle_trigger(double dcycs);
-int paddle_trigger_mouse(double dcycs);
-int paddle_trigger_linux(double dcycs);
+void paddle_trigger_mouse(double dcycs);
+void paddle_trigger_linux(double dcycs);
 int read_paddles(int paddle, double dcycs);
 
 /* sim65816.c */
@@ -283,6 +283,8 @@ void show_regs(void);
 void my_exit(int ret);
 void do_reset(void);
 void check_engine_asm_defines(void);
+byte *memalloc_align(int size, int skip_amt);
+void memory_ptr_init(void);
 int main(int argc, char **argv);
 void initialize_events(void);
 void check_for_one_event_type(int type);
@@ -374,7 +376,7 @@ void child_sound_init_alib(void);
 void video_init(void);
 void show_a2_line_stuff(void);
 void video_reset(void);
-void video_update(double old_drecip_cycles_in_16ms);
+void video_update(void);
 void change_display_mode(double dcycs);
 int get_line_stat(int line, int new_all_stat);
 void update_a2_ptrs(int line, int new_stat);
@@ -382,7 +384,7 @@ void change_a2vid_palette(int new_palette);
 void check_a2vid_palette(void);
 void update_a2_line_info(void);
 void change_border_color(double dcycs, int val);
-void update_border_info(double old_drecip_cycles_in_16ms);
+void update_border_info(void);
 void update_border_line(int line_in, int color);
 void redraw_changed_text_40(int start_offset, int start_line, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val);
 void redraw_changed_text_80(int start_offset, int start_line, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val);

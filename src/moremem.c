@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.199 99/05/04 23:38:21 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.202 99/06/01 00:31:21 kentd Exp $";
 
 #include "defc.h"
 
@@ -22,6 +22,7 @@ extern byte *g_memory_ptr;
 extern byte *g_dummy_memory1_ptr;
 extern byte *g_slow_memory_ptr;
 extern byte *g_rom_fc_ff_ptr;
+extern word32 g_mem_size_base, g_mem_size_exp;
 
 extern word32 slow_mem_changed[];
 
@@ -29,8 +30,6 @@ extern int g_num_breakpoints;
 extern word32 g_breakpts[];
 
 extern int halt_sim;
-extern double g_dcycles_in_16ms;
-extern double g_drecip_cycles_in_16ms;
 extern double g_last_vbl_dcycs;
 extern int speed_changed;
 
@@ -39,6 +38,7 @@ extern Page_info page_info_rd_wr[];
 extern int scr_mode;
 
 extern int Verbose;
+extern int Halt_on;
 extern double g_paddle_trig_dcycs;
 extern int g_rom_version;
 
@@ -54,16 +54,7 @@ extern int cur_drive;
 
 int	statereg;
 int	old_statereg = 0xffff;
-int	halt_on_c023 = 0;
-int	halt_on_c025 = 0;
 int	halt_on_c02a = 0;
-int	halt_on_c032 = 0;
-int	halt_on_c039 = 0;
-int	halt_on_c038 = 1;
-int	halt_on_c041 = 0;
-int	halt_on_c046 = 0;
-int	halt_on_c047 = 0;
-int	halt_on_shadow_reg = 0;
 
 extern Engine_reg engine;
 
@@ -1026,17 +1017,19 @@ void
 setup_pageinfo()
 {
 	word32	new_addr;
+	word32	mem_size_pages;
 	int	i;
 
 	setup_bank0();
 	setup_bank1();
 
+	mem_size_pages = (g_mem_size_base + g_mem_size_exp) / 256;
 	/* bank 2 through last bank */
-	for(i = 0x0200; i < (MEM_SIZE/256); i++) {
+	for(i = 0x0200; i < mem_size_pages; i++) {
 		SET_PAGE_INFO_RD(i, (word32)&g_memory_ptr[i*256]);
 		SET_PAGE_INFO_WR(i, (word32)&g_memory_ptr[i*256]);
 	}
-	for(i = (MEM_SIZE/256); i < 0xfc00; i++) {
+	for(i = mem_size_pages; i < 0xfc00; i++) {
 		SET_PAGE_INFO_RD(i, BANK_BAD_MEM);
 		SET_PAGE_INFO_WR(i, BANK_BAD_MEM);
 	}
@@ -1089,7 +1082,7 @@ update_shadow_reg(int val)
 	setup_bank0();
 	setup_bank1();
 
-	set_halt(halt_on_shadow_reg);
+	HALT_ON(HALT_ON_SHADOW_REG, "Shadow reg changed\n");
 
 	fixup_brks();
 }
@@ -1132,8 +1125,10 @@ show_bankptrs(int bnk)
 void
 show_addr(byte *ptr)
 {
+	word32	mem_size;
 
-	if(ptr >= g_memory_ptr && ptr < &g_memory_ptr[MEM_SIZE]) {
+	mem_size = g_mem_size_base + g_mem_size_exp;
+	if(ptr >= g_memory_ptr && ptr < &g_memory_ptr[mem_size]) {
 		printf("%08x--memory[%06x]", (word32)ptr,
 					(word32)(ptr - g_memory_ptr));
 	} else if(ptr >= g_rom_fc_ff_ptr && ptr < &g_rom_fc_ff_ptr[256*1024]) {
@@ -1319,7 +1314,6 @@ io_read(word32 loc, Cyc *cyc_ptr)
 			/* cassette */
 			return 0;
 		case 0x41: /* 0xc041 */
-			set_halt(halt_on_c041);
 			tmp = ((c041_en_25sec_ints << 4) +
 				(c041_en_vbl_ints << 3) +
 				(c041_en_switch_ints << 2) +
@@ -1332,7 +1326,6 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		case 0x46: /* 0xc046 */
 			tmp = c046_mouse_last;
 			c046_mouse_last = c046_mouse_down;
-			set_halt(halt_on_c046);
 			tmp = ((c046_mouse_down << 7) | (tmp << 6) |
 				(c046_an3_status << 5) |
 				(c046_25sec_int_status << 4) |
@@ -1959,7 +1952,6 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 				remove_irq();
 				c046_25sec_irq_pend = 0;
 			}
-			set_halt(halt_on_c041);
 			return;
 		case 0x46: /* c046 */
 			/* ignore writes to c046 */
@@ -2293,9 +2285,6 @@ set_slow_mem(word32 loc, int val, int duff_cycles)
 }
 #endif
 
-const double dlines_in_16ms = (262.0);
-const double g_drecip_lines_in_16ms = (1.0/262.0);
-
 /* IIgs vertical line counters */
 /* 0x7d - 0x7f: in vbl, top of screen? */
 /* 0x80 - 0xdf: not in vbl, drawing screen */
@@ -2316,11 +2305,9 @@ get_lines_since_vbl(double dcycs)
 
 	dcycs_since_last_vbl = dcycs - g_last_vbl_dcycs;
 
-	dlines_since_vbl = (dlines_in_16ms *
-		(dcycs_since_last_vbl * g_drecip_cycles_in_16ms));
+	dlines_since_vbl = (262.0/DCYCS_IN_16MS) * dcycs_since_last_vbl;
 	lines_since_vbl = (int)dlines_since_vbl;
-	dcyc_line_start = ((double)lines_since_vbl * g_drecip_lines_in_16ms *
-			g_dcycles_in_16ms);
+	dcyc_line_start = (double)lines_since_vbl * (DCYCS_IN_16MS/262.0);
 
 	offset = ((int)(dcycs_since_last_vbl - dcyc_line_start)) & 0xff;
 
@@ -2331,12 +2318,8 @@ get_lines_since_vbl(double dcycs)
 	} else {
 		set_halt(1);
 		printf("lines_since_vbl: %08x!\n", lines_since_vbl);
-		printf("dc_s_l_v: %f, g_drecip_cycles_in_16: %f, lines_16:%f\n",
-			dcycs_since_last_vbl, g_drecip_cycles_in_16ms,
-			dlines_in_16ms);
-		printf("cycs_in16ms: %f\n", g_dcycles_in_16ms);
-		printf("dcycs: %f, last_vbl_cycs: %f\n",
-			dcycs, g_last_vbl_dcycs);
+		printf("dc_s_l_v: %f, dcycs: %f, last_vbl_cycs: %f\n",
+			dcycs_since_last_vbl, dcycs, g_last_vbl_dcycs);
 		show_dtime_array();
 		show_all_events();
 		/* U_STACK_TRACE(); */
@@ -2360,6 +2343,9 @@ in_vblank(double dcycs)
 	return 0;
 }
 
+/* horizontal video counter goes from 0x00,0x40 - 0x7f, then 0x80,0xc0-0xff */
+/* over 2*65 cycles.  The last visible screen pos is 0x7f and 0xff */
+/* This matches KEGS starting line 0 at the border for line -1 */
 int
 read_vid_counters(int loc, double dcycs)
 {
@@ -2372,7 +2358,7 @@ read_vid_counters(int loc, double dcycs)
 
 	lines_since_vbl += 0x10000;
 	if(lines_since_vbl >= 0x20000) {
-		lines_since_vbl -= (0x20000 + 0xfa00);
+		lines_since_vbl = lines_since_vbl - 0x20000 + 0xfa00;
 	}
 
 	if(lines_since_vbl > 0x1ffff) {

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.84 99/05/03 22:02:31 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.85 99/05/31 20:56:14 kentd Exp $";
 
 #include "defc.h"
 
@@ -29,7 +29,6 @@ extern word32 g_vbl_count;
 extern int g_preferred_rate;
 
 
-extern double g_dcycles_in_16ms;
 extern double g_last_vbl_dcycs;
 
 extern int errno;

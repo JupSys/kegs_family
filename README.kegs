@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.50
+KEGS: Kent's Emulated GS version 0.51
 http://www.crosswinds.net/san-jose/~kentd/kegs/
 
 What is this?
@@ -49,8 +49,8 @@ Emulated battery RAM remembers control panel settings.
 Limited SCC (serial port) emulation to enable PR#1/2 IN#1/2 and other
 	serial programs to work, but it is still a bit buggy.
 
-KEGS always emulates a 4MB Apple //gs.  I may make the amount of Apple //gs
-memory a command line option in the future.
+KEGS by default emulates a 4MB Apple //gs, but you can change this with
+the "-mem" command line option.
 
 KEGS is so accurate, even the built-in ROM selftests pass (you must be in
 2.5MHz speed mode to pass the self-tests).
@@ -145,7 +145,9 @@ rest of the screen to go "technicolor" due to KEGS needing the
 whole colormap to operate.
 
 KEGS can run in 15-bit, 16-bit and 24-bit display modes at a performance
-penalty.  Just say "-15", "-16", or "-24" on the command-line when
+penalty.  It should auto-detect the best display depth (first 8,
+then 15, 24, then 16 last).  Or you can force it to choose a particular
+depth by giving "-15", "-16", or "-24" on the command-line when
 starting KEGS.
 
 KEGS also forks off a subprocess to help handle the sound if audio is
@@ -165,6 +167,9 @@ any kegs processes and try again.  If it still hangs and plays no sound,
 try killing the Aserver processes if you're using -alib.  If both of
 the Aserver processes don't die, you must reboot your workstation to use
 KEGS or use the "-audio 0" option.
+
+You can change the memory size using the "-mem" option, see the command
+line flags later in this file.
 
 Images (disk_conf):
 ------------------
@@ -383,7 +388,7 @@ The X-windows mouse is the mouse and joystick.  By default, the mouse
 is not constrained inside the window.  Press F8 to hide the X windows
 cursor and constrain the mouse.  F8 again toggles out of constrain mode.
 
-The joystick is the mouse position.  Upper left is 0,0.  Lower right
+The default joystick is the mouse position.  Upper left is 0,0.  Lower right
 is 255,255.  Press F11 to swap the X and Y axes.  Press F12 to reverse
 the sense of both paddles (so 0 becomes 255, etc).  Swapping and
 reversing are convenient with paddle-based games like "Little Brick Out"
@@ -419,6 +424,11 @@ button in the emulation window, and then type "q" return in the debug window.
 KEGS command-line option summary:
 --------------------------------
 
+-mem {mem_amt}: KEGS will use mem_amt as the amount of expansion RAM in
+	the //gs.  This memory is in addition to the 256KB on a ROM 01
+	motherboard, or 1MB on a ROM 03.  The memory is in bytes,
+	and it will be rounded down to the nearest 64KB.  "-mem 0x400000"
+	will use 4MB of expansion RAM (the default).
 -badrd:	Causes KEGS to halt on any access to invalid memory addresses.
 	Useful for debugging.  By default, KEGS allows reads to invalid
 	memory since the Finder does some (especially when you open the
@@ -432,10 +442,10 @@ KEGS command-line option summary:
 	addresses without printing any warnings.  Useful for running
 	extremely buggy programs so you don't have to see all the warning
 	messages scroll by.
--15:	KEGS will look for a 15-bit X display.
--16:	KEGS will look for a 16-bit X display (not tested, probably
+-15:	KEGS will only look for a 15-bit X display.
+-16:	KEGS will only look for a 16-bit X display (not tested, probably
 	 will get red colors wrong).
--24:	KEGS will look for a 24-bit X display.
+-24:	KEGS will only look for a 24-bit X display.
 -hpdev:	KEGS will try to open /dev/audio directly, instead of using the
 	Aserver.
 -skip:	KEGS will "skip" that many screen redraws between refreshes.

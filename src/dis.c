@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.69 98/07/28 00:11:51 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.71 99/06/01 00:30:48 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -23,6 +23,7 @@ const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.69 98/07/28 00:11:51 kentd Ex
 extern byte *g_memory_ptr;
 extern byte *g_slow_memory_ptr;
 extern byte *g_rom_fc_ff_ptr;
+extern word32 g_mem_size_base, g_mem_size_exp;
 extern int halt_sim;
 extern int enter_debug;
 extern int g_show_screen;
@@ -30,6 +31,7 @@ extern int statereg;
 extern word32 stop_run_at;
 extern int stop_on_c03x;
 extern int Verbose;
+extern int Halt_on;
 extern int g_rom_version;
 
 extern int g_testing_enabled;
@@ -173,6 +175,11 @@ do_debug_intfc()
 				printf("Setting Verbose ^= %04x\n", a1);
 				Verbose ^= a1;
 				printf("Verbose is now: %04x\n", Verbose);
+				break;
+			case 'H':
+				printf("Setting Halt_on ^= %04x\n", a1);
+				Halt_on ^= a1;
+				printf("Halt_on is now: %04x\n", Halt_on);
 				break;
 			case 'r':
 				do_reset();
@@ -669,9 +676,11 @@ load_roms()
 	len = stat_buf.st_size;
 	if(len == 128*1024) {
 		g_rom_version = 1;
+		g_mem_size_base = 256*1024;
 		ret = read(fd, &g_rom_fc_ff_ptr[2*65536], len);
 	} else if(len == 256*1024) {
 		g_rom_version = 3;
+		g_mem_size_base = 1024*1024;
 		ret = read(fd, &g_rom_fc_ff_ptr[0], len);
 	} else {
 		fprintf(stderr, "ROM size %d not 128K or 256K\n", len);
@@ -710,7 +719,7 @@ load_roms()
 		/* 1: Patch Smartport code to fix a stupid bug */
 		/*   that causes it to write the IWM status reg into c036, */
 		/*   which is the system speed reg...it's "safe" since */
-		/*   IWM status reg but 4 must be 0 (7MHz)..., otherwise */
+		/*   IWM status reg bit 4 must be 0 (7MHz)..., otherwise */
 		/*   it might have turned on shadowing in all banks! */
 		g_rom_fc_ff_ptr[0x357c9] = 0x00;
 

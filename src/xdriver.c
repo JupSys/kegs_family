@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.144 99/05/03 22:03:22 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.146 99/06/01 00:41:28 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -51,8 +51,9 @@ extern int g_limit_speed;
 extern int g_fast_disk_emul;
 
 extern int g_warp_pointer;
-extern int g_visual_depth;
-int g_visual_mdepth = 0;
+extern int g_screen_depth;
+extern int g_force_depth;
+int g_screen_mdepth = 0;
 
 extern int g_swap_paddles;
 extern int g_invert_paddles;
@@ -70,6 +71,7 @@ GC a2_winGC;
 XFontStruct *text_FontSt;
 Colormap g_a2_colormap = 0;
 Colormap g_default_colormap = 0;
+int	g_needs_cmap = 0;
 
 #ifdef X_SHARED_MEM
 int g_use_shmem = 1;
@@ -160,6 +162,7 @@ Pixmap	g_cursor_mask;
 XColor	g_xcolor_black = { 0, 0x0000, 0x0000, 0x0000, DoRed|DoGreen|DoBlue, 0 };
 XColor	g_xcolor_white = { 0, 0xffff, 0xffff, 0xffff, DoRed|DoGreen|DoBlue, 0 };
 
+int g_depth_attempt_list[] = { 8, 15, 24, 16 };
 
 
 #define X_EVENT_LIST_ALL_WIN						\
@@ -313,7 +316,7 @@ update_color_array(int col_num, int a2_color)
 		doit = 0;
 	}
 
-	if(g_visual_depth != 8) {
+	if(g_screen_depth != 8) {
 		/* redraw whole superhires for now */
 		g_full_refresh_needed = -1;
 	}
@@ -338,7 +341,7 @@ convert_to_xcolor(XColor *xcol, XColor *xcol2, int col_num,
 	red = (a2_color >> 8) & 0xf;
 	green = (a2_color >> 4) & 0xf;
 	blue = (a2_color) & 0xf;
-	if(g_visual_depth == 8 || !doit) {
+	if(g_screen_depth == 8 || !doit) {
 		xcol->red = MAKE_4(red);
 		xcol2->red = MAKE_4(red);
 		xcol->green = MAKE_4(green);
@@ -376,7 +379,7 @@ update_physical_colormap()
 	}
 
 	if(full) {
-		if(g_visual_depth != 8) {
+		if(g_screen_depth != 8) {
 			/* Must redraw all, for now */
 			a2_screen_buffer_changed = -1;
 			g_full_refresh_needed = -1;
@@ -463,34 +466,29 @@ show_colormap(char *str, Colormap cmap, int index1, int index2, int index3)
 void
 dev_video_init()
 {
+	int	tmp_array[0x80];
 	XGCValues new_gc;
-	XVisualInfo vTemplate;
 	XSetWindowAttributes win_attr;
 	XSizeHints my_winSizeHints;
 	XClassHint my_winClassHint;
 	XTextProperty my_winText;
 	XVisualInfo *visualList;
-	XVisualInfo my_vis;
 	Visual	*vis;
-	char	cursor_data;
 	char	**font_ptr;
-	int	match8, match24;
-	int	depth, mdepth;
+	char	cursor_data;
 	word32	create_win_list;
-	int	needs_cmap;
+	int	depth;
+	int	len;
 	int	cmap_alloc_amt;
 	int	cnt;
 	int	font_height;
 	int	screen_num;
-	int	visualsMatched;
 	char	*myTextString[1];
-	int	visual_chosen;
 	int	red, green, blue;
 	word32	lores_col;
 	int	ret;
 	int	i;
 	int	keycode;
-	int	tmp_array[0x80];
 
 	printf("Preparing X Windows graphics system\n");
 
@@ -531,72 +529,26 @@ dev_video_init()
 
 	screen_num = DefaultScreen(display);
 
-	vTemplate.screen = screen_num;
-	vTemplate.depth = g_visual_depth;
+	len = sizeof(g_depth_attempt_list)/sizeof(int);
+	if(g_force_depth > 0) {
+		/* Only use the requested user depth */
+		len = 1;
+		g_depth_attempt_list[0] = g_force_depth;
+	}
+	vis = 0;
+	for(i = 0; i < len; i++) {
+		depth = g_depth_attempt_list[i];
 
-	visualList = XGetVisualInfo(display,
-		(VisualScreenMask | VisualDepthMask),
-		&vTemplate, &visualsMatched);
-
-	vid_printf("visuals matched: %d\n", visualsMatched);
-	if(visualsMatched == 0) {
-		fprintf(stderr, "no visuals!\n");
+		vis = x_try_find_visual(display, depth, screen_num,
+			&visualList);
+		if(vis != 0) {
+			break;
+		}
+	}
+	if(vis == 0) {
+		fprintf(stderr, "Couldn't find any visuals at any depth!\n");
 		exit(2);
 	}
-
-	visual_chosen = -1;
-	needs_cmap = 0;
-	for(i = 0; i < visualsMatched; i++) {
-		printf("Visual %d\n", i);
-		printf("	id: %08x, screen: %d, depth: %d, class: %d\n",
-			(word32)visualList[i].visualid,
-			visualList[i].screen,
-			visualList[i].depth,
-			visualList[i].class);
-		printf("	red: %08lx, green: %08lx, blue: %08lx\n",
-			visualList[i].red_mask,
-			visualList[i].green_mask,
-			visualList[i].blue_mask);
-		printf("	cmap size: %d, bits_per_rgb: %d\n",
-			visualList[i].colormap_size,
-			visualList[i].bits_per_rgb);
-		match8 = (visualList[i].class == PseudoColor);
-		match24 = (visualList[i].class == TrueColor);
-		if((g_visual_depth == 8) && match8) {
-			visual_chosen = i;
-			Max_color_size = visualList[i].colormap_size;
-			needs_cmap = 1;
-			break;
-		}
-		if((g_visual_depth != 8) && match24) {
-			visual_chosen = i;
-			Max_color_size = -1;
-			needs_cmap = 0;
-			break;
-		}
-	}
-	if(visual_chosen < 0) {
-		fprintf(stderr,"Couldn't find any good visuals!\n");
-		exit(3);
-	}
-
-	printf("Chose visual: %d, max_colors: %d\n", visual_chosen,
-		Max_color_size);
-
-	vis = visualList[visual_chosen].visual;
-
-	/* structure copy */
-	my_vis = visualList[visual_chosen];
-
-	depth = g_visual_depth;
-	mdepth = depth;
-	if(depth == 15) {
-		mdepth = 16;
-	}
-	if(depth == 24) {
-		mdepth = 32;
-	}
-	g_visual_mdepth = mdepth;
 
 	g_default_colormap = XDefaultColormap(display, screen_num);
 	if(!g_default_colormap) {
@@ -606,7 +558,7 @@ dev_video_init()
 
 	g_a2_colormap = -1;
 	cmap_alloc_amt = AllocNone;
-	if(needs_cmap) {
+	if(g_needs_cmap) {
 		cmap_alloc_amt = AllocAll;
 	}
 	g_a2_colormap = XCreateColormap(display,
@@ -615,17 +567,10 @@ dev_video_init()
 	vid_printf("g_a2_colormap: %08x, main: %08x\n",
 			(word32)g_a2_colormap, (word32)g_default_colormap);
 
-	if(needs_cmap && g_a2_colormap == g_default_colormap) {
+	if(g_needs_cmap && g_a2_colormap == g_default_colormap) {
 		printf("A2_colormap = default colormap!\n");
 		exit(4);
 	}
-
-#if 0
-	show_colormap("a2_colormap", g_a2_colormap, my_vis.colormap_size,
-			my_vis.colormap_size, my_vis.colormap_size);
-	show_colormap("default_colormap", g_a2_colormap, my_vis.colormap_size,
-				my_vis.colormap_size, my_vis.colormap_size);
-#endif
 
 	/* and define cursor */
 	cursor_data = 0;
@@ -658,10 +603,10 @@ dev_video_init()
 	create_win_list |= CWColormap;
 	a2_win = XCreateWindow(display, RootWindow(display, screen_num),
 		0, 0, BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT,
-		0, vTemplate.depth, InputOutput, vis,
+		0, g_screen_depth, InputOutput, vis,
 		create_win_list, &win_attr);
 
-	if(needs_cmap) {
+	if(g_needs_cmap) {
 	}
 	XSetWindowColormap(display, a2_win, g_a2_colormap);
 
@@ -708,7 +653,7 @@ dev_video_init()
 		g_use_shmem = get_shm(&ximage_border_sides, display,
 			&data_border_sides, vis, &shm_border_sides_seginfo, 2);
 	}
-	if(g_visual_depth != 8 && g_use_shmem) {
+	if(g_screen_depth != 8 && g_use_shmem) {
 		/* allocate special buffers for this screen */
 		g_use_shmem &= get_shm(&xint_border_sides, display,
 			&dint_border_sides, vis,
@@ -768,12 +713,12 @@ dev_video_init()
 		g_a2palette_8to24[i] = MAKE_COL24(red, green, blue);
 	}
 
-	if(needs_cmap) {
+	if(g_needs_cmap) {
 		XStoreColors(display, g_a2_colormap, &xcolor_a2vid_array[0],
 			Max_color_size);
 	}
 
-	g_installed_full_superhires_colormap = !needs_cmap;
+	g_installed_full_superhires_colormap = !g_needs_cmap;
 	
 	myTextString[0] = "Sim65";
 
@@ -817,7 +762,7 @@ dev_video_init()
 	/* XSync(display, False); */
 #if 0
 /* MkLinux for Powermac depth 15 has bugs--this was to try to debug them */
-	if(g_visual_depth == 15) {
+	if(g_screen_depth == 15) {
 		/* draw phony screen */
 		ptr16 = (word16 *)dint_main_win;
 		for(i = 0; i < 320*400; i++) {
@@ -843,6 +788,89 @@ dev_video_init()
 	XFlush(display);
 	fflush(stdout);
 }
+
+Visual *
+x_try_find_visual(Display *display, int depth, int screen_num,
+		XVisualInfo **visual_list_ptr)
+{
+	XVisualInfo *visualList;
+	XVisualInfo vTemplate;
+	int	visualsMatched;
+	int	mdepth;
+	int	needs_cmap;
+	int	visual_chosen;
+	int	match8, match24;
+	int	i;
+
+	vTemplate.screen = screen_num;
+	vTemplate.depth = depth;
+
+	visualList = XGetVisualInfo(display,
+		(VisualScreenMask | VisualDepthMask),
+		&vTemplate, &visualsMatched);
+
+	vid_printf("visuals matched: %d\n", visualsMatched);
+	if(visualsMatched == 0) {
+		fprintf(stderr, "no visuals!\n");
+		exit(2);
+	}
+
+	visual_chosen = -1;
+	needs_cmap = 0;
+	for(i = 0; i < visualsMatched; i++) {
+		printf("Visual %d\n", i);
+		printf("	id: %08x, screen: %d, depth: %d, class: %d\n",
+			(word32)visualList[i].visualid,
+			visualList[i].screen,
+			visualList[i].depth,
+			visualList[i].class);
+		printf("	red: %08lx, green: %08lx, blue: %08lx\n",
+			visualList[i].red_mask,
+			visualList[i].green_mask,
+			visualList[i].blue_mask);
+		printf("	cmap size: %d, bits_per_rgb: %d\n",
+			visualList[i].colormap_size,
+			visualList[i].bits_per_rgb);
+		match8 = (visualList[i].class == PseudoColor);
+		match24 = (visualList[i].class == TrueColor);
+		if((depth == 8) && match8) {
+			visual_chosen = i;
+			Max_color_size = visualList[i].colormap_size;
+			needs_cmap = 1;
+			break;
+		}
+		if((depth != 8) && match24) {
+			visual_chosen = i;
+			Max_color_size = -1;
+			needs_cmap = 0;
+			break;
+		}
+	}
+
+	if(visual_chosen < 0) {
+		printf("Couldn't find any good visuals at depth %d!\n",
+			depth);
+		return (Visual *)0;
+	}
+
+	printf("Chose visual: %d, max_colors: %d\n", visual_chosen,
+		Max_color_size);
+
+	g_screen_depth = depth;
+	mdepth = depth;
+	if(depth == 15) {
+		mdepth = 16;
+	}
+	if(depth == 24) {
+		mdepth = 32;
+	}
+	g_screen_mdepth = mdepth;
+	g_needs_cmap = needs_cmap;
+	*visual_list_ptr = visualList;
+
+	return visualList[visual_chosen].visual;
+}
+
 
 #ifdef X_SHARED_MEM
 int xshm_error = 0;
@@ -879,15 +907,15 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 
 	depth = 8;
 	if(extended_info & 0x10) {
-		depth = g_visual_depth;
+		depth = g_screen_depth;
 	}
 	xim = XShmCreateImage(display, visual, depth, ZPixmap,
 		(char *)0, seginfo, width, height);
 	if(extended_info & 0x10) {
 		/* check mdepth! */
-		if(xim->bits_per_pixel != g_visual_mdepth) {
+		if(xim->bits_per_pixel != g_screen_mdepth) {
 			printf("shm_ximage bits_per_pix: %d != %d\n",
-					xim->bits_per_pixel, g_visual_mdepth);
+					xim->bits_per_pixel, g_screen_mdepth);
 		}
 	}
 
@@ -974,8 +1002,8 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 	depth = 8;
 	mdepth = 8;
 	if(extended_info & 0x10) {
-		depth = g_visual_depth;
-		mdepth = g_visual_mdepth;
+		depth = g_screen_depth;
+		mdepth = g_screen_mdepth;
 	}
 	ptr = (byte *)malloc((width * height * mdepth) >> 3);
 
@@ -992,9 +1020,9 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 		(char *)ptr, width, height, 8, 0);
 	if(extended_info & 0x10) {
 		/* check mdepth! */
-		if(xim->bits_per_pixel != g_visual_mdepth) {
+		if(xim->bits_per_pixel != g_screen_mdepth) {
 			printf("shm_ximage bits_per_pix: %d != %d\n",
-					xim->bits_per_pixel, g_visual_mdepth);
+					xim->bits_per_pixel, g_screen_mdepth);
 		}
 	}
 
@@ -1055,8 +1083,8 @@ redraw_status_lines()
 
 	white = (g_a2vid_palette << 4) + 0xf;
 	black = (g_a2vid_palette << 4) + 0x0;
-	if(g_visual_depth != 8) {
-		white = (2 << (g_visual_depth - 1)) - 1;
+	if(g_screen_depth != 8) {
+		white = (2 << (g_screen_depth - 1)) - 1;
 		black = 0;
 	}
 	XSetForeground(display, a2_winGC, white);
@@ -1195,13 +1223,13 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 		srcy = 0;
 	}
 
-	if(g_visual_depth > 8 && g_visual_depth <= 16) {
+	if(g_screen_depth > 8 && g_screen_depth <= 16) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to16(xim, xint_main_win, left_pix, srcy,
 			(right_pix - left_pix), 16*(end_line - start_line));
 		xim = xint_main_win;
 	}
-	if(g_visual_depth == 24) {
+	if(g_screen_depth == 24) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to24(xim, xint_main_win, left_pix, srcy,
 			(right_pix - left_pix), 16*(end_line - start_line));
@@ -1242,13 +1270,13 @@ x_redraw_border_sides_lines(int end_x, int width, int start_line,
 		start_line, end_line, end_x - width, end_x);
 #endif
 	xim = ximage_border_sides;
-	if(g_visual_depth > 8 && g_visual_depth <= 16) {
+	if(g_screen_depth > 8 && g_screen_depth <= 16) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to16(xim, xint_border_sides, 0, 16*start_line,
 			width, 16*(end_line - start_line));
 		xim = xint_border_sides;
 	}
-	if(g_visual_depth == 24) {
+	if(g_screen_depth == 24) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to24(xim, xint_border_sides, 0, 16*start_line,
 			width, 16*(end_line - start_line));
@@ -1322,7 +1350,7 @@ x_refresh_border_special()
 	height = BASE_MARGIN_TOP;
 
 	xim = ximage_border_special;
-	if(g_visual_depth > 8 && g_visual_depth <= 16) {
+	if(g_screen_depth > 8 && g_screen_depth <= 16) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to16(xim, xint_border_special, 0, 0,
 			width, BASE_MARGIN_BOTTOM);
@@ -1330,7 +1358,7 @@ x_refresh_border_special()
 			width, BASE_MARGIN_TOP);
 		xim = xint_border_special;
 	}
-	if(g_visual_depth == 24) {
+	if(g_screen_depth == 24) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to24(xim, xint_border_special, 0, 0,
 			width, BASE_MARGIN_BOTTOM);

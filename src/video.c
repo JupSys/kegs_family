@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.94 99/05/25 00:39:48 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.96 99/05/31 20:56:24 kentd Exp $";
 
 #include <time.h>
 
@@ -44,7 +44,7 @@ word32 g_cycs_in_40col = 0;
 
 extern int screen_index[];
 extern byte *g_slow_memory_ptr;
-extern int g_visual_depth;
+extern int g_screen_depth;
 
 extern int statereg;
 extern double g_cur_dcycs;
@@ -349,7 +349,7 @@ video_init()
 			exit(3);
 		}
 
-		total = (total * g_visual_depth) / 8;
+		total = (total * g_screen_depth) / 8;
 		for(j = 0; j < total >> 2; j++) {
 			*ptr++ = 0;
 		}
@@ -435,7 +435,7 @@ void
 video_reset()
 {
 
-	g_installed_full_superhires_colormap = (g_visual_depth != 8);
+	g_installed_full_superhires_colormap = (g_screen_depth != 8);
 	g_cur_a2_stat = ALL_STAT_TEXT | ALL_STAT_ANNUNC3 |
 		(0xf << BIT_ALL_STAT_TEXT_COLOR);
 
@@ -452,14 +452,14 @@ int	g_show_screen = 1;
 word32	g_cycs_in_check_input = 0;
 
 void
-video_update(double old_drecip_cycles_in_16ms)
+video_update()
 {
 	register word32 start_time;
 	register word32 end_time;
 
 	update_a2_line_info();
 
-	update_border_info(old_drecip_cycles_in_16ms);
+	update_border_info();
 
 	GET_ITIMER(start_time);
 	check_input_events();
@@ -784,10 +784,8 @@ change_border_color(double dcycs, int val)
 	}
 }
 
-extern double g_drecip_cycles_in_16ms;
-
 void
-update_border_info(double old_drecip_cycles_in_16ms)
+update_border_info()
 {
 	float	flines_per_fcyc;
 	int	new_line;
@@ -803,7 +801,7 @@ update_border_info(double old_drecip_cycles_in_16ms)
 
 	color_now = g_vbl_border_color;
 
-	flines_per_fcyc = (float)(262.0 * old_drecip_cycles_in_16ms);
+	flines_per_fcyc = (float)(262.0 / DCYCS_IN_16MS);
 	limit = g_num_border_changes;
 	last_line = 0;
 	for(i = 0; i < limit; i++) {

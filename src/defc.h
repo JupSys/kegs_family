@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.65 99/04/12 22:45:46 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.69 99/06/01 01:03:07 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -22,6 +22,7 @@ const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.65 99/04/12 22:45:46 kentd 
 typedef unsigned char byte;
 typedef unsigned short word16;
 typedef unsigned int word32;
+typedef unsigned long long word64;
 
 void U_STACK_TRACE();
 
@@ -31,6 +32,10 @@ void U_STACK_TRACE();
 #define CYCS_3_5_MHZ		(CYCS_28_MHZ/8)
 #define DCYCS_1_MHZ		((DCYCS_28_MHZ/28.0)*(65.0*7/(65.0*7+1.0)))
 #define CYCS_1_MHZ		((int)DCYCS_1_MHZ)
+
+#define DCYCS_IN_16MS_RAW	(DCYCS_1_MHZ / 60.0)
+#define DCYCS_IN_16MS		((double)((int)DCYCS_IN_16MS_RAW))
+#define DRECIP_DCYCS_IN_16MS	(1.0 / (DCYCS_IN_16MS))
 
 #ifdef KEGS_LITTLE_ENDIAN
 # define BIGEND(a)    ((((a) >> 24) & 0xff) +			\
@@ -182,6 +187,18 @@ extern int errno;
 #define vid_printf	if(DO_VERBOSE && (Verbose & VERBOSE_VIDEO)) printf
 
 
+#define HALT_ON_SCAN_INT	0x001
+#define HALT_ON_IRQ		0x002
+#define HALT_ON_SHADOW_REG	0x004
+#define HALT_ON_C70D_WRITES	0x008
+
+#define HALT_ON(a, msg)		\
+	if(Halt_on & a) {	\
+		printf(msg);	\
+		set_halt(1);	\
+	}
+
+
 #ifndef MIN
 # define MIN(a,b)	(((a) < (b)) ? (a) : (b))
 #endif
@@ -190,15 +207,7 @@ extern int errno;
 #endif
 
 #ifdef HPUX
-# ifdef __GNUC__
-/* Assume GNU C doesn't know inline assembly */
-#  define GET_ITIMER(dest)	\
-	__asm__ volatile ("mfctl 16,%0" : "=r" (dest))
-# else
-/* Assume HP compiler with inline asm */
-#  define GET_ITIMER(dest)		\
-	_MFCTL(16,dest)
-# endif
+# define GET_ITIMER(dest)	dest = get_itimer();
 #else
 # define GET_ITIMER(dest)	dest = 0;
 #endif
