@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.74 97/09/01 23:05:34 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.75 97/09/13 23:49:30 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -181,7 +181,7 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.74 97/09/01 23:05:34
 #define X_A2_WINDOW_HEIGHT	(A2_WINDOW_HEIGHT + BASE_MARGIN_TOP + \
 							BASE_MARGIN_BOTTOM)
 
-#define STATUS_WINDOW_HEIGHT	100
+#define STATUS_WINDOW_HEIGHT	(7*13)
 
 #define BASE_WINDOW_WIDTH	(X_A2_WINDOW_WIDTH)
 #define BASE_WINDOW_HEIGHT	(X_A2_WINDOW_HEIGHT + STATUS_WINDOW_HEIGHT)

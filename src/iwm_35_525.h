@@ -1,6 +1,6 @@
 
 #ifdef INCLUDE_IWM_RCSID_C
-const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.2 97/07/05 21:00:11 kentd Exp $";
+const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.3 97/09/23 00:19:14 kentd Exp $";
 #endif
 
 int
@@ -59,6 +59,16 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 	if(fast_disk_emul) {
 		cycs_passed = cycs_this_nib;
 		dcycs_passed = dcycs_this_nib;
+		/* pull a trick to make disk motor-on test pass ($bd34 RWTS) */
+		/*  if this would be a sync byte, and we didn't just do this */
+		/*  then don't return whole byte */
+		if(size > 8 && (g_iwm_fake_fast == 0)) {
+			cycs_passed = cycs_passed >> 1;
+			dcycs_passed = dcycs_passed * 0.5;
+			g_iwm_fake_fast = 1;
+		} else {
+			g_iwm_fake_fast = 0;
+		}
 	}
 
 	skip = 0;
@@ -140,20 +150,6 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 		dcycs_this_nib = cycs_this_nib;
 	}
 
-#if 0
-	if(disk_525 == 0 && fast) {
-		/* attempt to add back in overhead for doing slow mem read */
-		/* This allows Copy II+ nibble copier to read data correctly */
-		cycs_passed += 2;
-		dcycs_last_read -= 2.0;
-		if(!fast_disk_emul) {
-			dsk->dcycs_last_read = dcycs_last_read;
-			iwm_printf("Fast, inc cycs_passed:%d, last_read:%f\n",
-				cycs_passed, dcycs_last_read);
-		}
-	}
-#endif
-
 	if(cycs_passed < cycs_this_nib) {
 		/* partial */
 #if 0
@@ -191,29 +187,23 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 
 
 void
-IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul,
-	double dcycs)
+IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 {
 	double	dcycs_last_read;
 	word32	bits_read;
 	word32	mask;
 	word32	prev_val;
-	int	disk_525;
 	double	dcycs_this_nib;
 	double	dcycs_passed;
 	int	sdiff;
 	int	prev_bits;
-	int	fast;
 
 	if(dsk->fd < 0) {
 		printf("Tried to write to type: %d, drive: %d, fd: %d!\n",
-			dsk->disk_525, dsk->drive, dsk->fd);
+			IWM_DISK_525, dsk->drive, dsk->fd);
 		set_halt(1);
 		return;
 	}
-
-	disk_525 = dsk->disk_525;
-	fast = speed_fast;
 
 	dcycs_last_read = dsk->dcycs_last_read;
 
@@ -226,25 +216,24 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul,
 							val);
 
 	if(iwm.iwm_mode & 2) {
-		/* async mode */
+		/* async mode = 3.5" default */
 		bits_read = 8;
 	} else {
-		/* sync mode */
-		if(disk_525) {
-			bits_read = ((int)dcycs_passed) >> 2;
-		} else {
-			bits_read = ((int)dcycs_passed) >> 1;
-		}
+		/* sync mode, 5.25" drives */
+		bits_read = ((int)dcycs_passed) >> (1 + IWM_DISK_525);
 		if(bits_read < 8) {
 			bits_read = 8;
 		}
 	}
 
+	if(fast_disk_emul) {
+		bits_read = 8;
+	}
 	
-	if(disk_525) {
-		dcycs_this_nib = bits_read * 4;
-	} else {
-		dcycs_this_nib = bits_read * 2;
+	dcycs_this_nib = bits_read * (2 * IWM_CYC_MULT);
+
+	if(fast_disk_emul) {
+		dcycs_passed = dcycs_this_nib;
 	}
 
 	if(prev_bits > 0) {

@@ -17,7 +17,7 @@ AS = cc -Ae
 XOPTS = -I/usr/include/X11R5
 XLIBS = -L/usr/lib/X11R5
 
-all: $(NAME)$(SUFFIX) partls to_pro
+all: specials $(NAME)$(SUFFIX) partls to_pro
 
 specials: 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c Alib.h
 
@@ -25,7 +25,7 @@ specials_clean:
 	rm -f 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c Alib.h
 
 
-$(NAME)$(SUFFIX): $(OBJECTS) compile_time.o
+$(NAME)$(SUFFIX): $(OBJECTS) compile_time.o specials
 	$(LD) -z $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(XLIBS) $(EXTRA_LIBS) -lXext -lX11 -lAlib -lcl -lm
 
 8inst_s: instable.h

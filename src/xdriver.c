@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.123 97/09/08 21:27:50 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.127 97/09/23 21:45:08 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -48,9 +48,10 @@ extern int keypad_key_down;
 extern int updated_mod_latch;
 extern int g_limit_speed;
 
-extern int mouse_phys_x;
-extern int mouse_phys_y;
-extern int mouse_button;
+extern int g_fast_disk_emul;
+
+extern int g_warp_pointer;
+
 extern int g_swap_paddles;
 extern int g_invert_paddles;
 extern int _Xdebug;
@@ -62,16 +63,11 @@ int g_auto_repeat_on = -1;
 
 
 Display *display = 0;
-Window base_win;
-Window status_win;
 Window a2_win;
-GC base_winGC;
 GC a2_winGC;
 XFontStruct *text_FontSt;
-Colormap a2_colormap;
-Colormap base_colormap;
-
-XColor def_colors[256];
+Colormap g_a2_colormap;
+Colormap g_default_colormap;
 
 #ifdef X_SHARED_MEM
 int use_shmem = 1;
@@ -102,11 +98,7 @@ int Max_color_size = 256;
 
 XColor xcolor_a2vid_array[256];
 XColor xcolor_superhires_array[256];
-XColor border_xcolor;
 XColor dummy_xcolor;
-
-int	g_pixel_black = 0;
-int	g_pixel_white = 1;
 
 int g_Control_L_up = 1;
 int g_Control_R_up = 1;
@@ -120,6 +112,7 @@ extern word32 g_full_refresh_needed;
 
 extern int g_border_sides_refresh_needed;
 extern int g_border_special_refresh_needed;
+extern int g_status_refresh_needed;
 
 extern int lores_colors[];
 extern int hires_colors[];
@@ -137,6 +130,13 @@ extern int a2_line_left_edge[];
 extern int a2_line_right_edge[];
 extern int a2_line_full_left_edge[];
 extern int a2_line_full_right_edge[];
+
+Cursor	g_cursor;
+Pixmap	g_cursor_shape;
+Pixmap	g_cursor_mask;
+
+XColor	g_xcolor_black = { 0, 0x0000, 0x0000, 0x0000, DoRed|DoGreen|DoBlue, 0 };
+XColor	g_xcolor_white = { 0, 0xffff, 0xffff, 0xffff, DoRed|DoGreen|DoBlue, 0 };
 
 
 
@@ -161,6 +161,8 @@ int a2_key_to_xsym[][3] = {
 	{ 0x76,	XK_F4,	0 },
 	{ 0x60,	XK_F5,	0 },
 	{ 0x61,	XK_F6,	0 },
+#if 0
+	/* these keys have special KEGS functions */
 	{ 0x62,	XK_F7,	0 },
 	{ 0x64,	XK_F8,	0 },
 	{ 0x65,	XK_F9,	0 },
@@ -170,6 +172,7 @@ int a2_key_to_xsym[][3] = {
 	{ 0x69,	XK_F13,	0 },
 	{ 0x6b,	XK_F14,	0 },
 	{ 0x71,	XK_F15,	0 },
+#endif
 	{ 0x7f, XK_Pause, XK_Break },
 	{ 0x32,	'`', '~' },		/* Key number 18? */
 	{ 0x12,	'1', '!' },
@@ -326,11 +329,11 @@ update_physical_colormap()
 	}
 
 	if(g_installed_full_superhires_colormap) {
-		XStoreColors(display, a2_colormap, &xcolor_superhires_array[0],
-			Max_color_size);
+		XStoreColors(display, g_a2_colormap,
+			&xcolor_superhires_array[0], Max_color_size);
 	} else {
-		XStoreColors(display, a2_colormap, &xcolor_a2vid_array[0],
-			Max_color_size);
+		XStoreColors(display, g_a2_colormap,
+			&xcolor_a2vid_array[0], Max_color_size);
 	}
 }
 
@@ -383,6 +386,7 @@ dev_video_init()
 	XTextProperty my_winText;
 	XVisualInfo *visualList;
 	Visual	*vis;
+	char	cursor_data;
 	char	**font_ptr;
 	int	cnt;
 	int	font_height;
@@ -433,8 +437,6 @@ dev_video_init()
 	fflush(stdout);
 
 	screen_num = DefaultScreen(display);
-	g_pixel_black = BlackPixel(display, screen_num);
-	g_pixel_white = WhitePixel(display, screen_num);
 
 	vTemplate.screen = screen_num;
 	vTemplate.depth = 8;
@@ -481,90 +483,60 @@ dev_video_init()
 	vis = visualList[visual_chosen].visual;
 
 
-	base_colormap = XDefaultColormap(display, screen_num);
-	if(!base_colormap) {
-		printf("base_colormap == 0!\n");
+	g_default_colormap = XDefaultColormap(display, screen_num);
+	if(!g_default_colormap) {
+		printf("g_default_colormap == 0!\n");
 		exit(4);
 	}
 
 
-	a2_colormap = XCreateColormap (display, RootWindow(display, screen_num),
+	g_a2_colormap = XCreateColormap(display, RootWindow(display,screen_num),
 		vis, AllocAll);
 
-	vid_printf("a2_colormap: %08x, main: %08x\n",
-				(word32)a2_colormap, (word32)base_colormap);
+	vid_printf("g_a2_colormap: %08x, main: %08x\n", (word32)g_a2_colormap,
+		(word32)g_default_colormap);
 
-	if(a2_colormap == base_colormap) {
+	if(g_a2_colormap == g_default_colormap) {
 		printf("A2_colormap = default colormap!\n");
 		exit(4);
 	}
 
-	ret = XAllocColorCells(display, base_colormap, False,
-		NULL, 0, &border_xcolor.pixel, 1);
+	/* and define cursor */
+	cursor_data = 0;
+	g_cursor_shape = XCreatePixmapFromBitmapData(display,
+		RootWindow(display,screen_num), &cursor_data, 1, 1, 1, 0, 1);
+	g_cursor_mask = XCreatePixmapFromBitmapData(display,
+		RootWindow(display,screen_num), &cursor_data, 1, 1, 1, 0, 1);
 
-	vid_printf("XAllocColorCells ret: %d, border_xcolor.pixel: %ld\n",
-		ret, border_xcolor.pixel);
+	g_cursor = XCreatePixmapCursor(display, g_cursor_shape,
+			g_cursor_mask, &g_xcolor_black, &g_xcolor_white, 0, 0);
 
-	if(ret == 0) {
-		printf("XAllocColorCells = 0!!!\n");
-		exit(5);
-	}
-
-	border_xcolor.red = 0xffff;
-	border_xcolor.green = 0;
-	border_xcolor.blue = 0;
-	border_xcolor.flags = DoRed | DoGreen | DoBlue;
-
-	XStoreColor(display, base_colormap, &border_xcolor);
+	XFreePixmap(display, g_cursor_shape);
+	XFreePixmap(display, g_cursor_mask);
 
 	XFlush(display);
 
-	win_attr.background_pixel = border_xcolor.pixel;
-	win_attr.event_mask = X_BASE_WIN_EVENT_LIST;
-
-	win_attr.colormap = base_colormap;
-
-	vid_printf("About to base_win\n");
-	fflush(stdout);
-
-	base_win = XCreateWindow(display, RootWindow(display, screen_num),
-		0, 0, BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT,
-		0, vTemplate.depth, InputOutput,
-		DefaultVisual(display, screen_num),
-		CWEventMask | CWBackPixel,
-		&win_attr);
-
-	win_attr.background_pixel = g_pixel_black;
 	win_attr.event_mask = X_A2_WIN_EVENT_LIST;
-	status_win = XCreateWindow(display, base_win,
-		0, X_A2_WINDOW_HEIGHT,
-		BASE_WINDOW_WIDTH, STATUS_WINDOW_HEIGHT,
-		0, vTemplate.depth, InputOutput,
-		DefaultVisual(display, screen_num),
-		CWBackPixel | CWEventMask,
-		&win_attr);
 
-	XFlush(display);
-
-	win_attr.colormap = a2_colormap;
+	win_attr.colormap = g_a2_colormap;
 	win_attr.backing_store = WhenMapped;
+	if(g_warp_pointer) {
+		win_attr.cursor = g_cursor;
+	} else {
+		win_attr.cursor = None;
+	}
 
 	vid_printf("About to a2_win\n");
 	fflush(stdout);
 
-	a2_win = XCreateWindow(display, base_win,
-		0, 0,
-		X_A2_WINDOW_WIDTH, X_A2_WINDOW_HEIGHT,
-		0, vTemplate.depth, InputOutput, vis,
-		CWEventMask | CWColormap | CWBackingStore,
+	a2_win = XCreateWindow(display, RootWindow(display, screen_num),
+		0, 0, BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT,
+		0, vTemplate.depth, InputOutput,
+		DefaultVisual(display, screen_num),
+		CWEventMask | CWColormap | CWBackingStore | CWCursor,
 		&win_attr);
 
-	XSetWindowColormap(display, a2_win, a2_colormap);
-	ret = XSetWMColormapWindows(display, base_win, &a2_win, 1);
-	vid_printf("XSetWMcolormapWindows ret: %08x\n", ret);
-	if(ret == 0) {
-		printf("XSetWMColormapWindows ret= 0\n");
-	}
+	XSetWindowColormap(display, a2_win, g_a2_colormap);
 
 	XFlush(display);
 
@@ -644,7 +616,7 @@ dev_video_init()
 		xcolor_superhires_array[i].blue = i*256;
 	}
 
-	XStoreColors(display, a2_colormap, &xcolor_a2vid_array[0],
+	XStoreColors(display, g_a2_colormap, &xcolor_a2vid_array[0],
 		Max_color_size);
 
 	g_installed_full_superhires_colormap = 0;
@@ -663,21 +635,12 @@ dev_video_init()
 	my_winClassHint.res_name = "sim65";
 	my_winClassHint.res_class = "Sim65";
 
-	XSetWMProperties(display, base_win, &my_winText, &my_winText, 0,
-		0, &my_winSizeHints, 0, &my_winClassHint);
-	XMapRaised(display, base_win);
-
 	XSetWMProperties(display, a2_win, &my_winText, &my_winText, 0,
 		0, &my_winSizeHints, 0, &my_winClassHint);
 	XMapRaised(display, a2_win);
 
-	XSetWMProperties(display, status_win, &my_winText, &my_winText, 0,
-		0, &my_winSizeHints, 0, &my_winClassHint);
-	XMapRaised(display, status_win);
-
 	XSync(display, False);
 
-	base_winGC = XCreateGC(display, base_win, 0, (XGCValues *) 0);
 	a2_winGC = XCreateGC(display, a2_win, 0, (XGCValues *) 0);
 	font_ptr = XListFonts(display, FONT_NAME_STATUS, 4, &cnt);
 
@@ -695,17 +658,7 @@ dev_video_init()
 
 	new_gc.font = text_FontSt->fid;
 	new_gc.fill_style = FillSolid;
-	XChangeGC(display, base_winGC, GCFillStyle | GCFont, &new_gc);
 	XChangeGC(display, a2_winGC, GCFillStyle | GCFont, &new_gc);
-
-	XSetForeground(display, base_winGC, border_xcolor.pixel);
-
-	XSync(display, False);
-	XFillRectangle(display, base_win, base_winGC, 0, 0,
-		BASE_WINDOW_WIDTH,
-		BASE_MARGIN_TOP + BASE_MARGIN_BOTTOM + X_A2_WINDOW_HEIGHT);
-
-	XFlush(display);
 
 	/* XSync(display, False); */
 
@@ -852,21 +805,26 @@ double status1_time = 0.0;
 double status2_time = 0.0;
 double status3_time = 0.0;
 
-#define X_LINE_LENGTH	84
+#define MAX_STATUS_LINES	7
+#define X_LINE_LENGTH		88
+
+
+char	g_status_buf[MAX_STATUS_LINES][X_LINE_LENGTH + 1];
 
 void
-draw_status(int line_num, const char *string)
+update_status_line(int line, const char *string)
 {
-	char	buf[256];
+	char	*buf;
 	const char *ptr;
-	int	height;
-	int	margin;
 	int	i;
 
-	height = text_FontSt->ascent + text_FontSt->descent;
-	margin = text_FontSt->ascent;
+	if(line >= MAX_STATUS_LINES || line < 0) {
+		printf("update_status_line: line: %d!\n", line);
+		exit(1);
+	}
 
 	ptr = string;
+	buf = &(g_status_buf[line][0]);
 	for(i = 0; i < X_LINE_LENGTH; i++) {
 		if(*ptr) {
 			buf[i] = *ptr++;
@@ -876,13 +834,28 @@ draw_status(int line_num, const char *string)
 	}
 
 	buf[X_LINE_LENGTH] = 0;
-	
-	XSetForeground(display, base_winGC, g_pixel_white);
-	XSetBackground(display, base_winGC, g_pixel_black);
+}
 
-	XDrawImageString(display, status_win, base_winGC, 0,
-		height*line_num + margin,
-		buf, strlen(buf));
+void
+redraw_status_lines()
+{
+	char	*buf;
+	int	line;
+	int	height;
+	int	margin;
+
+	height = text_FontSt->ascent + text_FontSt->descent;
+	margin = text_FontSt->ascent;
+
+	XSetForeground(display, a2_winGC, (g_a2vid_palette << 4) + 0xf);
+	XSetBackground(display, a2_winGC, (g_a2vid_palette << 4) + 0x0);
+
+	for(line = 0; line < MAX_STATUS_LINES; line++) {
+		buf = &(g_status_buf[line][0]);
+		XDrawImageString(display, a2_win, a2_winGC, 0,
+			X_A2_WINDOW_HEIGHT + height*line + margin,
+			buf, strlen(buf));
+	}
 
 	XFlush(display);
 }
@@ -1146,6 +1119,7 @@ check_input_events()
 	XEvent	ev;
 	int	len;
 	int	delta_x, delta_y;
+	int	motion;
 
 	g_num_check_input_calls--;
 	if(g_num_check_input_calls < 0) {
@@ -1155,6 +1129,7 @@ check_input_events()
 		len = QLength(display);
 	}
 
+	motion = 0;
 	while(len > 0) {
 		XNextEvent(display, &ev);
 		len--;
@@ -1188,7 +1163,8 @@ check_input_events()
 				ev.xbutton.button);
 			if(ev.xbutton.button == 1) {
 				vid_printf("mouse button pressed\n");
-				mouse_button = 1;
+				motion = update_mouse(ev.xbutton.x,
+							ev.xbutton.y, 1, 1);
 			} else if(ev.xbutton.button == 2) {
 				g_limit_speed++;
 				if(g_limit_speed > 2) {
@@ -1218,7 +1194,8 @@ check_input_events()
 		case ButtonRelease:
 			if(ev.xbutton.button == 1) {
 				vid_printf("mouse button released\n");
-				mouse_button = 0;
+				motion = update_mouse(ev.xbutton.x,
+							ev.xbutton.y, 0, 1);
 			}
 			break;
 		case Expose:
@@ -1241,24 +1218,11 @@ check_input_events()
 				ev.xcolormap.new, ev.xcolormap.state);
 			break;
 		case MotionNotify:
-			delta_x = 0;
-			delta_y = 0;
-			if(ev.xmotion.window == base_win) {
-				delta_x = -BASE_MARGIN_LEFT;
-				delta_y = -BASE_MARGIN_TOP;
-			} else if(ev.xmotion.window == a2_win) {
-				delta_x = 0;
-				delta_y = 0;
-			} else if(ev.xmotion.window == status_win) {
-				delta_x = -BASE_MARGIN_LEFT;
-				delta_y = X_A2_WINDOW_HEIGHT +
-					BASE_MARGIN_BOTTOM;
-			} else {
+			if(ev.xmotion.window != a2_win) {
 				printf("Motion in window %08x unknown!\n",
 					(word32)ev.xmotion.window);
 			}
-			mouse_phys_x = delta_x + ev.xmotion.x;
-			mouse_phys_y = delta_y + ev.xmotion.y;
+			motion = update_mouse(ev.xmotion.x, ev.xmotion.y, 0, 0);
 			break;
 		default:
 			printf("X event 0x%08x is unknown!\n",
@@ -1267,12 +1231,19 @@ check_input_events()
 		}
 	}
 
+	if(motion && g_warp_pointer) {
+		XWarpPointer(display, None, a2_win, 0, 0, 0, 0,
+			X_A2_WINDOW_WIDTH/2, X_A2_WINDOW_HEIGHT/2);
+		update_mouse(-1,-1,-1,-1);
+	}
+
 	if(g_full_refresh_needed) {
 		a2_screen_buffer_changed = -1;
 		g_full_refresh_needed = -1;
 
 		g_border_sides_refresh_needed = 1;
 		g_border_special_refresh_needed = 1;
+		g_status_refresh_needed = 1;
 
 		/* x_refresh_ximage(); */
 		/* redraw_border(); */
@@ -1305,6 +1276,23 @@ handle_keysym(XEvent *xev_in)
 		is_up = 1;
 	}
 
+	if((keysym == XK_F7) && !is_up) {
+		g_fast_disk_emul = !g_fast_disk_emul;
+		printf("g_fast_disk_emul is now %d\n", g_fast_disk_emul);
+	}
+
+	if((keysym == XK_F9 || keysym == XK_F8) && !is_up) {
+		/* warp pointer */
+		g_warp_pointer = !g_warp_pointer;
+		if(g_warp_pointer) {
+			XDefineCursor(display, a2_win, g_cursor);
+			printf("X Pointer grabbed\n");
+		} else {
+			XDefineCursor(display, a2_win, None);
+			printf("X Pointer released\n");
+		}
+	}
+
 	if(keysym == XK_F10 && !is_up) {
 		change_a2vid_palette((g_a2vid_palette + 1) & 0xf);
 	}
@@ -1318,6 +1306,7 @@ handle_keysym(XEvent *xev_in)
 		printf("Invert paddles is now: %d\n", g_invert_paddles);
 	}
 
+#if 0
 	if(keysym == XK_Alt_L || keysym == XK_Meta_L) {
 		g_alt_left_up = is_up;
 	}
@@ -1336,16 +1325,17 @@ handle_keysym(XEvent *xev_in)
 		}
 		g_send_sound_to_file = 0;
 	}
+#endif
 
 	/* first, do conversions */
 	switch(keysym) {
-	case XK_Alt_L:
-	case XK_Meta_L:
+	case XK_Alt_R:
+	case XK_Meta_R:
 	case XK_Menu:
 		keysym = XK_Print;		/* option */
 		break;
-	case XK_Alt_R:
-	case XK_Meta_R:
+	case XK_Alt_L:
+	case XK_Meta_L:
 	case XK_Cancel:
 		keysym = XK_Scroll_Lock;	/* cmd */
 		break;
@@ -1405,8 +1395,17 @@ handle_keysym(XEvent *xev_in)
 		}
 	}
 
-	printf("Keysym: %04x of keycode: %02x unknown\n", (word32)keysym,
-		keycode);
+	switch(keysym) {
+	case XK_F7: case XK_F8: case XK_F9:
+	case XK_F10: case XK_F11: case XK_F12:
+	case XK_F13: case XK_F14: case XK_F15:
+		/* special keys, ignore */
+		break;
+	default:
+		printf("Keysym: %04x of keycode: %02x unknown\n",
+			(word32)keysym, keycode);
+	}
+
 }
 
 void

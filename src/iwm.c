@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.66 97/07/05 20:58:34 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.69 97/09/23 00:19:48 kentd Exp $";
 
 #include "defc.h"
 
@@ -68,7 +68,8 @@ int	g_track_nibs_35[] = {
 
 
 
-int	g_fast_disk_emul = 0;
+int	g_fast_disk_emul = 1;
+int	g_iwm_fake_fast = 0;
 
 
 int	from_disk_byte[256];
@@ -204,15 +205,16 @@ draw_iwm_status(int line, char *buf)
 	}
 
 	sprintf(buf, "s6d1:%2d%s   s6d2:%2d%s   s5d1:%2d/%d%s   "
-		"s5d2:%2d/%d%s",
+		"s5d2:%2d/%d%s   fast_disk_emul:%d",
 		iwm.drive525[0].cur_qtr_track >> 2, flag[0][0],
 		iwm.drive525[1].cur_qtr_track >> 2, flag[0][1],
 		iwm.drive35[0].cur_qtr_track >> 1,
 		iwm.drive35[0].cur_qtr_track & 1, flag[1][0],
 		iwm.drive35[1].cur_qtr_track >> 1,
-		iwm.drive35[1].cur_qtr_track & 1, flag[1][1]);
+		iwm.drive35[1].cur_qtr_track & 1, flag[1][1],
+		g_fast_disk_emul);
 
-	draw_status(line, buf);
+	update_status_line(line, buf);
 }
 
 void
@@ -987,7 +989,7 @@ iwm_read_data(Disk *dsk, int fast_disk_emul, double dcycs)
 	if(dsk->disk_525) {
 		return iwm_read_data_525(dsk, fast_disk_emul, dcycs);
 	} else {
-		return iwm_read_data_525(dsk, fast_disk_emul, dcycs);
+		return iwm_read_data_35(dsk, fast_disk_emul, dcycs);
 	}
 }
 
@@ -997,7 +999,7 @@ iwm_write_data(Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 	if(dsk->disk_525) {
 		iwm_write_data_525(dsk, val, fast_disk_emul, dcycs);
 	} else {
-		iwm_write_data_525(dsk, val, fast_disk_emul, dcycs);
+		iwm_write_data_35(dsk, val, fast_disk_emul, dcycs);
 	}
 }
 
@@ -2329,6 +2331,7 @@ maybe_parse_disk_conf_file()
 	int	disk_525;
 	int	drive;
 	int	smartport;
+	int	size;
 	int	len;
 	int	ret;
 
@@ -2422,6 +2425,19 @@ maybe_parse_disk_conf_file()
 			continue;
 		}
 
+		size = 0;
+		if(buf[pos] == ',') {
+			/* read optional size parameter */
+			pos++;
+			while(pos < len && buf[pos] >= '0' && buf[pos] <= '9'){
+				size = size * 10 + buf[pos] - '0';
+				pos++;
+			}
+			printf("Read optional size as: %d\n", size);
+			size = size * 1024;
+		}
+
+
 		while(pos < len && (buf[pos] == ' ' || buf[pos] == '\t' ||
 					buf[pos] == '=' || buf[pos] == ':') ) {
 			pos++;
@@ -2443,7 +2459,7 @@ maybe_parse_disk_conf_file()
 			name_ptr = "virtual_image";
 		}
 
-		insert_disk(dsk, name_ptr, virtual_image);
+		insert_disk(dsk, name_ptr, virtual_image, size);
 
 	}
 
@@ -2458,7 +2474,7 @@ maybe_parse_disk_conf_file()
 
 
 void
-insert_disk(Disk *dsk, char *name, int virtual_image)
+insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 {
 	char	tmp_buf[1024];
 	char	*name_ptr;
@@ -2582,7 +2598,10 @@ insert_disk(Disk *dsk, char *name, int virtual_image)
 
 	if(dsk->smartport) {
 		dsk->image_start = 0;
-		dsk->image_size = get_fd_size(dsk->fd);
+		if(size <= 0) {
+			size = get_fd_size(dsk->fd);
+		}
+		dsk->image_size = size;
 
 		if(partition_name) {
 			ret = find_partition_by_name(dsk->fd, partition_name,
@@ -2596,8 +2615,9 @@ insert_disk(Disk *dsk, char *name, int virtual_image)
 				return;
 			}
 		}
-		iwm_printf("adding smartport device[%d], size: %08x\n",
-			dsk->drive, dsk->tracks[0].unix_len);
+		iwm_printf("adding smartport device[%d], size:%08x, "
+			"img_sz:%08x\n", dsk->drive, dsk->tracks[0].unix_len,
+			dsk->image_size);
 	} else if(dsk->disk_525) {
 		dsk->num_tracks = 4*35;
 		for(i = 0; i < 35; i++) {

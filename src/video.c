@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.78 97/09/07 18:38:48 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.81 97/09/23 22:59:58 kentd Exp $";
 
 #include <time.h>
 
@@ -82,6 +82,7 @@ int	g_palette_changed = 1;
 int	g_border_sides_refresh_needed = 1;
 int	g_border_special_refresh_needed = 1;
 int	g_border_line24_refresh_needed = 1;
+int	g_status_refresh_needed = 1;
 
 #define A2_MAX_ALL_STAT		34
 
@@ -608,7 +609,11 @@ change_a2vid_palette(int new_palette)
 	g_cur_a2_stat = (g_cur_a2_stat & (~ALL_STAT_A2VID_PALETTE)) +
 			(new_palette << BIT_ALL_STAT_A2VID_PALETTE);
 	change_display_mode(g_cur_dcycs);
-	g_palette_changed++;
+
+	g_border_sides_refresh_needed = 1;
+	g_border_special_refresh_needed = 1;
+	g_status_refresh_needed = 1;
+	g_palette_changed = 1;
 
 }
 
@@ -1961,6 +1966,8 @@ check_super_hires_palette_changes(int reparse)
 {
 	word32	*word_ptr;
 	byte	*byte_ptr;
+	word32	*ch_ptr;
+	word32	ch_mask;
 	int	palette_changed;
 	int	saved_a2vid_palette, a2vid_palette;
 	word32	tmp;
@@ -1980,6 +1987,16 @@ check_super_hires_palette_changes(int reparse)
 
 	if(saved_a2vid_palette != a2vid_palette) {
 		reparse = 1;
+	}
+
+	ch_ptr = &(slow_mem_changed[0x9e00 >> CHANGE_SHIFT]);
+	ch_mask = ch_ptr[0] | ch_ptr[1];
+	ch_ptr[0] = 0;
+	ch_ptr[1] = 0;
+
+	if(!reparse && ch_mask == 0) {
+		/* nothing changed, get out fast */
+		return;
 	}
 
 	for(i = 0; i < 0x10; i++) {
@@ -2117,6 +2134,7 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 {
 	word32	all_checks;
 	word32	check[8];
+	word32	this_check;
 	int	line;
 	int	y;
 	int	i;
@@ -2182,11 +2200,6 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 	ch_ptr[2] = 0;
 	ch_ptr[3] = 0;
 	ch_ptr[4] = 0;
-	if(in_reparse) {
-		for(line = 0; line < 8; line++) {
-			check[line] = -1;
-		}
-	}
 
 	a2vid_palette = g_a2vid_palette;
 
@@ -2196,14 +2209,16 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 		scan = slow_memory[0x19d00 + y];
 		old_scan = superhires_scan_save[y];
 		superhires_scan_save[y] = scan;
-		if((scan ^ old_scan) & 0xaf) {
-			check[line] = -1;
+		this_check = check[line];
+		if(in_reparse || (scan ^ old_scan) & 0xaf) {
+			this_check = -1;
 		}
 
-		all_checks |= check[line];
-		if(check[line] == 0) {
+		if(this_check == 0) {
 			continue;
 		}
+
+		all_checks |= this_check;
 
 		a2_screen_buffer_changed |= line_mask;
 
@@ -2213,37 +2228,37 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 		switch(type) {
 		case 0:	/* no_a2vid, 320, nofill */
 			redraw_changed_super_hires_oneline_norm_320(
-				screen_data, y, scan, check[line]);
+				screen_data, y, scan, this_check);
 			break;
 		case 1:	/* no_a2vid, 320, fill */
 			redraw_changed_super_hires_oneline_fill_320(
-				screen_data, y, scan, check[line]);
+				screen_data, y, scan, this_check);
 			break;
 		case 2:	/* a2vid, 320, nofill */
 			redraw_changed_super_hires_oneline_a2vid_320(
-				screen_data, y, scan, check[line]);
+				screen_data, y, scan, this_check);
 			break;
 		case 3:	/* a2vid, 320, fill */
 			redraw_changed_super_hires_oneline_a2vid_fill_320(
-				screen_data, y, scan, check[line]);
+				screen_data, y, scan, this_check);
 			break;
 		case 4:	/* no_a2vid, 640, nofill */
 			redraw_changed_super_hires_oneline_norm_640(
-				screen_data, y, scan, check[line]);
+				screen_data, y, scan, this_check);
 			break;
 		case 5:	/* no_a2vid, 640, fill */
 			/* No fill mode in 640 */
 			redraw_changed_super_hires_oneline_norm_640(
-				screen_data, y, scan, check[line]);
+				screen_data, y, scan, this_check);
 			break;
 		case 6:	/* a2vid, 640, nofill */
 			redraw_changed_super_hires_oneline_a2vid_640(
-				screen_data, y, scan, check[line]);
+				screen_data, y, scan, this_check);
 			break;
 		case 7:	/* a2vid, 640, fill */
 			/* no fill mode in 640 */
 			redraw_changed_super_hires_oneline_a2vid_640(
-				screen_data, y, scan, check[line]);
+				screen_data, y, scan, this_check);
 			break;
 		default:
 			printf("type: %d bad!\n", type);
@@ -2255,12 +2270,14 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 	right = 0;
 
 	tmp = all_checks;
-	for(i = 0; i < 160; i += 8) {
-		if(tmp & 0x80000000) {
-			left = MIN(i, left);
-			right = MAX(i + 8, right);
+	if(all_checks) {
+		for(i = 0; i < 160; i += 8) {
+			if(tmp & 0x80000000) {
+				left = MIN(i, left);
+				right = MAX(i + 8, right);
+			}
+			tmp = tmp << 1;
 		}
-		tmp = tmp << 1;
 	}
 
 	a2_line_left_edge[start_line] = (4*left);
@@ -2304,6 +2321,7 @@ display_screen()
 
 word32 g_cycs_in_check_input = 0;
 word32 g_cycs_in_refresh_line = 0;
+word32 g_cycs_in_refresh_line2 = 0;
 word32 g_cycs_in_refresh_ximage = 0;
 
 int	g_num_lines_a2vid = 0;
@@ -2312,8 +2330,8 @@ int	g_num_lines_superhires = 0;
 void
 refresh_screen()
 {
-	register word32 start_time;
-	register word32 end_time;
+	register word32 start_time, start_time2;
+	register word32 end_time, end_time2;
 	int	i;
 
 	GET_ITIMER(start_time);
@@ -2327,9 +2345,13 @@ refresh_screen()
 	g_num_lines_a2vid = 0;
 	g_superhires_palette_checked = 0;
 
+	GET_ITIMER(start_time2);
 	for(i = 0; i < 25; i++) {
 		refresh_line(i);
 	}
+	GET_ITIMER(end_time2);
+
+	g_cycs_in_refresh_line2 += (end_time2 - start_time2);
 
 
 	g_installed_full_superhires_colormap = 0;
@@ -2341,6 +2363,11 @@ refresh_screen()
 
 	/* deal with border */
 	refresh_border();
+
+	if(g_status_refresh_needed) {
+		g_status_refresh_needed = 0;
+		redraw_status_lines();
+	}
 
 	GET_ITIMER(end_time);
 	g_cycs_in_refresh_line += (end_time - start_time);

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.233 97/09/07 18:25:58 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.238 97/09/23 21:08:51 kentd Exp $";
 
 #include <math.h>
 
@@ -82,6 +82,7 @@ extern word32 table16[];
 extern byte doc_ram[];
 
 extern int g_iwm_motor_on;
+extern int g_fast_disk_emul;
 extern int g_apple35_sel;
 
 void U_STACK_TRACE();
@@ -92,6 +93,7 @@ int halt_on_irq = 0;
 int halt_on_decimal_ops = 0;
 int	g_rom_version = 0;
 int	g_halt_on_bad_read = 0;
+int	g_ignore_bad_acc = 0;
 int	g_use_alib = 1;
 
 const double g_drecip_cycles_in_16ms_1mhz = (60.0/(CYCS_1_MHZ));
@@ -354,6 +356,12 @@ get_memory_io(word32 loc, Cyc *cyc_ptr)
 		return (doc_ram[loc & 0xffff]);
 	}
 
+	if(g_ignore_bad_acc) {
+		/* print no message, just get out.  User doesn't want */
+		/*  to be bothered by buggy programs */
+		return 0;
+	}
+
 	printf("get_memory_io for addr: %06x\n", loc);
 	set_halt(g_halt_on_bad_read);
 
@@ -462,6 +470,12 @@ set_memory_io(word32 loc, int val, Cyc *cyc_ptr)
 	if((loc & 0xff0000) == 0xef0000) {
 		/* DOC RAM */
 		doc_ram[loc & 0xffff] = val;
+		return;
+	}
+
+	if(g_ignore_bad_acc) {
+		/* print no message, just get out.  User doesn't want */
+		/*  to be bothered by buggy programs */
 		return;
 	}
 
@@ -652,6 +666,9 @@ main(int argc, char **argv)
 		if(!strcmp("-badrd", argv[i])) {
 			printf("Halting on bad reads\n");
 			g_halt_on_bad_read = 1;
+		} else if(!strcmp("-ignbadacc", argv[i])) {
+			printf("Ignoring bad memory accesses\n");
+			g_ignore_bad_acc = 1;
 		} else if(!strcmp("-test", argv[i])) {
 			printf("Allowing testing\n");
 			g_testing_enabled = 1;
@@ -999,7 +1016,8 @@ run_prog(word32 cycles)
 
 		iwm_1 = (motor_on && !apple35_sel);
 		iwm_25 = (motor_on && apple35_sel);
-		if(fast && (motor_on == 0) && (limit_speed == 0)) {
+		if(fast && (motor_on == 0 || g_fast_disk_emul) &&
+							(limit_speed == 0)) {
 			/* unlimited speed */
 			fspeed_mult = g_projected_pmhz;
 			fplus_ptr = &g_recip_projected_pmhz_unl;
@@ -1274,6 +1292,7 @@ extern word32 g_cycs_in_40col;
 extern word32 g_cycs_in_xredraw;
 extern word32 g_cycs_in_check_input;
 extern word32 g_cycs_in_refresh_line;
+extern word32 g_cycs_in_refresh_line2;
 extern word32 g_cycs_in_refresh_ximage;
 extern word32 g_cycs_in_io_read;
 extern word32 g_cycs_in_sound1;
@@ -1292,6 +1311,8 @@ extern float g_fvoices;
 
 extern int g_doc_vol;
 extern int g_a2vid_palette;
+
+extern int g_status_refresh_needed;
 
 int	g_iwm_limit = 0;
 
@@ -1379,15 +1400,15 @@ vbl_60hz(double dcycs, double dtime_now)
 			"Eff MHz:%s, c:%06x, sec:%1.3f vol:%02x pal:%x",
 			dcycs, sim_mhz_ptr, total_mhz_ptr, cycs_int,
 			dtime_diff_1sec, g_doc_vol, g_a2vid_palette);
-		draw_status(1, status_buf);
+		update_status_line(0, status_buf);
 
-		sprintf(status_buf, "ior:%08x, xred_cs:%03x_%05x, "
+		sprintf(status_buf, "rl2:%08x, xred_cs:%03x_%05x, "
 			"ch_in:%08x ref_l:%08x ref_x:%08x",
-			g_cycs_in_io_read,
+			g_cycs_in_refresh_line2,
 			g_cycs_in_xredraw >> 20, g_cycs_in_xredraw & 0xfffff,
 			g_cycs_in_check_input, g_cycs_in_refresh_line,
 			g_cycs_in_refresh_ximage);
-		draw_status(2, status_buf);
+		update_status_line(1, status_buf);
 
 		sprintf(status_buf, "Ints:%3d I/O:%4dK BRK:%3d COP:%2d "
 			"Eng:%3d act:%3d hev:%3d esi:%3d edi:%3d",
@@ -1395,7 +1416,7 @@ vbl_60hz(double dcycs, double dtime_now)
 			g_num_enter_engine, g_engine_action,
 			g_engine_halt_event, g_engine_scan_int,
 			g_engine_doc_int);
-		draw_status(3, status_buf);
+		update_status_line(2, status_buf);
 
 		sprintf(status_buf, "snd1:%03x_%05x, 2:%03x_%05x, "
 			"3:%03x_%05x, st:%03x_%05x est:%03x_%05x %4.2f",
@@ -1405,15 +1426,19 @@ vbl_60hz(double dcycs, double dtime_now)
 			g_cycs_in_start_sound>>20,g_cycs_in_start_sound&0xfffff,
 			g_cycs_in_est_sound>>20, g_cycs_in_est_sound & 0xfffff,
 			g_fvoices);
-		draw_status(4, status_buf);
+		update_status_line(3, status_buf);
 
 		sprintf(status_buf, "snd_plays: %4d, doc_ev: %4d, st_snd: %4d "
 			"scan_osc: %4d, snd_parms: %4d",
 			g_num_snd_plays, g_num_doc_events, g_num_start_sounds,
 			g_num_scan_osc, g_num_recalc_snd_parms);
-		draw_status(5, status_buf);
+		update_status_line(4, status_buf);
 
-		draw_iwm_status(6, status_buf);
+		draw_iwm_status(5, status_buf);
+
+		update_status_line(6, "KEGS v0.31");
+
+		g_status_refresh_needed = 1;
 
 		g_num_irq = 0;
 		g_num_brk = 0;
@@ -1429,6 +1454,7 @@ vbl_60hz(double dcycs, double dtime_now)
 		g_cycs_in_xredraw = 0;
 		g_cycs_in_check_input = 0;
 		g_cycs_in_refresh_line = 0;
+		g_cycs_in_refresh_line2 = 0;
 		g_cycs_in_refresh_ximage = 0;
 		g_cycs_in_io_read = 0;
 		g_cycs_in_sound1 = 0;

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.60 97/09/10 22:56:54 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.61 97/09/23 00:07:29 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -271,6 +271,7 @@ do_debug_intfc()
 				list_pcbank = engine.kbank;
 				break;
 			case 'q':
+			case 'Q':
 				printf("Exiting debugger\n");
 				return;
 				break;

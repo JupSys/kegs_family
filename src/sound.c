@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.60 97/07/07 23:09:16 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.61 97/09/11 23:05:22 kentd Exp $";
 
 #include "defc.h"
 
@@ -66,7 +66,7 @@ const float	g_fsamps_per_dcyc = (float)((AUDIO_RATE*1.0) / DCYCS_1_MHZ);
 
 int	g_doc_vol = 2;
 
-#define MAX_C030_TIMES		4096
+#define MAX_C030_TIMES		18000
 
 double g_last_sound_play_dsamp = 0.0;
 

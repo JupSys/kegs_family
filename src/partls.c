@@ -143,21 +143,21 @@ main(int argc, char **argv)
 		}
 
 		if(long_form) {
-			printf("%d: sig: %04x, map_blk_cnt: %d, "
+			printf("%2d: sig: %04x, map_blk_cnt: %d, "
 				"phys_part_start: %08x, part_blk_cnt: %08x\n",
 				cur, sig, map_blk_cnt, phys_part_start,
 				part_blk_cnt);
-			printf("part_name: %s, part_type: %s\n",
+			printf("  part_name: %s, part_type: %s\n",
 				part_map_ptr->part_name,
 				part_map_ptr->part_type);
-			printf("data_start:%08x, data_cnt:%08x status: %08x\n",
+			printf("  data_start:%08x, data_cnt:%08x status:%08x\n",
 				part_map_ptr->data_start,
 				part_map_ptr->data_cnt,
 				part_map_ptr->part_status);
-			printf("processor: %s\n", part_map_ptr->processor);
+			printf("  processor: %s\n", part_map_ptr->processor);
 		} else {
 			dsize = (double)part_map_ptr->data_cnt;
-			printf("%-20s  size=%6.2fMB type=%s\n",
+			printf("%2d:%-20s  size=%6.2fMB type=%s\n", cur,
 				part_map_ptr->part_name,
 				(dsize/(1024.0*2.0)),
 				part_map_ptr->part_type);

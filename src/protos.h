@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.101 97/09/10 22:57:05 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.102 97/09/21 15:30:32 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -194,7 +194,7 @@ void disk_nib_end_track(Disk *dsk);
 void iwm_show_track(int slot_drive, int track);
 void iwm_show_a_track(Track *trk);
 void maybe_parse_disk_conf_file(void);
-void insert_disk(Disk *dsk, char *name, int virtual_image);
+void insert_disk(Disk *dsk, char *name, int virtual_image, int size);
 void eject_named_disk(Disk *dsk, char *name);
 void eject_disk(Disk *dsk);
 

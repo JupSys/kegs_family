@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.30
+KEGS: Kent's Emulated GS version 0.31
 
 What the heck is this?
 ----------------------
@@ -16,7 +16,7 @@ help you out.  See my email address at the end of this file.
 KEGS features:
 -------------
 
-Fast 65816 emulation (about 6MHz on a 712/80, and 15MHz on a C180).
+Fast 65816 emulation (about 6MHz on a 712/80, and 15-20MHz on a C180).
 Emulates low-level 5.25" and 3.5" drive accesses (even nibble-copiers work!).
 Emulates classic Apple II sound and 32-voice Ensoniq sound.
 	All sound is played in 16-bit stereo at 48KHz.
@@ -42,6 +42,7 @@ It's a little bigger to download, but a little easier to handle since it's
 all text.
 
 Included files:
+	CHANGES		- Description of changes since last release
 	README.kegs	- you're here
 	kegs		- the executable
 	font.65sim	- C-like description of the font KEGS uses.
@@ -115,16 +116,16 @@ partition containing all the unused blocks.
 
 An example from the Golden Orchard CD:
 $ partls  /dev/dsk/c201d2s0   
-Apple                 size=  0.03MB type=Apple_partition_map
-Macintosh_SL          size=  0.02MB type=Apple_Driver
-GO.ProDOS             size= 20.00MB type=Apple_PRODOS
-GO-Main               size= 70.85MB type=Apple_HFS
-Back                  size=351.49MB type=Apple_Free
-GO-Misc16bit          size= 80.00MB type=Apple_HFS
-GO-Programming        size=125.00MB type=Apple_HFS
-GO-Disks              size=144.00MB type=Apple_HFS
-GO-Applications       size= 82.00MB type=Apple_HFS
-GO-G.S.               size=128.00MB type=Apple_HFS
+ 0:Apple                 size=  0.03MB type=Apple_partition_map
+ 1:Macintosh_SL          size=  0.02MB type=Apple_Driver
+ 2:GO.ProDOS             size= 20.00MB type=Apple_PRODOS
+ 3:GO-Main               size= 70.85MB type=Apple_HFS
+ 4:Back                  size=351.49MB type=Apple_Free
+ 5:GO-Misc16bit          size= 80.00MB type=Apple_HFS
+ 6:GO-Programming        size=125.00MB type=Apple_HFS
+ 7:GO-Disks              size=144.00MB type=Apple_HFS
+ 8:GO-Applications       size= 82.00MB type=Apple_HFS
+ 9:GO-G.S.               size=128.00MB type=Apple_HFS
 
 To mount a partition, the disk_conf should look like:
 
@@ -132,8 +133,10 @@ s7d10 = /dev/dsk/c201d2s0:GO-Main
 
 KEGS interprets everything up to a colon as the Unix device file, and
 everything after as the partition name.  I recommend using /dev/dsk/
-paths instead of /dev/rdsk/ since /dev/dsk can be cached in the Unix
-buffer cache for a big speed boost.
+paths instead of /dev/rdsk/ for CD-ROMS since /dev/dsk can be cached in
+the Unix buffer cache for a big speed boost.  For floppies or real hard
+drives, use /dev/rdsk.  I'll fix KEGS to use O_SYNC soon, which would
+mean you could use /dev/dsk all the time.
 
 The sample disk_conf has commented-out entries for the Golden Orchard
 Apple II CD-ROM.
@@ -149,6 +152,23 @@ If you do not have any disk mounted in s7d1, KEGS will hit a breakpoint
 and stop running.  Just hit "g" in the debug window, and it will jump
 you into the monitor.  "E000g" in the Apple //gs monitor will put you
 in BASIC.
+
+KEGS cannot determine what size /dev/rfloppy is, so you must give it a
+hint.  To tell KEGS you want to mount a 1440K floppy at /dev/rfloppy/c20Ad1s0,
+use:
+
+s7d6,1440 = /dev/rfloppy/c20ad1s0
+
+All disks in s5dX are 800K, and cannot be changed.  All disks in s6dX are
+140K and cannot be changed.  Only disks in s7dX can have the size specified.
+
+Partitions can also be mounted by number.  The ProDOS partition of
+the Golden Orchard CD (partition 2, GO.ProDOS) can be mounted as:
+
+s7d1 = /dev/dsk/c201d2s0:2
+
+This is useful if the disk you are trying to use has blank partition
+names.
 
 
 Running KEGS:
@@ -175,6 +195,12 @@ to manually kill the subprocess.  ("ps -ef|grep kegs;kill xxxxx").
 Assuming all goes well, KEGS will then boot your disk image.  You may have to
 move your mouse into the simulation window to get the colors right.
 
+If you discover KEGS freezing soon after starting, and no startup beep,
+then the workstation sound system has gotten itself wedged.  Try to kill
+any kegs processes and try again.  If it still hangs and plays no sound,
+try -hpdev, or try killing the Aserver processes.  If both of the Aserver
+processes don't die, you must reboot your workstation to use KEGS.
+
 Debugging KEGS:
 --------------
 
@@ -190,20 +216,24 @@ output and mail it to me.  You can "chain" the g's together--so if you
 want it to skip 10 breakpoints, just say "gggggggggg" then hit return.
 You may need to do this with some Ensoniq problems.
 
+If this is really bothersome running some programs, try the "-ignbadacc"
+command-line option.  It tells KEGS to not print messages about bad
+memory accesses.
+
 Using KEGS:
 ----------
 
-The X-windows mouse is the mouse and joystick.  Since I do not constrain
-the mouse to stay in the window, moving around the simulated screen
-takes a little practice.  You'll figure it out quickly.  I will fix this
-eventually.
+The X-windows mouse is the mouse and joystick.  By default, the mouse
+is not constrained inside the window.  Press F8 to hide the X windows
+cursor and constrain the mouse.  F8 again toggles out of constrain mode.
 
 The joystick is the mouse position.  Upper left is 0,0.  Lower right
 is 255,255.  Press F11 to swap the X and Y axes.  Press F12 to reverse
 the sense of both paddles (so 0 becomes 255, etc).  Swapping and
 reversing are convenient with paddle-based games like "Little Brick Out"
 so that the mouse will be moving like the paddle on the screen.  "Little
-Brick Out" is on the DOS 3.3 master disk.
+Brick Out" is on the DOS 3.3 master disk.  The joystick does not work
+properly if the pointer is constrained in the window.
 
 The left mouse button is the mouse button for KEGS.  The middle mouse
 button toggles between three speed modes.  Mode 0 means run as fast as
@@ -224,26 +254,28 @@ mouse button.
 Quitting KEGS:
 -------------
 
-Either ctrl-C in the debugger window, or press the right-mouse button
-in the emulation window, and then type "q" return in the debug window.
+Either ctrl-C in the debugger window at any time, or press the right-mouse
+button in the emulation window, and then type "q" return in the debug window.
 
 Command/Option keys:
 -------------------
 
 If you have a workstation keyboard with the new Windows keys, you can
-use them as the command/option keys.  Since most people don't have a PC
-keyboard, there are several alternatives.
+use them as the command/option keys.  This is what I use.  Since most people
+don't have a PC keyboard, there are several alternatives.
 
 The following keys are Option (closed-apple) (not all keyboards have
-all keys):  Meta_L, Alt_L, Menu, Print_screen, and the Windows key just
+all keys):  Meta_R, Alt_R, Menu, Print_screen, and the Windows key just
 to the right of the spacebar.  The following keys are Command (open-apple):
-Meta_R, Alt_R, Cancel, Scroll_lock, the windows key left of the spacebar,
-and the windows key on the far right that looks like a pull-down menu.
+Meta_L, Alt_L, Cancel, Scroll_lock, the Windows key left of the spacebar,
+and the Windows key on the far right that looks like a pull-down menu.
 
 If you can't get any of these to work on your machine, let me know.
 Note that X Windows often has other things mapped to Meta- and Alt-
 key sequences, so they often don't get passed through to KEGS.  So it's
-best to use another key instead of Alt or Meta.
+best to use another key instead of Alt or Meta.  Alt-Up-arrow often
+means circulate through the X windows, which means it isn't passed on
+to KEGS.
 
 The joystick/paddle buttons are just the Command and Option keys.
 
@@ -323,6 +355,8 @@ arguments under 32767.  I personally haven't tried a partition bigger
 than 30000K (about 2.5MB short of the maximum).  Well, you can use bigger
 images if you format them HFS, but I don't trust the HFS driver.
 
+To_pro automatically sets the ProDOS filetype of files ending in ".shk"
+to $E0.
 
 Details on disk_conf/images:
 ---------------------------
@@ -366,6 +400,10 @@ rw-: Read-write image.  Image will appear writeable in KEGS, and changes
 	will be passed through to the Unix file
 rwx: Read-only image.  Same as 'r-x'.
 
+KEGS, by default, runs the IWM (3.5" and 5.25" disks) emulation in
+an "approximate" mode.  Almost everything will work except for nibble
+copiers.  To make nibble copiers work, Press F7.
+
 KEGS supports low-level emulation of 5.25" and 3.5" drive hardware.  It
 should be very accurate, supporting nibble-copiers, etc.  Note there
 is no "nibblized" disk image format that KEGS understands currently.
@@ -376,7 +414,7 @@ A standard reformatting will not cause that to happen.  But running
 things like a "drive-speed" test will cause further changes not to
 propagate to the Unix file.
 
-For full accuracy, 5.25" drive accesses force KEGS to run at 1MHz,
+In full accuracy mode, 5.25" drive accesses force KEGS to run at 1MHz,
 and 3.5" drive accesses force KEGS to run at 2.5MHz.
 
 KEGS Timing:
@@ -406,24 +444,24 @@ Unix "top" command.
 
 If you force KEGS to run at 2.5MHz, it works like a real Apple //gs--
 if you set the control panel to "slow", it will really be running at
-1.024MHz.  Accesses to 5.25" disk automatically slow down to 1.024MHz.
-KEGS may not be able to keep up with some programs running at 2.5MHz
-due to video and sound overheads.  If that happens, it effectively
-runs slower by extending the emulated "second", like in the 1.024MHz
-mode.  You can tell this is happening when Eff MHz in the status area
-falls below 2.5MHz.  If KEGS is running faster than 2.5MHz, it takes
-small pauses to slow down, just like in 1.024MHz.  Many Apple //gs
-demos must be run at 2.5MHz.  The built-in selftests (cmd-option-ctrl-Reset)
-must run at 2.5MHz.  Many Apple //gs action games are more playable
-at 2.5MHz.
+1.024MHz.  Accesses to 5.25" disk automatically slow down to 1.024MHz,
+when running the IWM in accurate mode (F7).  KEGS may not be able to
+keep up with some programs running at 2.5MHz due to video and sound
+overheads.  If that happens, it effectively runs slower by extending the
+emulated "second", like in the 1.024MHz mode.  You can tell this is
+happening when Eff MHz in the status area falls below 2.5MHz.  If KEGS
+is running faster than 2.5MHz, it takes small pauses to slow down, just
+like in 1.024MHz.  Many Apple //gs demos must be run at 2.5MHz.  The
+built-in selftests (cmd-option-ctrl-Reset) must run at 2.5MHz.  Many
+Apple //gs action games are more playable at 2.5MHz.
 
 Letting KEGS run "as fast as possible" means KEGS will run at whatever
 speed it is able to, above 1.024MHz (if it falls below 1.024, it
 extends the emulated second).  Eff MHz gives you the current Apple //gs
-equivalent speed.  Many games will be unplayable at this setting.
+equivalent speed.  Many games will be unplayable at the unlimited setting.
 
 Sound output has an interesting relationship to KEGS timing.
-KEGS has a need to play one second of sound per second on emulated time.
+KEGS has a need to play one second of sound per second of emulated time.
 Normally, this works out exactly right.  But as noted above, if
 KEGS can't maintain the needed speed, it extends the emulated second.
 If it extends the second to 1.4 real seconds, that means KEGS only
@@ -572,6 +610,9 @@ Sound breaks up if KEGS is unable to keep up--it should only be happening
 if you are trying to force KEGS to run at 2.5MHz, but cannot due to
 sound and video overhead.
 
+In Rastan, the music plays at a slow tempo UNLESS you are moving--then
+it plays the music just fine.
+
 
 Sound emulation:
 ---------------
@@ -702,7 +743,9 @@ Line 6: (IWM info)
 For each IWM device, this line displays the current track (and side for
 3.5" disks).  If a disk is spinning, there will be an "*" next to the
 track number.  Only updated once a second, so the disk arm moving may
-appear to jump by several tracks.
+appear to jump by several tracks.  "fast_disk_emul:1" shows that KEGS
+is using less accurate, but faster, IWM emulation.  Press F7 to toggle
+to accurate disk emulation.
 
 
 X-Windows interactions:
@@ -735,7 +778,7 @@ Describe my changes to SPEEDTEST.
 KEGS To-Do:
 ----------
 
-g_fast_disk_emul via F9.
+Serial port emulation (printing, comm)
 3200 color mode.
 Nibblized images.
 

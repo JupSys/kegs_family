@@ -10,7 +10,8 @@ s7d1 = NUCLEUS03
 s7d2 = SAMPLE_IMAGE
 
 #s7d1 = GSOS
-#s7d5 = /dev/dsk/c201d2s0:GO.ProDOS
+#s7d3,1440 = /dev/rfloppy/c20Ad1s0
+#s7d5 = /dev/dsk/c201d2s0:2
 #s7d6 = /dev/dsk/c201d2s0:GO-Main
 #s7d7 = /dev/dsk/c201d2s0:GO-Misc16bit
 #s7d8 = /dev/dsk/c201d2s0:GO-Programming

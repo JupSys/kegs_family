@@ -1,0 +1,29 @@
+
+Changes in KEGS v0.31 since v0.30
+
+- New mouse handling--Press F8 to hide X windows cursor and constrain
+	cursor inside window.  Makes using the mouse much easier.
+	F8 toggles back to normal.
+- Add revision to status area.
+- Remove "slow memory" calculation.  KEGS was emulating slowing down to
+	1MHz to write to slow memory (bank $E0 or $E1).  But true //gs
+	accelerators have a smarter trick, so just removed it from
+	KEGS.  KEGS still slows down for I/O reads and writes.
+	This eliminates the confusing 40MHz speed numbers you'd sometimes get.
+	KEGS can also now run faster when it would have slowed down to
+	1MHz before.
+- Turn off accurate IWM emulation be default, for much faster emulation.
+	Bit copiers won't work by default now.  Toggle accurate IWM
+	with F7.  Accurate IWM forces 1MHz speed for 5.25" and 2.5MHz for
+	3.5", but less accurate IWM runs as fast as possible.
+- Add optional size to s7dx entries in disk_conf, to allow using /dev/rfloppy.
+- Allow mounting partitions by number, instead of just by name, since some
+	Mac-formatted Zip disks don't have partition names.
+- Add -ignbadacc to ignore bad memory accesses.
+- Increase MAX_C030_TIMES.  Otherwise, fast workstations could generate too
+	many clicks per VBL, causing an assertion to fail.
+- Small speed increase detecting changes in the superhires screen.
+- Alt_L is now Open-Apple, and Alt_R is Closed-Apple.
+- KEGS now uses just one private colormap, so xwd can get screendumps.
+
+

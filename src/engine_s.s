@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.120 97/09/07 14:26:55 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.121 97/09/21 15:29:44 kentd Exp $"
 
 	.code
 
@@ -29,6 +29,7 @@ rcsid_engine_s_s
 
 
 #if 0
+# define ACCURATE_SLOW_MEM
 # define CHECK_BREAKPOINTS
 # define LOG_PC
 # define DEBUG_TOOLBOX
@@ -449,13 +450,19 @@ set_memory_special_case
 
 
 set_memory_shadow1_asm
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_1
+#endif
 	add	arg3,scratch4,scratch4
 	extru	arg3,31-SHIFT_PER_CHANGE,5,scratch1
 	ldb	r%slow_memory(scratch4),arg2
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_2
+#endif
 	mtctl	scratch1,cr11
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_3
+#endif
 	comclr,<> arg2,arg1,0
 	bv	0(link)
 	stb	arg1,(scratch2)
@@ -471,13 +478,19 @@ set_memory_shadow1_asm
 
 set_memory_shadow2_asm
 	depi	1,15,1,arg3
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_1
+#endif
 	add	arg3,scratch4,scratch4
 	extru	arg3,31-SHIFT_PER_CHANGE,5,scratch1
 	ldb	r%slow_memory(scratch4),arg2
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_2
+#endif
 	mtctl	scratch1,cr11
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_3
+#endif
 	comclr,<> arg2,arg1,0
 	bv	0(link)
 	stb	arg1,(scratch2)
@@ -536,14 +549,20 @@ set_memory16_shadow1_asm
 	CYCLES_PLUS_2
 	copy	arg1,arg2
 	extru	arg1,23,8,arg1
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_1
+#endif
 	add	arg3,scratch4,scratch4
 	dep	arg2,23,8,arg1
 	extru	arg3,31-SHIFT_PER_CHANGE,5,scratch1
 	ldh	r%slow_memory(scratch4),arg2
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_2
+#endif
 	mtctl	scratch1,cr11
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_3
+#endif
 	comclr,<> arg2,arg1,0		;return if arg2 == arg1
 	bv	0(link)
 	sth	arg1,(scratch2)
@@ -563,14 +582,20 @@ set_memory16_shadow2_asm
 	copy	arg1,arg2
 	extru	arg1,23,8,arg1
 	depi	1,15,1,arg3
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_1
+#endif
 	dep	arg2,23,8,arg1
 	add	arg3,scratch4,scratch4
 	extru	arg3,31-SHIFT_PER_CHANGE,5,scratch1
 	ldh	r%slow_memory(scratch4),arg2
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_2
+#endif
 	mtctl	scratch1,cr11
+#ifdef ACCURATE_SLOW_MEM
 	FCYCLES_ROUND_3
+#endif
 	comclr,<> arg2,arg1,0
 	bv	0(link)
 	sth	arg1,(scratch2)

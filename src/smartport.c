@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.4 97/06/15 22:24:04 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.5 97/09/21 15:30:47 kentd Exp $";
 
 #include "defc.h"
 
@@ -76,6 +76,7 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 	int	block_size;
 	int	map_blks;
 	int	cur_blk;
+	int	match_number;
 	word32	start;
 	word32	len;
 	word32	data_off;
@@ -83,6 +84,12 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 	word32	sig;
 
 	block_size = 512;
+
+	match_number = -1;
+	if(*name >= '0' && *name <= '9') {
+		/* find partition by number! */
+		match_number = atoi(name);
+	}
 
 	read_partition_block(fd, part_blk_buf, 0, block_size);
 
@@ -108,7 +115,8 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 			return -1;
 		}
 
-		if(strncmp(name, part_map_ptr->part_name, 32) == 0) {
+		if((strncmp(name, part_map_ptr->part_name, 32) == 0) ||
+						(cur_blk == match_number)) {
 			/* found it, check for consistency */
 			start = part_map_ptr->phys_part_start;
 			len = part_map_ptr->part_blk_cnt;
@@ -562,9 +570,12 @@ do_c70d(word32 arg0)
 		engine.acc = (engine.acc & 0xff00) + 0x01;
 		engine.psr |= 0x01;	/* set carry */
 		engine.pc = (rts_addr + 3 + ext) & 0xffff;
-		printf("Just did smtport cmd:%02x rts_addr:%04x, cmdlst:%06x\n",
-			cmd, rts_addr, cmd_list);
-		set_halt(1);
+		if(cmd != 0x4a) {
+			/* Finder does 0x4a call before formatting disk */
+			printf("Just did smtport cmd:%02x rts_addr:%04x, "
+				"cmdlst:%06x\n", cmd, rts_addr, cmd_list);
+			set_halt(1);
+		}
 		return;
 	}
 

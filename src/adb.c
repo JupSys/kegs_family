@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.24 97/09/08 20:09:38 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.25 97/09/23 00:21:17 kentd Exp $";
 
 #include "adb.h"
 
@@ -66,12 +66,21 @@ byte	adb_memory[256];
 
 word32 g_adb_mode = 0;		/* mode set via set_modes, clear_modes */
 
-int a2_mouse_x = 0;
-int a2_mouse_y = 0;
 int a2_mouse_button = 0;
-int mouse_phys_x = 0;
-int mouse_phys_y = 0;
-int mouse_button = 0;
+
+int g_warp_pointer = 0;
+int g_mouse_cur_x = 0;
+int g_mouse_cur_y = 0;
+int g_mouse_moved = 0;
+int g_mouse_button = 0;
+
+int g_mouse_delta_x = 0;
+int g_mouse_delta_y = 0;
+int g_mouse_overflow_x = 0;
+int g_mouse_overflow_y = 0;
+int g_mouse_overflow_button = 0;
+int g_mouse_overflow_valid = 0;
+
 
 int	g_adb_mouse_coord = 0;
 
@@ -959,13 +968,15 @@ adb_read_c027()
 
 	ret = (g_c027_val & ADB_C027_NEG_MASK);
 
-	if(a2_mouse_x != mouse_phys_x || a2_mouse_y != mouse_phys_y ||
-		mouse_button != a2_mouse_button) {
+	if(g_mouse_overflow_valid || g_mouse_delta_x || g_mouse_delta_y ||
+					(g_mouse_button != a2_mouse_button)) {
 
+#if 0
 		adb_printf("new mouse data!: a2_x,y: %d, %d phys x,y: %d,%d, "
 			"b a2: %d, b phys: %d\n",
-			a2_mouse_x, a2_mouse_y, mouse_phys_x, mouse_phys_y,
+			a2_mouse_x, a2_mouse_y, g_mouse_cur_x, g_mouse_cur_y,
 			a2_mouse_button, mouse_button);
+#endif
 
 		if(g_mouse_ctl_addr == g_mouse_dev_addr) {
 			/* mouse is where we expect it, pass on data */
@@ -1073,10 +1084,52 @@ write_adb_ram(word32 addr, int val)
 }
 
 int
+update_mouse(int x, int y, int button_state, int button_valid)
+{
+
+	if(x < 0 && y < 0) {
+		return 0;
+	}
+
+	if((x == X_A2_WINDOW_WIDTH/2) && (y == X_A2_WINDOW_HEIGHT/2) &&
+							g_warp_pointer) {
+		/* skip it */
+		g_mouse_cur_x = x;
+		g_mouse_cur_y = y;
+		g_mouse_moved = 0;
+	} else {
+		g_mouse_moved = 1;
+	}
+
+	g_mouse_delta_x += x - g_mouse_cur_x;
+	g_mouse_delta_y += y - g_mouse_cur_y;
+	g_mouse_cur_x = x;
+	g_mouse_cur_y = y;
+
+	if(button_valid) {
+		if(!g_mouse_overflow_valid && (button_state != g_mouse_button)){
+			/* copy delta to overflow, set overflow */
+			g_mouse_overflow_x = g_mouse_delta_x;
+			g_mouse_overflow_y = g_mouse_delta_y;
+			g_mouse_overflow_button = g_mouse_button;
+			g_mouse_overflow_valid = 1;
+			g_mouse_delta_x = 0;
+			g_mouse_delta_y = 0;
+		}
+
+		g_mouse_button = button_state;
+	}
+
+	return g_mouse_moved;
+}
+
+
+int
 mouse_read_c024()
 {
 	int	delta;
 	word32	ret;
+	int	mouse_button;
 
 	if(g_adb_mode & 0x2) {
 		/* mouse is off, return 0 */
@@ -1090,27 +1143,57 @@ mouse_read_c024()
 
 	if(g_adb_mouse_coord) {
 		/* y coord */
-		delta = mouse_phys_y - a2_mouse_y;
-		if(delta >= 0x40) {
-			delta = 0x3f;
-		} else if(delta < (-0x3f)) {
-			delta = -0x3f;
+		if(g_mouse_overflow_valid) {
+			delta = g_mouse_overflow_y;
+			if(delta > 0x3f) {
+				delta = 0x3f;
+			} else if(delta < (-0x3f)) {
+				delta = -0x3f;
+			}
+			g_mouse_overflow_y -= delta;
+			mouse_button = g_mouse_overflow_button;
+			if(g_mouse_overflow_y == 0 && g_mouse_overflow_x == 0) {
+				g_mouse_overflow_valid = 0;
+			}
+		} else {
+			delta = g_mouse_delta_y;
+			if(delta > 0x3f) {
+				delta = 0x3f;
+			} else if(delta < (-0x3f)) {
+				delta = -0x3f;
+			}
+			g_mouse_delta_y -= delta;
+			mouse_button = g_mouse_button;
 		}
 		ret = ((!mouse_button) << 7) + (delta & 0x7f);
-		a2_mouse_y += delta;
 
 		irq_printf("Read c024, mouse y: %02x\n", ret);
 		a2_mouse_button = mouse_button;
 	} else {
 		/* x coord */
-		delta = mouse_phys_x - a2_mouse_x;
-		if(delta >= 0x40) {
-			delta = 0x3f;
-		} else if(delta < (-0x3f)) {
-			delta = -0x3f;
+		if(g_mouse_overflow_valid) {
+			delta = g_mouse_overflow_x;
+			if(delta > 0x3f) {
+				delta = 0x3f;
+			} else if(delta < (-0x3f)) {
+				delta = -0x3f;
+			}
+			g_mouse_overflow_x -= delta;
+			if(g_mouse_overflow_y == 0 && g_mouse_overflow_x == 0 &&
+				  (a2_mouse_button == g_mouse_overflow_button)){
+				g_mouse_overflow_valid = 0;
+			}
+		} else {
+			delta = g_mouse_delta_x;
+			if(delta > 0x3f) {
+				delta = 0x3f;
+			} else if(delta < (-0x3f)) {
+				delta = -0x3f;
+			}
+			g_mouse_delta_x -= delta;
 		}
+
 		ret = (delta & 0x7f);
-		a2_mouse_x += delta;
 
 		irq_printf("Read c024, mouse x: %02x\n", ret);
 	}
@@ -1142,11 +1225,19 @@ read_paddles(int paddle, double dcycs)
 	if(paddle == 0) {
 		/* mous_phys_x is 0->560, convert that to 0-2816 cycles */
 		/* so, mult by 5 */
-		trig_dcycs = mouse_phys_x * 5;
+		if(g_mouse_cur_x < BASE_MARGIN_LEFT) {
+			trig_dcycs = 0.0;
+		} else {
+			trig_dcycs = (g_mouse_cur_x - BASE_MARGIN_LEFT) * 5;
+		}
 	} else {
 		/* mous_phys_y is 0->384, convert that to 0-2816 cycles */
 		/* so, mult by 15 then divide by 2 (shift right by 1) */
-		trig_dcycs = (mouse_phys_y * 15) >> 1;
+		if(g_mouse_cur_y < BASE_MARGIN_TOP) {
+			trig_dcycs = 0.0;
+		} else {
+			trig_dcycs = ((g_mouse_cur_y - BASE_MARGIN_TOP)*15) >>1;
+		}
 	}
 
 	if(trig_dcycs > 2816.0) {
