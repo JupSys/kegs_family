@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.216 2000/01/11 00:12:30 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.218 2000/09/24 00:55:40 kentd Exp $";
 
 #include "defc.h"
 
@@ -22,6 +22,7 @@ extern byte *g_memory_ptr;
 extern byte *g_dummy_memory1_ptr;
 extern byte *g_slow_memory_ptr;
 extern byte *g_rom_fc_ff_ptr;
+extern byte *g_rom_cards_ptr;
 extern word32 g_mem_size_base, g_mem_size_exp;
 
 extern word32 slow_mem_changed[];
@@ -126,6 +127,7 @@ void
 fixup_brks()
 {
 	word32	page;
+	word32	tmp, tmp2;
 	Pg_info	val;
 	int	i, num;
 
@@ -133,9 +135,13 @@ fixup_brks()
 	for(i = 0; i < num; i++) {
 		page = (g_breakpts[i] >> 8) & 0xffff;
 		val = GET_PAGE_INFO_RD(page);
-		SET_PAGE_INFO_RD(page, val | BANK_IO_TMP | BANK_BREAK);
+		tmp = PTR2WORD(val) & 0xff;
+		tmp2 = tmp | BANK_IO_TMP | BANK_BREAK;
+		SET_PAGE_INFO_RD(page, val - tmp + tmp2);
 		val = GET_PAGE_INFO_WR(page);
-		SET_PAGE_INFO_WR(page, val | BANK_IO_TMP | BANK_BREAK);
+		tmp = PTR2WORD(val) & 0xff;
+		tmp2 = tmp | BANK_IO_TMP | BANK_BREAK;
+		SET_PAGE_INFO_WR(page, val - tmp + tmp2);
 	}
 }
 
@@ -273,6 +279,10 @@ fixup_intcx()
 				rom_inc = SET_BANK_IO;
 				if((int_crom[indx] == 0) || INTCX) {
 					rom_inc = rom10000 + (j << 8);
+				} else {
+					// User-slot rom
+					rom_inc = &(g_rom_cards_ptr[0]) +
+						((j - 0xc0) << 8);
 				}
 				SET_PAGE_INFO_RD(j + off, rom_inc);
 			}
@@ -977,13 +987,12 @@ void
 show_bankptrs(int bnk)
 {
 	int i;
-	word32 rd, wr;
+	Pg_info rd, wr;
 	byte *ptr_rd, *ptr_wr;
 
-	printf("g_memory_ptr: %08x, dummy_mem: %08x, slow_mem_ptr: %08x\n",
-		(word32)g_memory_ptr, (word32)g_dummy_memory1_ptr,
-		(word32)g_slow_memory_ptr);
-	printf("g_rom_fc_ff_ptr: %08x\n", (word32)g_rom_fc_ff_ptr);
+	printf("g_memory_ptr: %p, dummy_mem: %p, slow_mem_ptr: %p\n",
+		g_memory_ptr, g_dummy_memory1_ptr, g_slow_memory_ptr);
+	printf("g_rom_fc_ff_ptr: %p\n", g_rom_fc_ff_ptr);
 
 	printf("Showing bank_info array for %02x\n", bnk);
 	for(i = 0; i < 256; i++) {
@@ -1006,19 +1015,19 @@ show_addr(byte *ptr)
 
 	mem_size = g_mem_size_base + g_mem_size_exp;
 	if(ptr >= g_memory_ptr && ptr < &g_memory_ptr[mem_size]) {
-		printf("%08x--memory[%06x]", (word32)ptr,
+		printf("%p--memory[%06x]", ptr,
 					(word32)(ptr - g_memory_ptr));
 	} else if(ptr >= g_rom_fc_ff_ptr && ptr < &g_rom_fc_ff_ptr[256*1024]) {
-		printf("%08x--rom_fc_ff[%06x]", (word32)ptr,
+		printf("%p--rom_fc_ff[%06x]", ptr,
 					(word32)(ptr - g_rom_fc_ff_ptr));
 	} else if(ptr >= g_slow_memory_ptr && ptr<&g_slow_memory_ptr[128*1024]){
-		printf("%08x--slow_memory[%06x]", (word32)ptr,
+		printf("%p--slow_memory[%06x]", ptr,
 					(word32)(ptr - g_slow_memory_ptr));
 	} else if(ptr >=g_dummy_memory1_ptr && ptr < &g_dummy_memory1_ptr[256]){
-		printf("%08x--dummy_memory[%06x]", (word32)ptr,
+		printf("%p--dummy_memory[%06x]", ptr,
 					(word32)(ptr - g_dummy_memory1_ptr));
 	} else {
-		printf("%08x--unknown", (word32)ptr);
+		printf("%p--unknown", ptr);
 	}
 }
 

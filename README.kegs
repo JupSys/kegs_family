@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.56
+KEGS: Kent's Emulated GS version 0.59
 http://www.crosswinds.net/san-jose/~kentd/kegs/
 
 What is this?
@@ -40,7 +40,7 @@ Emulates classic Apple II sound and 32-voice Ensoniq sound.
 	All sound is played in 16-bit stereo at 48KHz.
 Emulates all Apple //gs graphics modes, including border effects.
 	Can handle mixed-displays (superhires at the top, lores at the bottom).
-	Always does 60 video updates per second.
+	Always does 60 full screen video updates per second.
 Mouse and joystick support.
 Emulates all Apple //gs memory "tricks" for full compatibility.
 Low-level ADB keyboard and mouse emulation enables Wolfenstein 3D to run.
@@ -70,7 +70,7 @@ Included files:
 	kegs			- the executable, for HP-UX 10.20+
 	kegs.spec		- The Linux spec file for making an RPM
 	font.65sim		- C-like description of the font KEGS uses.
-	disk_conf		- disk image configuration info
+	kegs_conf		- disk image configuration info
 	to_pro			- Hard-to-use ProDOS volume creator
 	partls			- Lists partitions on Apple-partitioned hard
 				   drives or CD-ROMs
@@ -86,7 +86,7 @@ You need to provide:
 		(262144 bytes long.)
 	3) A disk image to boot.  This can be either "raw" format or 2IMG.
 		See discussion below.  GS/OS would be best.
-	4) Edit the file called "disk_conf" describing what images you want
+	4) Edit the file called "kegs_conf" describing what images you want
 		KEGS to use.
 
 Getting ROMs
@@ -96,6 +96,9 @@ You need a copy of the memory from fe/0000 - ff/ffff from a ROM 01 GS
 or fc/0000 - ff/ffff from a ROM 03 GS, and put that in a file called
 "ROM".  I'll eventually get detailed instructions on how to do this.
 
+You may find it convenient to also get a file of the Disk II ROMs
+from a real Apple II Disk II card and place that in "c600.rom".  This
+will improve compatibility with Apple II, II+, and //e programs.
 
 Running KEGS:
 ------------
@@ -139,14 +142,15 @@ how you can experiment with it a little bit.
 KEGS will open a new window and use the terminal window you started it from
 as a "debug" window.  I've reduced the debug info it prints,
 but you may catch some I forgot to remove.  Let me know what you were
-running, and what it was saying, and I will fix it.
+running, and what it is printing, and I will fix it.
 
 KEGS requires an 8-bit graphics plane to operate efficiently.  On HP
 workstations, this is always available, even if you have a 24-bit
 graphics card.  On Linux, it seems as if you must run the server in
 8-bit mode.  On Linux, moving the cursor into the KEGS window causes the
 rest of the screen to go "technicolor" due to KEGS needing the
-whole colormap to operate.
+whole colormap to operate.  This is due to cheap PC graphics cards not
+providing multiple color maps (most workstations provide 2 colormaps).
 
 KEGS can run in 15-bit, 16-bit and 24-bit display modes at a performance
 penalty.  It should auto-detect the best display depth (first 8,
@@ -156,7 +160,7 @@ starting KEGS.
 
 KEGS also forks off a subprocess to help handle the sound if audio is
 active.  If KEGS crashes in a unusual way (a core dump, for instance),
-you may have to manually kill the subprocess.  ("ps -ef|grep kegs;kill
+you may have to manually kill the subprocess.  ("ps -ef| grep kegs;kill
 xxxxx").
 
 Assuming all goes well, KEGS will then boot your disk image.  See below
@@ -170,16 +174,18 @@ then the workstation sound system has gotten itself wedged.  Try to kill
 any "kegs" processes and try again.  If it still hangs and plays no sound,
 try killing the Aserver processes if you're using -alib.  If both of
 the Aserver processes don't die, you must reboot your workstation to use
-KEGS or use the "-audio 0" option.
+KEGS or use the "-audio 0" option.  (This is why KEGS no longer uses
+the Alib interface by default anymore).
 
 You can change the memory size using the "-mem" option, see the command
 line flags later in this file.
 
-Images (disk_conf):
+Images (kegs_conf):
 ------------------
 
-You tell KEGS what disk images to use through the disk_conf file.
-You must set this up before running KEGS.
+You tell KEGS what disk images to use through the kegs_conf file.
+(There are now alias names available for this file: kegs_conf, disk_conf,
+and .kegs_conf).  You must set this up before running KEGS.
 
 KEGS can handle "raw", 2IMG, 5.25" ".nib" images, or partitioned images
 now.  The raw image format has no header of any type.  KEGS uses the
@@ -193,7 +199,7 @@ Unix.  For 3.5" disks, for example, a raw image would be exactly 800K bytes
 long (819200 bytes).  KEGS intercepts the emulated GS accesses to the
 image, and does the correct reads and writes of the Unix file instead.
 
-KEGS uses disk_conf to describe what to load into each virtual disk slot.
+KEGS uses kegs_conf to describe what to load into each virtual disk slot.
 The format of the file is very simple.  A '#' indicates a comment--the
 rest of the line is ignored.  Otherwise, each line needs to be of the
 form:
@@ -215,7 +221,7 @@ control panel, just like a real Apple //gs.  KEGS emulates a //gs with
 two 5.25" drives in slot 6, two 3.5" drives in slot 5, and up to 32
 "hard drives" in slot 7.
 
-The provided sample disk_conf contains:
+The provided sample kegs_conf contains:
 	# Paths to images for KEGS
 
 	s5d1 = XMAS_DEMO
@@ -224,7 +230,7 @@ The provided sample disk_conf contains:
 	s7d2 = SAMPLE_IMAGE
 
 If you don't have each of those images loaded, KEGS may fail to start
-correctly.  If you don't have the image, comment the line out of disk_conf.
+correctly.  If you don't have the image, comment the line out of kegs_conf.
 
 To do "useful" things with KEGS, you need to get a bootable disk image.
 You can ftp to ftp.info.apple.com and get System 6 at:
@@ -270,7 +276,7 @@ $ partls  /dev/dsk/c201d2s0
  8:GO-Applications       size= 82.00MB type=Apple_HFS
  9:GO-G.S.               size=128.00MB type=Apple_HFS
 
-To mount a partition, the disk_conf should look like:
+To mount a partition, the kegs_conf should look like:
 
 s7d10 = /dev/dsk/c201d2s0:GO-Main
 
@@ -281,7 +287,7 @@ the Unix buffer cache for a big speed boost.  For floppies or real hard
 drives, use /dev/rdsk.  I'll fix KEGS to use O_SYNC soon, which would
 mean you could use /dev/dsk all the time.
 
-The sample disk_conf has commented-out sample entries for the Golden Orchard
+The sample kegs_conf has commented-out sample entries for the Golden Orchard
 Apple II CD-ROM.
 
 Since KEGS needs low-level access to the CD-ROM, you should make the
@@ -313,19 +319,39 @@ names.
 You can skip drive numbers--it's ok to have a disk in s7d20, and nothing
 in s7d10-s7d19.
 
+User geoff@gwlink.net adds some notes for mounting disks/floppies/CDs under
+Solaris:
+
+  To use a CDROM, insert the CD and let Volume Management mount it.
+  Edit kegs_conf and use the filesystem that shows up in the "df -k"
+  listing.  The volume name of the CDROM must be included.  For example,
+  a CDROM in an IDE drive would look like this:
+
+  s7d19 = /vol/dev/dsk/c1t0d0/ciscocd
+
+  A CDROM in a SCSI drive would look like this:
+
+  s7d20 = /vol/dev/dsk/c0t6d0/j1170_10804
+
+  For floppy use, insert the floppy and run volcheck.  All you need is this 
+  in kegs_conf to handle any compatible floppy:
+
+  s7d20,1440 = /vol/dev/aliases/floppy0
+
+
 The s6d* and s5d* drives support disk swapping and disk ejecting.
-For disk swapping, you just edit the disk_conf file while KEGS is running,
+For disk swapping, you just edit the kegs_conf file while KEGS is running,
 and KEGS will re-parse the file and load in the images you request.
 If you comment out a line which is a mounted disk, KEGS "ejects" that
 image.
 
 One common use for disk swapping is to run a two-disk 5.25" program
-that doesn't look in s6d2.  Set up disk_conf with:
+that doesn't look in s6d2.  Set up kegs_conf with:
 
 s6d1 = image1.dsk
 s6d2 = image2.dsk
 
-...and then when you want to insert image2 in s6d1, just edit disk_conf to:
+...and then when you want to insert image2 in s6d1, just edit kegs_conf to:
 
 s6d2 = image1.dsk
 s6d1 = image2.dsk
@@ -337,11 +363,11 @@ to add them here in the future.
 
 Since a real Apple //gs can eject 3.5" disks, so can KEGS.  If the
 Apple //gs wants to eject the disk, KEGS will put a '#' in front of
-that disk image name in disk_conf, and eject the disk.
+that disk image name in kegs_conf, and eject the disk.
 
 Support for 5.25" nibblized images is read-only for now (since the
 format is kinda simplistic, it's tricky for KEGS to write to it).
-Just mount your image, like "disk.nib" in the disk_conf file like
+Just mount your image, like "disk.nib" in the kegs_conf file like
 any .dsk or .po image.
 
 
@@ -601,17 +627,17 @@ images if you format them HFS, but I don't trust the GS/OS HFS driver.
 To_pro automatically sets the ProDOS filetype of files ending in ".shk"
 to $E0.
 
-Details on disk_conf/images:
+Details on kegs_conf/images:
 ---------------------------
 
-The file "disk_conf" describes the images KEGS will use.  The sample
+The file "kegs_conf" describes the images KEGS will use.  The sample
 file has all the lines commented out with '#' to show sample uses.
 Remember, KEGS will boot s7d1 (unless you've changed that using the
 Apple //gs control panel), so you must put an image in that slot.
 
-KEGS watches the file "disk_conf", and if it changes, it re-reads it
+KEGS watches the file "kegs_conf", and if it changes, it re-reads it
 and reloads disk images.  That is, while KEGS is running, you can
-edit disk_conf using, say, vi, and add or change disks.  KEGS will print
+edit kegs_conf using, say, vi, and add or change disks.  KEGS will print
 messages in the debug window describing what new disks it has found.
 Changing disks in slot 7 does not work, but you can move around
 disks in slots 5 and 6.  This allows you to "eject" disks and change them.

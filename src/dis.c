@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.75 99/10/23 02:06:19 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.78 2000/09/24 00:54:32 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -24,6 +24,7 @@ const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.75 99/10/23 02:06:19 kentd Ex
 extern byte *g_memory_ptr;
 extern byte *g_slow_memory_ptr;
 extern byte *g_rom_fc_ff_ptr;
+extern byte *g_rom_cards_ptr;
 extern word32 g_mem_size_base, g_mem_size_exp;
 extern int halt_sim;
 extern int enter_debug;
@@ -639,19 +640,41 @@ do_debug_list()
 	}
 }
 
+const char *g_kegs_rom_names[] = { "ROM", "ROM.01", "ROM.03", 0 };
+
+const char *g_kegs_c1rom_names[] = { 0 };
+const char *g_kegs_c2rom_names[] = { 0 };
+const char *g_kegs_c3rom_names[] = { 0 };
+const char *g_kegs_c4rom_names[] = { 0 };
+const char *g_kegs_c5rom_names[] = { 0 };
+const char *g_kegs_c6rom_names[] = { "c600.rom", "controller.rom", "disk.rom",
+				"DISK.ROM", "diskII.prom", 0 };
+const char *g_kegs_c7rom_names[] = { 0 };
+
+const char **g_kegs_rom_card_list[8] = {
+	0,			g_kegs_c1rom_names,
+	g_kegs_c2rom_names,	g_kegs_c3rom_names,
+	g_kegs_c4rom_names,	g_kegs_c5rom_names,
+	g_kegs_c6rom_names,	g_kegs_c7rom_names };
+
 void
 load_roms()
 {
+	char	name_buf[256];
 	struct stat stat_buf;
+	const char **names_ptr;
 	int	len;
 	int	fd;
 	int	ret;
+	int	i;
 
 	g_rom_version = 0;
-	fd = open("ROM", O_RDONLY | O_BINARY);
+	setup_kegs_file(&name_buf[0], (int)sizeof(name_buf), 0,
+							&g_kegs_rom_names[0]);
+	fd = open(name_buf, O_RDONLY | O_BINARY);
 	if(fd < 0) {
-		printf("Open ROM failed: %d\n", fd);
-		printf("errno: %d\n", errno);
+		printf("Open ROM file %s failed:%d, errno:%d\n", name_buf, fd,
+				errno);
 		my_exit(-3);
 	}
 
@@ -680,6 +703,37 @@ load_roms()
 	if(ret != len) {
 		printf("errno: %d\n", errno);
 		my_exit(-3);
+	}
+	close(fd);
+
+	memset(&g_rom_cards_ptr[0], 0, 256*16);
+
+	for(i = 1; i < 8; i++) {
+		names_ptr = g_kegs_rom_card_list[i];
+		if(names_ptr == 0) {
+			continue;
+		}
+		setup_kegs_file(&name_buf[0], (int)sizeof(name_buf), 1,
+								names_ptr);
+
+		if(name_buf[0] != 0) {
+			fd = open(name_buf, O_RDONLY | O_BINARY);
+			if(fd < 0) {
+				printf("Open card ROM file %s failed: %d "
+					"err:%d\n", name_buf, fd, errno);
+				my_exit(-3);
+			}
+
+			len = 256;
+			ret = read(fd, &g_rom_cards_ptr[i*0x100], len);
+
+			if(ret != len) {
+				printf("errno: %d, expected %d, got %d\n",
+					errno, len, ret);
+				my_exit(-3);
+			}
+			close(fd);
+		}
 	}
 
 	if(g_rom_version == 1) {

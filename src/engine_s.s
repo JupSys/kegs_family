@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.149 99/10/31 21:07:35 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.150 2000/07/07 00:38:38 kentd Exp $"
 
 	.code
 
@@ -174,6 +174,7 @@ rcsid_engine_s_s
 	.import	g_memory_ptr,data
 	.import	g_dummy_memory1_ptr,data
 	.import	g_rom_fc_ff_ptr,data
+	.import	g_rom_cards_ptr,data
 
 	.export	fixed_memory_ptrs_init,code
 fixed_memory_ptrs_init
@@ -187,6 +188,10 @@ fixed_memory_ptrs_init
 
 	LDC(rom_fc_ff,arg0)
 	LDC(g_rom_fc_ff_ptr,arg1)
+	stw	arg0,(arg1)
+
+	LDC(rom_cards,arg0)
+	LDC(g_rom_cards_ptr,arg1)
 	stw	arg0,(arg1)
 
 	bv	0(link)
@@ -2453,9 +2458,11 @@ g_engine_c_mode
 
 	.export slow_memory,data
 	.export rom_fc_ff,data
+	.export rom_cards,data
 	.export dummy_memory1,data
 	.align	0x100
 slow_memory	.block	128*1024
 dummy_memory1	.block	3*1024
 rom_fc_ff	.block	256*1024
+rom_cards	.block	256*16
 

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.154 2000/02/08 12:24:53 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.157 2000/09/24 00:57:04 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -510,7 +510,7 @@ dev_video_init()
 		exit(1);
 	}
 
-	vid_printf("Just opened display = %08x\n", (word32)display);
+	vid_printf("Just opened display = %p\n", display);
 	fflush(stdout);
 
 	screen_num = DefaultScreen(display);
@@ -680,8 +680,8 @@ dev_video_init()
 					&dint_main_win, vis, 0x10);
 	}
 
-	vid_printf("data_text[0]: %08x, g_use_shmem: %d\n",
-				(word32)data_text[0], g_use_shmem);
+	vid_printf("data_text[0]: %p, g_use_shmem: %d\n",
+				data_text[0], g_use_shmem);
 
 	/* Done with visualList now */
 	XFree(visualList);
@@ -927,7 +927,7 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 		}
 	}
 
-	vid_printf("xim: %08x\n", (word32)xim);
+	vid_printf("xim: %p\n", xim);
 	*xim_in = xim;
 	if(xim == 0) {
 		return 0;
@@ -944,7 +944,7 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 
 	/* Still working */
 	seginfo->shmaddr = (char *)shmat(seginfo->shmid, 0, 0);
-	vid_printf("seginfo->shmaddr: %08x\n", (word32)seginfo->shmaddr);
+	vid_printf("seginfo->shmaddr: %p\n", seginfo->shmaddr);
 	if(seginfo->shmaddr == ((char *) -1)) {
 		XDestroyImage(xim);
 		return 0;
@@ -977,8 +977,7 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 	}
 
 	*databuf = (byte *)xim->data;
-	vid_printf("Sharing memory. xim: %08x, xim->data: %08x\n",
-		(word32)xim, (word32)xim->data);
+	vid_printf("Sharing memory. xim: %p, xim->data: %p\n", xim, xim->data);
 
 	return 1;
 }
@@ -1015,7 +1014,7 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 	}
 	ptr = (byte *)malloc((width * height * mdepth) >> 3);
 
-	vid_printf("ptr: %08x\n", (word32)ptr);
+	vid_printf("ptr: %p\n", ptr);
 
 	if(ptr == 0) {
 		printf("malloc for data failed, mdepth: %d\n", mdepth);
@@ -1034,7 +1033,7 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 		}
 	}
 
-	vid_printf("xim.data: %08x\n", (word32)xim->data);
+	vid_printf("xim.data: %p\n", xim->data);
 
 	return xim;
 }
@@ -1230,13 +1229,12 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 		srcy = 0;
 	}
 
-	if(g_screen_depth > 8 && g_screen_depth <= 16) {
+	if(g_screen_mdepth > 8 && g_screen_mdepth <= 16) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to16(xim, xint_main_win, left_pix, srcy,
 			(right_pix - left_pix), 16*(end_line - start_line));
 		xim = xint_main_win;
-	}
-	if(g_screen_depth == 24) {
+	} else if(g_screen_mdepth > 16) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to24(xim, xint_main_win, left_pix, srcy,
 			(right_pix - left_pix), 16*(end_line - start_line));
@@ -1277,13 +1275,14 @@ x_redraw_border_sides_lines(int end_x, int width, int start_line,
 		start_line, end_line, end_x - width, end_x);
 #endif
 	xim = ximage_border_sides;
-	if(g_screen_depth > 8 && g_screen_depth <= 16) {
+	if(g_screen_mdepth > 8 && g_screen_mdepth <= 16) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to16(xim, xint_border_sides, 0, 16*start_line,
 			width, 16*(end_line - start_line));
 		xim = xint_border_sides;
-	}
-	if(g_screen_depth == 24) {
+	} else if(g_screen_depth > 16) {
+
+		return;
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to24(xim, xint_border_sides, 0, 16*start_line,
 			width, 16*(end_line - start_line));
@@ -1357,16 +1356,16 @@ x_refresh_border_special()
 	height = BASE_MARGIN_TOP;
 
 	xim = ximage_border_special;
-	if(g_screen_depth > 8 && g_screen_depth <= 16) {
+	if(g_screen_mdepth > 8 && g_screen_mdepth <= 16) {
 		/* translate from 8-bit pseudo to correct visual */
 		x_convert_8to16(xim, xint_border_special, 0, 0,
 			width, BASE_MARGIN_BOTTOM);
 		x_convert_8to16(xim, xint_border_special, 0, BASE_MARGIN_BOTTOM,
 			width, BASE_MARGIN_TOP);
 		xim = xint_border_special;
-	}
-	if(g_screen_depth == 24) {
+	} else if(g_screen_mdepth > 16) {
 		/* translate from 8-bit pseudo to correct visual */
+		return;
 		x_convert_8to24(xim, xint_border_special, 0, 0,
 			width, BASE_MARGIN_BOTTOM);
 		x_convert_8to24(xim, xint_border_special, 0, BASE_MARGIN_BOTTOM,
@@ -1742,6 +1741,8 @@ handle_keysym(XEvent *xev_in)
 			break;
 		/* 0072 is for cra@WPI.EDU who says it's Break under XFree86 */
 		case 0x0072:
+		/* 006e is break according to mic@research.nj.nec.com */
+		case 0x006e:
 			keysym = XK_Break;
 			break;
 

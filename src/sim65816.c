@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.302 2000/01/10 14:25:00 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.305 2000/09/24 00:55:59 kentd Exp $";
 
 #include <math.h>
 
@@ -19,6 +19,10 @@ const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.302 2000/01/10 14:2
 #include "defc.h"
 #undef INCLUDE_RCSID_C
 
+const char *g_kegs_default_paths[] = { "", "./", "~/", "/usr/local/lib/",
+	"/usr/local/kegs/", "/usr/local/lib/kegs/", "/usr/share/kegs/",
+	"/usr/share/", "/var/lib/", "/usr/lib/", "/lib/", "/etc/",
+	"/etc/kegs/", 0 };
 
 #define MAX_EVENTS	64
 
@@ -137,6 +141,7 @@ byte *g_slow_memory_ptr = 0;
 byte *g_memory_ptr = 0;
 byte *g_dummy_memory1_ptr = 0;
 byte *g_rom_fc_ff_ptr = 0;
+byte *g_rom_cards_ptr = 0;
 
 Page_info page_info_rd_wr[2*65536 + PAGE_INFO_PAD_SIZE];
 
@@ -174,9 +179,8 @@ show_pc_log()
 		fprintf(stderr,"fopen failed...errno: %d\n", errno);
 		exit(2);
 	}
-	fprintf(pcfile, "current pc_log_ptr: %08x, start: %08x, end: %08x\n",
-		(word32)log_pc_ptr, (word32)log_pc_start_ptr,
-		(word32)log_pc_end_ptr);
+	fprintf(pcfile, "current pc_log_ptr: %p, start: %p, end: %p\n",
+		log_pc_ptr, log_pc_start_ptr, log_pc_end_ptr);
 
 	start_dcycs = log_pc_ptr->dcycs;
 
@@ -362,7 +366,7 @@ get_memory_io(word32 loc, double *cyc_ptr)
 	}
 
 	printf("get_memory_io for addr: %06x\n", loc);
-	printf("stat for addr: %06x = %08x\n", loc,
+	printf("stat for addr: %06x = %p\n", loc,
 				GET_PAGE_INFO_RD((loc >> 8) & 0xffff));
 	set_halt(g_halt_on_bad_read);
 
@@ -594,8 +598,8 @@ do_reset()
 }
 
 #define CHECK(start, var, value, var1, var2)				\
-	var2 = (word32)&(var);						\
-	var1 = (word32)(start);						\
+	var2 = PTR2WORD(&(var));					\
+	var1 = PTR2WORD((start));					\
 	if((var2 - var1) != value) {					\
 		printf("CHECK: " #var " is 0x%x, but " #value " is 0x%x\n", \
 			(var2 - var1), value);				\
@@ -616,7 +620,6 @@ check_engine_asm_defines()
 
 	eptr = &ereg;
 	CHECK(eptr, eptr->fcycles, ENGINE_FCYCLES, val1, val2);
-
 	CHECK(eptr, eptr->fplus_ptr, ENGINE_FPLUS_PTR, val1, val2);
 	CHECK(eptr, eptr->acc, ENGINE_REG_ACC, val1, val2);
 	CHECK(eptr, eptr->xreg, ENGINE_REG_XREG, val1, val2);
@@ -655,7 +658,7 @@ memalloc_align(int size, int skip_amt)
 
 	skip_amt = MAX(256, skip_amt);
 	bptr = malloc(size + skip_amt);
-	addr = ((word32)bptr) & 0xff;
+	addr = PTR2WORD(bptr) & 0xff;
 
 	/* must align bptr to be 256-byte aligned */
 	/* this code should work even if ptrs are > 32 bits */
@@ -846,6 +849,50 @@ main(int argc, char **argv)
 	end_screen();
 
 	return 0;
+}
+
+void
+setup_kegs_file(char *outname, int maxlen, int ok_if_missing,
+			const char **name_ptr)
+{
+	struct stat stat_buf;
+	const char **path_ptr;
+	const char **cur_name_ptr, **save_path_ptr;
+	int	ret;
+
+	outname[0] = 0;
+
+	path_ptr = &g_kegs_default_paths[0];
+
+	save_path_ptr = path_ptr;
+	while(*path_ptr) {
+		cur_name_ptr = name_ptr;
+		while(*cur_name_ptr) {
+			sprintf(outname, "%s%s", *path_ptr, *cur_name_ptr);
+			printf("Trying =%s=\n", outname);
+			ret = stat(outname, &stat_buf);
+			if(ret == 0) {
+				/* got it! */
+				return;
+			}
+			cur_name_ptr++;
+		}
+		path_ptr++;
+	}
+
+	if(ok_if_missing) {
+		outname[0] = 0;
+		return;
+	}
+
+	/* couldn't find it, print out all the attempts */
+	path_ptr = save_path_ptr;
+	printf("Could not find %s in any of these directories:\n", *name_ptr);
+	while(*path_ptr) {
+		printf("  %s\n", *path_ptr++);
+	}
+
+	exit(2);
 }
 
 Event g_event_list[MAX_EVENTS];
@@ -1248,8 +1295,8 @@ run_prog()
 				break;
 			case EV_STOP:
 				printf("type: EV_STOP\n");
-				printf("next: %08x, dcycs: %f\n",
-					(word32)g_event_start.next, dcycs);
+				printf("next: %p, dcycs: %f\n",
+						g_event_start.next, dcycs);
 				db1 = g_event_start.next;
 				halt_printf("next.dcycs: %f\n", db1->dcycs);
 				break;
@@ -1586,7 +1633,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.58");
+		update_status_line(6, "KEGS v0.59");
 
 		g_status_refresh_needed = 1;
 

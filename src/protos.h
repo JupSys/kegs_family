@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.136 2000/02/08 12:23:55 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.138 2000/07/07 00:39:09 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -278,6 +278,7 @@ void check_engine_asm_defines(void);
 byte *memalloc_align(int size, int skip_amt);
 void memory_ptr_init(void);
 int main(int argc, char **argv);
+void setup_kegs_file(char *outname, int maxlen, int ok_if_missing, const char **name_ptr);
 void initialize_events(void);
 void check_for_one_event_type(int type);
 void add_event_entry(double dcycs, int type);
@@ -402,7 +403,7 @@ void refresh_line(int line);
 void refresh_border(void);
 void end_screen(void);
 int font_fail(int num);
-void read_a2_font(char *fontname);
+void read_a2_font(void);
 int skip_to_brace(FILE *font_file);
 int get_file_byte(FILE *font_file);
 int get_token(FILE *font_file);

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.88 99/10/31 19:15:29 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.89 2000/09/24 00:56:31 kentd Exp $";
 
 #include "defc.h"
 
@@ -210,7 +210,8 @@ void
 sound_init()
 {
 	Doc_reg	*rptr;
-	word32	shmaddr;
+	word32	*shmaddr;
+	int	tmp;
 	int	shmid;
 	int	ret;
 	int	pid;
@@ -259,21 +260,21 @@ sound_init()
 		exit(2);
 	}
 
-	shmaddr = (word32)shmat(shmid, 0, 0);
-	if(shmaddr == -1) {
-		printf("sound_init: shmat ret: %08x, errno: %d\n", shmaddr,
+	shmaddr = shmat(shmid, 0, 0);
+	tmp = (int)PTR2WORD(shmaddr);
+	if(tmp == -1) {
+		printf("sound_init: shmat ret: %p, errno: %d\n", shmaddr,
 			errno);
 		exit(3);
 	}
 
 	ret = shmctl(shmid, IPC_RMID, 0);
 	if(ret < 0) {
-		printf("sound_init: shmctl ret: %d, errno: %d\n", ret,
-			errno);
+		printf("sound_init: shmctl ret: %d, errno: %d\n", ret, errno);
 		exit(4);
 	}
 
-	g_sound_shm_addr = (word32 *)shmaddr;
+	g_sound_shm_addr = shmaddr;
 
 	/* prepare pipe so parent can signal child each other */
 	/*  pipe[0] = read side, pipe[1] = write end */
@@ -474,9 +475,9 @@ check_for_range(word32 *addr, int num_samps, int offset)
 		left = shortptr[0];
 		right = shortptr[1];
 		if((left > 0x3000) || (right > 0x3000)) {
-			halt_printf("Sample %d of %d at snd_buf: %08x is: "
+			halt_printf("Sample %d of %d at snd_buf: %p is: "
 				"%d/%d\n", i + offset, num_samps,
-				(word32)(addr+i), left, right);
+				&addr[i], left, right);
 			return;
 		}
 

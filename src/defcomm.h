@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.88 99/10/23 02:05:56 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:17 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -82,15 +82,15 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.88 99/10/23 02:05:56
 
 
 #define ENGINE_FCYCLES		0x00
-#define ENGINE_FPLUS_PTR	0x08
-#define ENGINE_REG_KPC		0x0c
-#define ENGINE_REG_ACC		0x10
-#define ENGINE_REG_XREG		0x14
-#define ENGINE_REG_YREG		0x18
-#define ENGINE_REG_STACK	0x1c
-#define ENGINE_REG_DBANK	0x20
-#define ENGINE_REG_DIRECT	0x24
-#define ENGINE_REG_PSR		0x28
+#define ENGINE_REG_KPC		0x08
+#define ENGINE_REG_ACC		0x0c
+#define ENGINE_REG_XREG		0x10
+#define ENGINE_REG_YREG		0x14
+#define ENGINE_REG_STACK	0x18
+#define ENGINE_REG_DBANK	0x1c
+#define ENGINE_REG_DIRECT	0x20
+#define ENGINE_REG_PSR		0x24
+#define ENGINE_FPLUS_PTR	0x28
 
 #define LOG_PC_DCYCS		0x00
 #define LOG_PC_DBANK_KPC	0x08

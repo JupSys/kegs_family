@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.75 99/10/23 02:05:42 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.76 2000/09/24 00:53:43 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -102,22 +102,30 @@ STRUCT(Fplus) {
 
 STRUCT(Engine_reg) {
 	double	fcycles;
-	Fplus	*fplus_ptr;
-
 	word32	kpc;
 	word32	acc;
+
 	word32	xreg;
 	word32	yreg;
+
 	word32	stack;
 	word32	dbank;
+
 	word32	direct;
 	word32	psr;
+	Fplus	*fplus_ptr;
 };
 
-typedef word32 Pg_info;
+typedef byte *Pg_info;
 STRUCT(Page_info) {
 	Pg_info rd_wr;
 };
+
+#ifdef __LP64__
+# define PTR2WORD(a)	((unsigned long)(a))
+#else
+# define PTR2WORD(a)	((unsigned int)(a))
+#endif
 
 
 #define ALTZP	(statereg & 0x80)

@@ -1,4 +1,12 @@
 
+Changes in KEGS v0.59 since v0.58 (7/07/00)
+- Added support for multiple paths to the default files and also multiple
+	names for many default files.  This should make the .rpm distribution
+	work better.
+- Add another keycode to mean break according to mic@research.nj.nec.com.
+- Add support for various ROMs to get plugged into slot 1-7.
+- Fix code so that it should compile on 64-bit platforms.
+
 Changes in KEGS v0.58 since v0.57 (2/08/00)
 - Setting the execute bit on the disk image no longer means no-write-thru.
 	Too many new users were getting confused by this.

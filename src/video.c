@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.101 2000/02/06 01:45:03 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.103 2000/09/24 00:56:44 kentd Exp $";
 
 #include <time.h>
 
@@ -311,7 +311,7 @@ video_init()
 
 	dev_video_init();
 
-	read_a2_font("font.65sim");
+	read_a2_font();
 
 	vid_printf("Zeroing out video memory\n");
 
@@ -420,9 +420,9 @@ show_a2_line_stuff()
 	int	i;
 
 	for(i = 0; i < 25; i++) {
-		printf("line: %d: stat: %04x, ptr: %08x, reparse: %d, "
+		printf("line: %d: stat: %04x, ptr: %p, reparse: %d, "
 			"left_edge:%d, right_edge:%d\n",
-			i, a2_line_stat[i], (word32)a2_line_xim[i],
+			i, a2_line_stat[i], a2_line_xim[i],
 			a2_line_must_reparse[i], a2_line_left_edge[i],
 			a2_line_right_edge[i]);
 	}
@@ -2586,6 +2586,7 @@ end_screen()
 }
 
 byte font_array[256][8];
+const char *g_kegs_font_names[] = { "font.65sim", "font.kegs", "kegs.font", 0 };
 
 int
 font_fail(int num)
@@ -2595,8 +2596,9 @@ font_fail(int num)
 }
 
 void
-read_a2_font(char *fontname)
+read_a2_font()
 {
+	char	name_buf[256];
 	FILE	*font_file;
 	byte	*f40_e_ptr;
 	byte	*f40_o_ptr;
@@ -2608,10 +2610,11 @@ read_a2_font(char *fontname)
 	int	mask;
 	int	pix;
 
-	font_file = fopen(fontname, "rt");
+	setup_kegs_file(name_buf, sizeof(name_buf), 0, &g_kegs_font_names[0]);
+	font_file = fopen(name_buf, "rt");
 	if(font_file == (FILE *)0) {
-		printf("fopen of %s ret %08x, errno: %d\n", fontname,
-				(word32)font_file, errno);
+		printf("fopen of %s ret %p, errno: %d\n", name_buf,
+				font_file, errno);
 	}
 
 	for(char_num = 0; char_num < 256; char_num++) {

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.97 2000/02/08 12:02:58 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.99 2000/09/24 01:01:46 kentd Exp $";
 
 #include "defc.h"
 
@@ -23,11 +23,13 @@ extern word32 g_slot_motor_detect;
 #define NIB_LEN_525	0x1900		/* 51072 bits per track */
 #define NIBS_FROM_ADDR_TO_DATA		20
 
-#define DISK_CONF_FILE			"disk_conf"
-
 #define DSK_TYPE_RAW			0
 #define DSK_TYPE_PRODOS			1
 #define DSK_TYPE_NIB			2
+
+char g_kegs_conf_name[256];
+
+const char *g_kegs_conf_names[] = { "kegs_conf", "disk_conf", ".kegs_conf", 0 };
 
 const byte phys_to_dos_sec[] = {
 	0x00, 0x07, 0x0e, 0x06,  0x0d, 0x05, 0x0c, 0x04,
@@ -165,6 +167,10 @@ iwm_init()
 	} else {
 		halt_printf("iwm_init called twice!\n");
 	}
+
+	// Find any kegs_conf and disk_conf files
+	setup_kegs_file(&g_kegs_conf_name[0], sizeof(g_kegs_conf_name), 0,
+					&g_kegs_conf_names[0]);
 
 	iwm_reset();
 
@@ -344,14 +350,14 @@ iwm_vbl_update()
 
 		/* Also see if disk_conf has changed */
 
-		ret = stat(DISK_CONF_FILE, &stat_buf);
+		ret = stat(g_kegs_conf_name, &stat_buf);
 		if(ret != 0) {
 			halt_printf("IWM: stat of disk_conf ret:%d, errno:%d\n",
 				ret, errno);
 		} else {
 			mtime = stat_buf.st_mtime;
 			if(mtime > g_disk_conf_mtime) {
-				iwm_printf("%s has changed\n", DISK_CONF_FILE);
+				iwm_printf("%s has changed\n",g_kegs_conf_name);
 				if(g_disk_conf_mtime != 0) {
 					g_reparse_delay = 1;	/* 1 * 1/3 sec*/
 				}
@@ -2401,7 +2407,7 @@ maybe_parse_disk_conf_file()
 		iwm.smartport[i].just_ejected |= 0x80;
 	}
 
-	fconf = fopen(DISK_CONF_FILE, "rt");
+	fconf = fopen(g_kegs_conf_name, "rt");
 	if(fconf == 0) {
 		printf("cannot open disk_conf!  Stopping!\n");
 		exit(3);
@@ -2935,16 +2941,16 @@ eject_disk_by_num(int slot, int drive)
 	char	*ptr;
 	int	line;
 
-	sprintf(tmp_buf2, "%s.ktmp1", DISK_CONF_FILE);
+	sprintf(tmp_buf2, "%s.ktmp1", g_kegs_conf_name);
 
 	(void)unlink(tmp_buf2);			/* "rm -f tmp_buf2" */
-	kegs_file_copy(DISK_CONF_FILE, tmp_buf2);
+	kegs_file_copy(g_kegs_conf_name, tmp_buf2);
 
 	fconf_old = fopen(tmp_buf2, "rt");
-	fconf_new = fopen(DISK_CONF_FILE, "wt+");
+	fconf_new = fopen(g_kegs_conf_name, "wt+");
 	if(fconf_old == 0 || fconf_new == 0) {
 		printf("Cannot open %s or %s: Stopping\n", tmp_buf2,
-				DISK_CONF_FILE);
+				g_kegs_conf_name);
 		exit(3);
 	}
 	line = 0;
@@ -2959,7 +2965,7 @@ eject_disk_by_num(int slot, int drive)
 				(buf[2] == 'd') && (buf[3] == (0x30 + drive))){
 			/* comment out this line */
 			printf("Ejecting s%dd%d from line %d of %s\n",
-				slot, drive, line, DISK_CONF_FILE);
+				slot, drive, line, g_kegs_conf_name);
 			fputs("#", fconf_new);
 		}
 		fputs(buf, fconf_new);
