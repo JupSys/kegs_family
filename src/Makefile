@@ -1,0 +1,117 @@
+# $Id: release_makefile_base,v 1.9 2002/11/19 08:23:55 kadickey Exp $
+
+OBJECTS1 = adb.o clock.o dis.o engine_c.o scc.o iwm.o joystick_driver.o \
+	moremem.o paddles.o sim65816.o smartport.o sound.o sound_driver.o \
+	video.o
+
+include vars
+
+.SUFFIXES: .dep .proto
+
+AS = $(CC)
+
+XLIBS = -L/usr/X11R6/lib
+PERL = perl
+
+all: $(TARGET)
+
+specials: 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c size_s
+
+specials_clean:
+	rm -f 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c size_s
+
+
+# Mac builds:
+kegsmac: $(OBJECTS) compile_time.o
+	$(CC) $(CCOPTS) $(LDOPTS) -arch ppc $(OBJECTS) compile_time.o $(LDFLAGS) -o kegsmac $(EXTRA_LIBS) -prebind -framework Carbon
+	mkdir -p ../KEGSMAC.app/Contents/Resources/English.lproj/main.nib
+	mkdir -p ../KEGSMAC.app/Contents/MacOS
+	mv kegsmac ../KEGSMAC.app/Contents/MacOS/KEGSMAC
+	echo "APPL????" > ../KEGSMAC.app/Contents/PkgInfo
+	cp -f Info.plist ../KEGSMAC.app/Contents/
+	cp -f InfoPlist.strings ../KEGSMAC.app/Contents/Resources/English.lproj/
+	cp -f info.nib ../KEGSMAC.app/Contents/Resources/English.lproj/main.nib
+	cp -f classes.nib ../KEGSMAC.app/Contents/Resources/English.lproj/main.nib
+	cp -f objects.xib ../KEGSMAC.app/Contents/Resources/English.lproj/main.nib
+
+# Linux for X builds:
+kegs: $(OBJECTS) compile_time.o
+	$(CC) $(CCOPTS) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(XLIBS) $(EXTRA_LIBS) -lX11
+	mv kegs ..
+
+# Cygwin for X builds:
+kegs.exe: $(OBJECTS) compile_time.o
+	$(CC) $(CCOPTS) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(XLIBS) $(EXTRA_LIBS) -lXext -lX11 -lm
+	mv kegs.exe ..
+
+# Mingw32 (native windows) builds:
+kegswin.exe: $(OBJECTS) compile_time.o
+	$(CC) $(CCOPTS) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(EXTRA_LIBS) -lwinmm -lgdi32 -ldsound -lcomctl32
+	mv $(NAME)$(SUFFIX) ..
+
+
+8inst_s: instable.h
+	$(PERL) make_inst s 8 instable.h > 8inst_s
+
+16inst_s: instable.h
+	$(PERL) make_inst s 16 instable.h > 16inst_s
+
+8inst_c: instable.h
+	$(PERL) make_inst c 8 instable.h > 8inst_c
+
+16inst_c: instable.h
+	$(PERL) make_inst c 16 instable.h > 16inst_c
+
+8size: size_tab.h
+	$(PERL) make_size 8 size_tab.h > 8size
+
+16size: size_tab.h
+	$(PERL) make_size 16 size_tab.h > 16size
+
+size_c: size_tab.h
+	$(PERL) make_size c size_tab.h > size_c
+
+size_s: size_tab.h
+	$(PERL) make_size s size_tab.h > size_s
+
+
+engine_s.o: 8inst_s 8size 16inst_s 16size
+
+engine_c.o: 8inst_c 16inst_c
+
+.s.o:
+	$(AS) -c $(OPTS) -I. $*.s
+
+.c.o:
+	$(CC) $(CCOPTS) $(XOPTS) -c $(OPTS) -I. $*.c
+
+partls: partls.c
+	cc $(CCOPTS) -o partls partls.c
+
+to_pro: prodos.h prodos_protos.h to_pro.c
+	cc $(CCOPTS) -o to_pro to_pro.c
+
+
+compile_time.o: $(OBJECTS)
+
+
+# dependency stuff
+adb.o: adb.c adb.h defc.h defcomm.h iwm.h protos.h
+clock.o: clock.c defc.h defcomm.h iwm.h protos.h
+compile_time.o: compile_time.c
+dis.o: dis.c defc.h defcomm.h iwm.h protos.h disas.h
+engine_c.o: engine_c.c defc.h defcomm.h iwm.h protos.h protos_engine_c.h size_c op_routs.h defs_instr.h 8inst_c 16inst_c
+scc.o: scc.c defc.h defcomm.h iwm.h protos.h scc.h scc_driver.h
+iwm.o: iwm.c defc.h defcomm.h iwm.h protos.h iwm_35_525.h
+joystick_driver.o: joystick_driver.c defc.h defcomm.h iwm.h protos.h
+moremem.o: moremem.c defc.h defcomm.h iwm.h protos.h
+paddles.o: paddles.c defc.h defcomm.h iwm.h protos.h
+sim65816.o: sim65816.c defc.h defcomm.h iwm.h protos.h
+smartport.o: smartport.c defc.h defcomm.h iwm.h protos.h
+sound.o: sound.c defc.h defcomm.h iwm.h protos.h sound.h
+sound_driver.o: sound_driver.c defc.h defcomm.h iwm.h protos.h sound.h
+video.o: video.c defc.h defcomm.h iwm.h protos.h superhires.h
+windriver.o: windriver.c defc.h defcomm.h iwm.h protos.h protos_windriver.h winresource.h
+win32snd_driver.o: win32snd_driver.c defc.h defcomm.h iwm.h protos.h sound.h
+macdriver.o: macdriver.c defc.h defcomm.h iwm.h protos.h protos_macdriver.h
+macsnd_driver.o: macsnd_driver.c defc.h defcomm.h iwm.h protos.h sound.h

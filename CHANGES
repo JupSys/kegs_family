@@ -1,4 +1,11 @@
 
+Changes in KEGS v0.71 since v0.70 (11/20/02)
+- Improved double-hires colors a lot.  -dhr140 is no longer the default
+- Airheart relies on the PC going from 0xffff to 0x0000, so I undid the
+	change from KEGS v0.54 which allowed PC to overflow to 0x10000.
+	This slows KEGS down by about 5%.
+- Fixed X shared memory bug in KEGS v0.70 with fix from Jonathan Stark.
+
 Changes in KEGS v0.70 since v0.60 (11/18/02)
 - New buttons: Middle button is enter-debugger, and right button changes speed
 - New function key mapping (see README.kegs)
