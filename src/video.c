@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.92 99/01/31 22:14:08 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.93 99/03/02 00:08:00 kentd Exp $";
 
 #include <time.h>
 
@@ -2389,7 +2389,7 @@ void
 refresh_screen()
 {
 	register word32 start_time, start_time2;
-	register word32 end_time, end_time2;
+	register word32 end_time;
 	int	previous_superhires;
 	int	i;
 

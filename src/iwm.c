@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.86 99/02/15 21:24:26 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.88 99/03/20 22:47:00 kentd Exp $";
 
 #include "defc.h"
 
@@ -1241,8 +1241,8 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
 			if(val2 < 0) {
-				printf("Bad data area1, val:%02x,val2:\n", val,
-									val2);
+				printf("Bad data area1, val:%02x,val2:%02x\n",
+								val, val2);
 				printf(" i:%03x,n_pos:%04x\n", i, dsk->nib_pos);
 				break;
 			}
@@ -2704,10 +2704,15 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 			dsk->vol_num = buf_2img[16];
 			printf("Setting DOS 3.3 vol num to %d\n", dsk->vol_num);
 		}
+		//	Some 2IMG archives have the size byte reversed
 		size = (buf_2img[31] << 24) + (buf_2img[30] << 16) +
 				(buf_2img[29] << 8) + buf_2img[28];
 		unix_pos = (buf_2img[27] << 24) + (buf_2img[26] << 16) +
 				(buf_2img[25] << 8) + buf_2img[24];
+		if(size == 0x800c00) {
+			//	Byte reversed 0x0c8000
+			size = 0x0c8000;
+		}
 		dsk->image_start = unix_pos;
 		dsk->image_size = size;
 	} else {
@@ -2936,12 +2941,10 @@ void
 eject_disk_by_num(int slot, int drive)
 {
 	char	buf[CONF_BUF_LEN];
-	char	tmp_buf[1024];
 	char	tmp_buf2[1024];
 	FILE	*fconf_old, *fconf_new;
 	char	*ptr;
 	int	line;
-	int	ret;
 
 	sprintf(tmp_buf2, "%s.ktmp1", DISK_CONF_FILE);
 
@@ -2951,7 +2954,8 @@ eject_disk_by_num(int slot, int drive)
 	fconf_old = fopen(tmp_buf2, "rt");
 	fconf_new = fopen(DISK_CONF_FILE, "wt+");
 	if(fconf_old == 0 || fconf_new == 0) {
-		printf("Cannot open %s and %s: Stopping\n");
+		printf("Cannot open %s or %s: Stopping\n", tmp_buf2,
+				DISK_CONF_FILE);
 		exit(3);
 	}
 	line = 0;

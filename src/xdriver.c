@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.142 99/02/23 21:34:10 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.143 99/03/02 00:07:24 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -293,7 +293,6 @@ update_color_array(int col_num, int a2_color)
 {
 	XColor	*xcol, *xcol2;
 	int	palette;
-	int	red, blue, green;
 	int	doit;
 	int	full;
 
@@ -440,8 +439,8 @@ show_colormap(char *str, Colormap cmap, int index1, int index2, int index3)
 	int	i;
 	int	pix;
 
-	printf("Show colormap: %08x = %s, cmap cells: %d,%d,%d\n", cmap, str,
-			index1, index2, index3);
+	printf("Show colormap: %08x = %s, cmap cells: %d,%d,%d\n",
+			(int)cmap, str, index1, index2, index3);
 	for(i = 0; i < index1 + index2 + index3; i++) {
 		pix = i;
 		if(i >= index1) {
@@ -456,7 +455,7 @@ show_colormap(char *str, Colormap cmap, int index1, int index2, int index3)
 		xcol.pixel = pix;
 		XQueryColor(display, cmap, &xcol);
 		printf("Cell %03x: pix: %03x, R:%04x, G:%04x, B:%04x\n",
-			i, xcol.pixel, xcol.red, xcol.green, xcol.blue);
+			i, (int)xcol.pixel, xcol.red, xcol.green, xcol.blue);
 	}
 }
 
@@ -473,7 +472,6 @@ dev_video_init()
 	XVisualInfo *visualList;
 	XVisualInfo my_vis;
 	Visual	*vis;
-	word16	*ptr16;
 	char	cursor_data;
 	char	**font_ptr;
 	int	match8, match24;
@@ -489,10 +487,8 @@ dev_video_init()
 	int	visual_chosen;
 	int	red, green, blue;
 	word32	lores_col;
-	word32	val;
-	int	sh;
 	int	ret;
-	int	i, j;
+	int	i;
 	int	keycode;
 	int	tmp_array[0x80];
 
@@ -1718,7 +1714,7 @@ handle_keysym(XEvent *xev_in)
 					(keysym == a2_key_to_xsym[i][2]))) {
 
 			vid_printf("Found keysym:%04x = a[%d] = %04x or %04x\n",
-				keysym, i, a2_key_to_xsym[i][1],
+				(int)keysym, i, a2_key_to_xsym[i][1],
 				a2_key_to_xsym[i][2]);
 			/* Special: handle shift, control multiple keys */
 			/* Make user hitting Shift_L, Shift_R, and then */

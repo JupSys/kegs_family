@@ -1,4 +1,9 @@
 
+Changes in KEGS v0.45 since v0.44
+- Fix for COP instruction in engine_c.c.  Pointed out by Kelvin Sherlock.
+- Major fixes to Ensoniq emulation, SynthLab sounds much better.
+- Fix to iwm.c to deal with corrupt 2IMG archives a little better.
+
 Changes in KEGS v0.44 since v0.43
 - -audio 0 option would often cause programs to hang.  Bug was that the
    audio rate was defaulting to '0' which confused KEGS.

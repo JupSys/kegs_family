@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.63 99/01/23 19:07:07 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.64 99/03/02 00:07:35 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -116,11 +116,9 @@ STRUCT(Page_info) {
 };
 
 STRUCT(Doc_reg) {
-	double	dcyc_ev;
-	double	dcyc_ev2;
-	double	dcyc_ev3;
-	double	dcyc_ev4;
-	int	samps_to_do;
+	double	dsamp_ev;
+	double	dsamp_ev2;
+	double	complete_dsamp;
 	int	samps_left;
 	word32	cur_ptr;
 	word32	cur_inc;

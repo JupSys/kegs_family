@@ -22,7 +22,7 @@ all: specials $(NAME)$(SUFFIX) partls to_pro
 clean: specials_clean
 	rm -f *.o kegs
 
-specials: 8size 16size 8inst_c 16inst_c size_c
+specials: 8size 16size 8inst_c 16inst_c size_c Alib.h
 
 specials_clean:
 	rm -f 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c size_s Alib.h
@@ -45,6 +45,10 @@ $(NAME)$(SUFFIX): $(OBJECTS) compile_time.o specials
 
 size_c: size_tab.h
 	$(PROJROOT)/make_size c size_tab.h > size_c
+
+Alib.h:
+	rm -f Alib.h
+	$(PROJROOT)/make_alib
 
 
 engine_s.o: 8inst_s 8size 16inst_s 16size

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.119 99/02/21 23:33:19 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.120 99/03/02 00:08:15 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -38,6 +38,7 @@ void do_gen_test(int got_num, int base_seed);
 
 
 /* engine.s and engine_c.c */
+void memory_ptrs_init();
 word32 get_itimer_asm(void);
 
 word32 get_memory_c(word32 addr, int cycs);
@@ -307,7 +308,7 @@ int do_format_c7(int unit_num);
 void do_c700(word32 ret);
 
 /* sound.c */
-void doc_log_rout(char *msg, int osc, double dcycs, int etc);
+void doc_log_rout(char *msg, int osc, double dsamps, int etc);
 void show_doc_log(void);
 void sound_init(void);
 void parent_sound_get_sample_rate(int read_fd);
@@ -322,16 +323,16 @@ void send_sound_to_file(word32 *addr, int cur_pos, int num_samps);
 void send_sound(int fd, int real_samps, int size);
 void show_c030_state(void);
 void show_c030_samps(int *outptr, int num);
-void sound_play(double dcycs);
+void sound_play(double dsamps);
 void doc_handle_event(int osc, double dcycs);
-int doc_sound_end(int osc, int samps_to_do, double dcycs, int can_repeat);
+void doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps);
 void add_sound_irq(int osc);
 void remove_sound_irq(int osc);
-void start_sound(int osc, double dcycs, int samps_to_do);
-void wave_end_estimate(int osc, double dcycs, int samps_to_do);
+void start_sound(int osc, double eff_dsamps, double dsamps);
+void wave_end_estimate(int osc, double eff_dsamps, double dsamps);
 void remove_sound_event(int osc);
-void doc_write_ctl_reg(int osc, int val, double dcycs, int samps_to_do);
-void doc_recalc_sound_parms(int osc, double dcycs);
+void doc_write_ctl_reg(int osc, int val, double dsamps);
+void doc_recalc_sound_parms(int osc, double eff_dcycs, double dsamps);
 int doc_read_c030(double dcycs);
 int doc_read_c03c(double dcycs);
 int doc_read_c03d(double dcycs);

@@ -13,7 +13,7 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$Header: instable.h,v 1.88 98/05/17 16:21:57 kentd Exp $"
+	.stringz "@(#)$Header: instable.h,v 1.89 99/03/01 21:21:53 kentd Exp $"
 # endif
 #endif
 
@@ -99,9 +99,7 @@ brk_testing_SYM
 		PUSH16(pc & 0xffff);
 		PUSH8(psr & 0xff);
 		GET_MEMORY16(0xfffe, pc);
-		kbank = 0;
 		dbank = 0;
-		psr |= 0x4;
 	} else {
 		PUSH8(kbank);
 		PUSH16(pc);
@@ -109,9 +107,10 @@ brk_testing_SYM
 		GET_MEMORY16(0xffe6, pc);
 		halt_sim = 3;
 		printf("Halting for native break!\n");
-		kbank = 0;
-		psr |= 0x4;
 	}
+	kbank = 0;
+	psr |= 0x4;
+	psr &= ~(0x8);
 #endif
 
 inst01_SYM		/*  ORA (Dloc,X) */
@@ -160,9 +159,9 @@ cop_native_SYM
 	bl	push_8,link
 	extru	psr,31,8,arg0
 
-	ldil	l%0xfff4,arg0
+	ldil	l%0xffe4,arg0
 	bl	get_mem_long_16,link
-	ldo	r%0xfff4(arg0),arg0
+	ldo	r%0xffe4(arg0),arg0
 
 	ldi	0,kbank
 	copy	ret0,pc
@@ -171,9 +170,23 @@ cop_native_SYM
 
 
 #else
-	GET_1BYTE_ARG;
-	CYCLES_PLUS_2;
-	FINISH(RET_COP, arg);
+	g_num_cop++;
+	pc += 2;
+	if(psr & 0x100) {
+		PUSH16(pc & 0xffff);
+		PUSH8(psr & 0xff);
+		GET_MEMORY16(0xfff4, pc);
+		dbank = 0;
+		halt_sim = 3;
+	} else {
+		PUSH8(kbank);
+		PUSH16(pc & 0xffff);
+		PUSH8(psr & 0xff);
+		GET_MEMORY16(0xffe4, pc);
+	}
+	kbank = 0;
+	psr |= 4;
+	psr &= ~(0x8);
 #endif
 
 inst03_SYM		/*  ORA Disp8,S */
