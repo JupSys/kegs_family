@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.20 98/07/13 21:27:35 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.21 98/07/19 16:17:19 kentd Exp $";
 
 #include "defc.h"
 
@@ -324,6 +324,8 @@ scc_write_reg(int port, word32 val, double dcycs)
 			break;
 		case 0x5:	/* reset tx int pending */
 			scc_clr_tx_int(port);
+			break;
+		case 0x6:	/* reset rr1 bits */
 			break;
 		case 0x7:	/* reset highest pri int pending */
 			if(scc_ptr->int_pending_rx) {

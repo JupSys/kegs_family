@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.74 98/07/11 01:28:09 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.79 98/07/28 00:11:55 kentd Exp $";
 
 #include "defc.h"
 
@@ -69,6 +69,7 @@ int	g_track_nibs_35[] = {
 
 
 int	g_fast_disk_emul = 1;
+int	g_fast_disk_unnib = 0;
 int	g_iwm_fake_fast = 0;
 
 
@@ -648,7 +649,7 @@ iwm_read_status35(double dcycs)
 			break;
 		case 0x0c:	/* disk switched?? */
 			/* 0 = not switched, 1 = switched? */
-			tmp = dsk->just_ejected;
+			tmp = (dsk->just_ejected != 0);
 			iwm_printf("Read disk switched: %d\n", tmp);
 			return tmp;
 			break;
@@ -726,6 +727,7 @@ iwm_do_action35(double dcycs)
 		case 0x0d:	/* eject disk */
 			printf("Ejecting disk!\n");
 			dsk->just_ejected = 4;
+			eject_disk_by_num(5, drive+1);
 #if 0
 			set_halt(1);
 #endif
@@ -1116,6 +1118,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 	iwm_move_to_track(dsk, qtr_track);
 
 	dsk->nib_pos = 0;
+	g_fast_disk_unnib = 1;
 
 	track_len = trk->track_len;
 
@@ -1220,7 +1223,9 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
 			if(val2 < 0) {
-				printf("Bad data area1, read: %02x\n", val);
+				printf("Bad data area1, val:%02x,val2:\n", val,
+									val2);
+				printf(" i:%03x,n_pos:%04x\n", i, dsk->nib_pos);
 				break;
 			}
 			prev_val = val2 ^ prev_val;
@@ -1233,6 +1238,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			val2 = from_disk_byte[val];
 			if(val2 < 0) {
 				printf("Bad data area2, read: %02x\n", val);
+				printf("  nib_pos: %04x\n", dsk->nib_pos);
 				break;
 			}
 			prev_val = val2 ^ prev_val;
@@ -1244,11 +1250,13 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		val2 = from_disk_byte[val];
 		if(val2 < 0) {
 			printf("Bad data area3, read: %02x\n", val);
+			printf("  nib_pos: %04x\n", dsk->nib_pos);
 			break;
 		}
 		if(val2 != prev_val) {
 			printf("Bad data cksum, got %02x, wanted: %02x\n",
 				val2, prev_val);
+			printf("  nib_pos: %04x\n", dsk->nib_pos);
 			break;
 		}
 
@@ -1277,6 +1285,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 
 	iwm_move_to_track(dsk, save_qtr_track);
 	dsk->nib_pos = save_nib_pos;
+	g_fast_disk_unnib = 0;
 
 	if(status == 0) {
 		return 1;
@@ -1284,6 +1293,10 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 
 	printf("Nibblization not done, %02x sectors found on track %02x\n",
 		num_sectors_done, qtr_track>>2);
+	printf("my_nib_cnt: %04x, trk_len: %04x\n", my_nib_cnt, track_len);
+	for(i = 0; i < 16; i++) {
+		printf("sector_done[%d] = %d\n", i, sector_done[i]);
+	}
 	return -1;
 }
 
@@ -1319,6 +1332,7 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 	iwm_move_to_track(dsk, qtr_track);
 
 	dsk->nib_pos = 0;
+	g_fast_disk_unnib = 1;
 
 	track_len = trk->track_len;
 
@@ -1448,7 +1462,8 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
 			if(val2 < 0) {
-				printf("Bad data area1, read: %02x\n", val);
+				printf("Bad data area1b, read: %02x\n", val);
+				printf(" i:%03x,n_pos:%04x\n", i, dsk->nib_pos);
 				break;
 			}
 			tmp_66 = val2;
@@ -1606,6 +1621,7 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 
 	iwm_move_to_track(dsk, save_qtr_track);
 	dsk->nib_pos = save_nib_pos;
+	g_fast_disk_unnib = 0;
 
 	if(status == 0) {
 		return 1;
@@ -1915,7 +1931,11 @@ iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 	int	i;
 
 	word_ptr = (word32 *)&(trk->nib_area[0]);
+#ifdef KEGS_LITTLE_ENDIAN
+	val = 0xff08ff08;
+#else
 	val = 0x08ff08ff;
+#endif
 	for(i = 0; i < trk->track_len; i += 4) {
 		*word_ptr++ = val;
 	}
@@ -2266,6 +2286,7 @@ iwm_show_track(int slot_drive, int track)
 	trk = &(dsk->tracks[qtr_track]);
 
 	if(trk->track_len <= 0) {
+		printf("Track_len: %d\n", trk->track_len);
 		printf("No track for type: %d, drive: %d, qtrk: %02x\n",
 			g_apple35_sel, drive, qtr_track);
 		return;
@@ -2343,6 +2364,7 @@ maybe_parse_disk_conf_file()
 	int	size;
 	int	len;
 	int	ret;
+	int	i;
 
 
 	ret = stat(DISK_CONF_FILE, &stat_buf);
@@ -2362,7 +2384,16 @@ maybe_parse_disk_conf_file()
 
 	printf("Parsing disk_conf_file\n");
 
-	fconf = fopen(DISK_CONF_FILE, "r");
+	/* First, mark all drives as being in just_ejected | 0x80 state */
+	for(i = 0; i < MAX_C7_DISKS; i++) {
+		if(i < 2) {
+			iwm.drive525[i].just_ejected |= 0x80;
+			iwm.drive35[i].just_ejected |= 0x80;
+		}
+		iwm.smartport[i].just_ejected |= 0x80;
+	}
+
+	fconf = fopen(DISK_CONF_FILE, "rt");
 	if(fconf == 0) {
 		printf("cannot open disk_conf!  Stopping!\n");
 		exit(3);
@@ -2478,6 +2509,15 @@ maybe_parse_disk_conf_file()
 		exit(4);
 	}
 
+	/* and unmount/eject any disks that are now gone */
+	for(i = 0; i < MAX_C7_DISKS; i++) {
+		if(i < 2) {
+			eject_if_untouched(&iwm.drive525[i]);
+			eject_if_untouched(&iwm.drive35[i]);
+		}
+		eject_if_untouched(&iwm.smartport[i]);
+	}
+
 	iwm_printf("Done parsing disk_conf file\n");
 }
 
@@ -2486,8 +2526,10 @@ void
 insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 {
 	char	tmp_buf[1024];
+	byte	buf_2img[512];
 	char	*name_ptr;
 	char	*partition_name;
+	int	cmp_o, cmp_p, cmp_dot;
 	int	acc, acc2;
 	int	can_write;
 	int	len;
@@ -2506,6 +2548,8 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	}
 	printf("Inserting disk %s in slot %d, drive: %d\n", name,
 		tmp, dsk->drive + 1);
+
+	dsk->just_ejected &= 0x7f;
 
 	if(dsk->fd >= 0) {
 		/* See if it has the same name--if so, just leave it */
@@ -2606,13 +2650,60 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 
 	save_track = dsk->cur_qtr_track;
 
-	if(dsk->smartport) {
+	/* See if it is in 2IMG format */
+	ret = read(dsk->fd, (char *)&buf_2img[0], 512);
+	if(buf_2img[0] == '2' && buf_2img[1] == 'I' && buf_2img[2] == 'M' &&
+			buf_2img[3] == 'G') {
+		/* It's a 2IMG disk */
+		printf("Image named %s is in 2IMG format\n", dsk->name_ptr);
+
+		if(buf_2img[12] == 0) {
+			printf("2IMG is in DOS 3.3 sector order\n");
+			dsk->prodos_order = 0;
+		} else {
+			dsk->prodos_order = 1;
+		}
+		if(buf_2img[19] & 0x80) {
+			/* disk is locked */
+			printf("2IMG is write protected\n");
+			dsk->write_prot = 1;
+			dsk->write_through_to_unix = 0;
+		}
+		if((buf_2img[17] & 1) && (dsk->prodos_order == 0)) {
+			dsk->vol_num = buf_2img[16];
+			printf("Setting DOS 3.3 vol num to %d\n", dsk->vol_num);
+		}
+		size = (buf_2img[31] << 24) + (buf_2img[30] << 16) +
+				(buf_2img[29] << 8) + buf_2img[28];
+		unix_pos = (buf_2img[27] << 24) + (buf_2img[26] << 16) +
+				(buf_2img[25] << 8) + buf_2img[24];
+		dsk->image_start = unix_pos;
+		dsk->image_size = size;
+	} else {
+		/* Assume raw image */
 		dsk->image_start = 0;
 		if(size <= 0) {
 			size = get_fd_size(dsk->fd);
 		}
 		dsk->image_size = size;
+		if(dsk->disk_525) {
+			dsk->prodos_order = 0;
+			if(name_len >= 5) {
+				cmp_o = dsk->name_ptr[name_len-2];
+				cmp_p = dsk->name_ptr[name_len-3];
+				cmp_dot = dsk->name_ptr[name_len-4];
+				if(cmp_dot == '.' &&
+					  (cmp_p == 'p' || cmp_p == 'P') &&
+					  (cmp_o == 'o' || cmp_o == 'O')) {
+					dsk->prodos_order = 1;
+				}
+			}
+		} else {
+			dsk->prodos_order = 1;
+		}
+	}
 
+	if(dsk->smartport) {
 		if(partition_name) {
 			ret = find_partition_by_name(dsk->fd, partition_name,
 							dsk);
@@ -2629,15 +2720,24 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 			"img_sz:%08x\n", dsk->drive, dsk->tracks[0].unix_len,
 			dsk->image_size);
 	} else if(dsk->disk_525) {
+		unix_pos = dsk->image_start;
+		size = dsk->image_size;
+		if(size != 140*1024) {
+			printf("Disk 5.25 error: size is %d, not 140K\n",size);
+		}
 		dsk->num_tracks = 4*35;
 		for(i = 0; i < 35; i++) {
 			iwm_move_to_track(dsk, 4*i);
-			disk_unix_to_nib(dsk, 4*i, i*0x1000, 0x1000,
+			disk_unix_to_nib(dsk, 4*i, unix_pos + i*0x1000, 0x1000,
 								NIB_LEN_525);
 		}
 	} else {
 		/* disk_35 */
-		unix_pos = 0;
+		unix_pos = dsk->image_start;
+		size = dsk->image_size;
+		if(size != 800*1024) {
+			printf("Disk 3.5 error: size is %d, not 800K\n", size);
+		}
 		dsk->num_tracks = 2*80;
 		for(i = 0; i < 2*80; i++) {
 			iwm_move_to_track(dsk, i);
@@ -2674,13 +2774,27 @@ eject_named_disk(Disk *dsk, char *name)
 }
 
 void
+eject_if_untouched(Disk *dsk)
+{
+
+	if(dsk->fd < 0) {
+		return;
+	}
+
+	if(dsk->just_ejected & 0x80) {
+		/* It was not touched, eject it */
+		eject_disk(dsk);
+	}
+}
+
+void
 eject_disk(Disk *dsk)
 {
 	int	i;
 
 	if(iwm.motor_on) {
 		printf("Trying eject dsk: %s, but motor_on!\n", dsk->name_ptr);
-		exit(4);
+		set_halt(1);
 	}
 
 	iwm_flush_disk_to_unix(dsk);
@@ -2694,6 +2808,8 @@ eject_disk(Disk *dsk)
 		if(dsk->tracks[i].nib_area) {
 			free(dsk->tracks[i].nib_area);
 		}
+		dsk->tracks[i].nib_area = 0;
+		dsk->tracks[i].track_len = 0;
 	}
 	free(dsk->tracks);
 	dsk->num_tracks = 0;
@@ -2714,3 +2830,56 @@ eject_disk(Disk *dsk)
 }
 
 
+void
+eject_disk_by_num(int slot, int drive)
+{
+	char	buf[CONF_BUF_LEN];
+	char	tmp_buf[1024];
+	char	tmp_buf2[1024];
+	FILE	*fconf_old, *fconf_new;
+	char	*ptr;
+	int	line;
+	int	ret;
+
+	sprintf(tmp_buf2, "%s.ktmp1", DISK_CONF_FILE);
+
+	sprintf(tmp_buf, "rm -f %s; cp %s %s", tmp_buf2, DISK_CONF_FILE,
+			tmp_buf2);
+
+	printf("Running: %s\n", tmp_buf);
+	ret = system(tmp_buf);
+	if(ret != 0) {
+		printf("copy of %s failed\n", DISK_CONF_FILE);
+		set_halt(1);
+		return;
+	}
+
+	fconf_old = fopen(tmp_buf2, "rt");
+	fconf_new = fopen(DISK_CONF_FILE, "wt+");
+	if(fconf_old == 0 || fconf_new == 0) {
+		printf("Cannot open %s and %s: Stopping\n");
+		exit(3);
+	}
+	line = 0;
+	while(1) {
+		ptr = fgets(buf, CONF_BUF_LEN, fconf_old);
+		if(ptr == 0) {
+			/* done */
+			break;
+		}
+		line++;
+		if((buf[0] == 's') && (buf[1] == (0x30 + slot)) &&
+				(buf[2] == 'd') && (buf[3] == (0x30 + drive))){
+			/* comment out this line */
+			printf("Ejecting s%dd%d from line %d of %s\n",
+				slot, drive, line, DISK_CONF_FILE);
+			fputs("#", fconf_new);
+		}
+		fputs(buf, fconf_new);
+	}
+	fclose(fconf_old);
+	fclose(fconf_new);
+
+	/* and make sure it gets reparsed */
+	g_disk_conf_mtime = 0;
+}

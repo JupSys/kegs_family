@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.112 98/05/23 00:21:11 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.114 98/07/25 22:44:04 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -153,29 +153,6 @@ void do_debug_load(void);
 int do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize, int op_provided, word32 instr);
 void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, char *string);
 
-/* engine_c.c */
-void check_breakpoints(word32 addr);
-word32 get_memory8_io_stub(word32 addr, word32 stat, float *fcycs_ptr, float fplus_x_m1);
-word32 get_memory16_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
-word32 get_memory24_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
-void set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr, float fplus_x_m1);
-void set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
-void set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
-word32 get_memory_c(word32 addr, int cycs);
-word32 get_memory16_c(word32 addr, int cycs);
-word32 get_memory24_c(word32 addr, int cycs);
-void set_memory_c(word32 addr, word32 val, int cycs);
-void set_memory16_c(word32 addr, word32 val, int cycs);
-void set_memory24_c(word32 addr, word32 val, int cycs);
-word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
-word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
-byte *memalloc_align(int size);
-void memory_ptrs_init(void);
-void set_halt_act(int val);
-void clr_halt_act(void);
-word32 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr);
-int enter_engine(Engine_reg *engine_ptr);
-
 /* scc.c */
 void scc_init(void);
 void scc_reset(void);
@@ -241,7 +218,9 @@ void iwm_show_a_track(Track *trk);
 void maybe_parse_disk_conf_file(void);
 void insert_disk(Disk *dsk, char *name, int virtual_image, int size);
 void eject_named_disk(Disk *dsk, char *name);
+void eject_if_untouched(Disk *dsk);
 void eject_disk(Disk *dsk);
+void eject_disk_by_num(int slot, int drive);
 
 /* moremem.c */
 void fixup_brks(void);
@@ -305,6 +284,7 @@ void add_event_entry(double dcycs, int type);
 double remove_event_entry(int type);
 void add_event_stop(double dcycs);
 void add_event_doc(double dcycs, int osc);
+void add_event_vbl(void);
 double remove_event_doc(int osc);
 void show_all_events(void);
 void show_pmhz(void);
@@ -313,7 +293,8 @@ void add_irq(void);
 void remove_irq(void);
 void take_irq(int is_it_brk);
 void show_dtime_array(void);
-void vbl_60hz(double dcycs, double dtime_now);
+void update_60hz(double dcycs, double dtime_now);
+void do_vbl_int(void);
 void do_scan_int(void);
 void check_scan_line_int(double dcycs, int cur_video_line);
 void check_for_new_scan_int(double dcycs);
@@ -383,7 +364,7 @@ void child_sound_init_alib(void);
 void video_init(void);
 void show_a2_line_stuff(void);
 void video_reset(void);
-void video_update(void);
+void video_update(double old_drecip_cycles_in_16ms);
 void change_display_mode(double dcycs);
 int get_line_stat(int line, int new_all_stat);
 void update_a2_ptrs(int line, int new_stat);
@@ -391,7 +372,7 @@ void change_a2vid_palette(int new_palette);
 void check_a2vid_palette(void);
 void update_a2_line_info(void);
 void change_border_color(double dcycs, int val);
-void update_border_info(void);
+void update_border_info(double old_drecip_cycles_in_16ms);
 void update_border_line(int line_in, int color);
 void redraw_changed_text_40(int start_offset, int start_line, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val);
 void redraw_changed_text_80(int start_offset, int start_line, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val);
@@ -421,4 +402,27 @@ void read_a2_font(char *fontname);
 int skip_to_brace(FILE *font_file);
 int get_file_byte(FILE *font_file);
 int get_token(FILE *font_file);
+
+/* engine_c.c */
+void check_breakpoints(word32 addr);
+word32 get_memory8_io_stub(word32 addr, word32 stat, float *fcycs_ptr, float fplus_x_m1);
+word32 get_memory16_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
+word32 get_memory24_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
+void set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr, float fplus_x_m1);
+void set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
+void set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
+word32 get_memory_c(word32 addr, int cycs);
+word32 get_memory16_c(word32 addr, int cycs);
+word32 get_memory24_c(word32 addr, int cycs);
+void set_memory_c(word32 addr, word32 val, int cycs);
+void set_memory16_c(word32 addr, word32 val, int cycs);
+void set_memory24_c(word32 addr, word32 val, int cycs);
+word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
+word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
+byte *memalloc_align(int size);
+void memory_ptrs_init(void);
+void set_halt_act(int val);
+void clr_halt_act(void);
+word32 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr);
+int enter_engine(Engine_reg *engine_ptr);
 

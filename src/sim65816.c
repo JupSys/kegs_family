@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.258 98/07/05 20:32:39 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.262 98/07/28 00:11:57 kentd Exp $";
 
 #include <math.h>
 
@@ -34,8 +34,9 @@ const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.258 98/07/05 20:32:
 #define EV_STOP		2
 #define EV_SCAN_INT	3
 #define EV_DOC_INT	4
+#define EV_VBL_INT	5
 
-extern int stepping;
+extern int g_stepping;
 
 extern int statereg;
 extern int g_cur_a2_stat;
@@ -47,6 +48,7 @@ extern int shadow_text;
 
 extern int shadow_reg;
 extern int speed_fast;
+extern word32 g_slot_motor_detect;
 
 extern int c023_1sec_en;
 extern int c023_scan_en;
@@ -178,7 +180,7 @@ show_pc_log()
 	word32	pc;
 	FILE *pcfile;
 
-	pcfile = fopen("pc_log_out", "w");
+	pcfile = fopen("pc_log_out", "wt");
 	if(pcfile == 0) {
 		fprintf(stderr,"fopen failed...errno: %d\n", errno);
 		exit(2);
@@ -601,7 +603,7 @@ do_reset()
 
 	engine.pc = get_memory16_c(0x00fffc, 0);
 
-	stepping = 0;
+	g_stepping = 0;
 
 }
 
@@ -785,7 +787,7 @@ main(int argc, char **argv)
 	adb_init();
 
 	do_reset();
-	stepping = 0;
+	g_stepping = 0;
 	do_go();
 
 	/* If we get here, we hit a breakpoint, call debug intfc */
@@ -963,6 +965,16 @@ add_event_doc(double dcycs, int osc)
 	add_event_entry(dcycs, EV_DOC_INT + (osc << 8));
 }
 
+void
+add_event_vbl()
+{
+	double	dcycs;
+
+	dcycs = g_dcycles_in_16ms * (192.0/262.0);
+	dcycs += g_last_vbl_dcycs;
+	add_event_entry(dcycs, EV_VBL_INT);
+}
+
 double
 remove_event_doc(int osc)
 {
@@ -1043,7 +1055,7 @@ run_prog(word32 cycles)
 	int	fast;
 	int	this_type;
 
-	if(stepping) {
+	if(g_stepping) {
 		set_halt(HALT_STEP);
 	}
 
@@ -1080,9 +1092,9 @@ run_prog(word32 cycles)
 		apple35_sel = g_apple35_sel;
 		fast = speed_fast;
 
-		iwm_1 = (motor_on && !apple35_sel);
+		iwm_1 = motor_on && !apple35_sel && (g_slot_motor_detect & 0x8);
 		iwm_25 = (motor_on && apple35_sel);
-		if(fast && (motor_on == 0 || g_fast_disk_emul) &&
+		if(fast && ((!iwm_1 && !iwm_25) || g_fast_disk_emul) &&
 							(limit_speed == 0)) {
 			/* unlimited speed */
 			fspeed_mult = g_projected_pmhz;
@@ -1164,7 +1176,7 @@ run_prog(word32 cycles)
 			g_event_free.next = this_event;
 			switch(type & 0xff) {
 			case EV_60HZ:
-				vbl_60hz(dcycs, now_dtime);
+				update_60hz(dcycs, now_dtime);
 				break;
 			case EV_STOP:
 				printf("type: EV_STOP\n");
@@ -1182,6 +1194,9 @@ run_prog(word32 cycles)
 			case EV_DOC_INT:
 				g_engine_doc_int++;
 				doc_handle_event(type >> 8, dcycs);
+				break;
+			case EV_VBL_INT:
+				do_vbl_int();
 				break;
 			default:
 				printf("Unknown event: %d!\n", type);
@@ -1383,7 +1398,7 @@ extern int g_status_refresh_needed;
 int	g_iwm_limit = 0;
 
 void
-vbl_60hz(double dcycs, double dtime_now)
+update_60hz(double dcycs, double dtime_now)
 {
 	double	eff_pmhz;
 	double	planned_dcycs;
@@ -1397,6 +1412,7 @@ vbl_60hz(double dcycs, double dtime_now)
 	double	dtime_this_vbl;
 	double	dcycs_this_vbl;
 	double	dadjcycs_this_vbl;
+	double	old_drecip_cycles_in_16ms;
 	int	cycs_int;
 	double	dadj_cycles_1sec;
 	char	status_buf[1024];
@@ -1502,7 +1518,7 @@ vbl_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.37");
+		update_status_line(6, "KEGS v0.38");
 
 		g_status_refresh_needed = 1;
 
@@ -1577,9 +1593,9 @@ vbl_60hz(double dcycs, double dtime_now)
 		predicted_pmhz = 1.0;
 	}
 
-	if(!(predicted_pmhz < 40.0)) {
+	if(!(predicted_pmhz < 60.0)) {
 		irq_printf("predicted: %f, setting to 40.0\n", predicted_pmhz);
-		predicted_pmhz = 40.0;
+		predicted_pmhz = 60.0;
 	}
 
 	recip_predicted_pmhz = 1.0/predicted_pmhz;
@@ -1630,6 +1646,8 @@ vbl_60hz(double dcycs, double dtime_now)
 	g_dtime_eff_pmhz_array[prev_vbl_index] = eff_pmhz;
 
 
+	old_drecip_cycles_in_16ms = g_drecip_cycles_in_16ms;
+
 	g_dcycles_in_16ms = (double)planned_dcycs;
 	g_drecip_cycles_in_16ms = (1.0/(double)planned_dcycs);
 
@@ -1638,12 +1656,8 @@ vbl_60hz(double dcycs, double dtime_now)
 	add_event_entry(dcycs + planned_dcycs, EV_60HZ);
 	check_for_one_event_type(EV_60HZ);
 
-	if(c041_en_vbl_ints && !c046_vbl_irq_pending) {
-		c046_vbl_int_status = 1;
-		c046_vbl_irq_pending = 1;
-		add_irq();
-		irq_printf("Setting c046_vbl_int_status to 1, irq_pend: %d\n",
-			g_irq_pending);
+	if(c041_en_vbl_ints) {
+		add_event_vbl();
 	}
 
 	g_25sec_cntr++;
@@ -1676,10 +1690,22 @@ vbl_60hz(double dcycs, double dtime_now)
 	}
 
 	iwm_vbl_update();
-	video_update();
+	video_update(old_drecip_cycles_in_16ms);
 	sound_update(dcycs);
 	clock_update();
 	scc_update();
+}
+
+void
+do_vbl_int()
+{
+	if(c041_en_vbl_ints && !c046_vbl_irq_pending) {
+		c046_vbl_int_status = 1;
+		c046_vbl_irq_pending = 1;
+		add_irq();
+		irq_printf("Setting c046_vbl_int_status to 1, irq_pend: %d\n",
+			g_irq_pending);
+	}
 }
 
 

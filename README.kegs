@@ -1,22 +1,24 @@
 
-KEGS: Kent's Emulated GS version 0.37
+KEGS: Kent's Emulated GS version 0.38
 
 What is this?
 -------------
 
 KEGS is an Apple //gs emulator for X windows, but optimized for HP
-workstations.  KEGS is now portable to two other platforms-- Linux on
-Intel x86 and Linux on PowerPC machines.  KEGS was originally written
+workstations.  KEGS is now portable to other platforms--Linux on
+Intel x86, Linux on PowerPC machines, and OS/2.  KEGS was originally written
 for HP Unix workstations using a hand-coded assembly language
 interpreter loop.  To open KEGS up to a wider audience, I recoded the
 assembly parts into a C-only version, which can now be compiled and run
 on other platforms.  The Linux port was very easy since only a few dozen
-lines of code needed to change.  See README.compile.
+lines of code needed to change, so ports to other Unix-like systems
+should be easy.  If you do compile KEGS on a new platform, send me back
+any fixes, or just let me know that it worked.  See README.compile.
 
 KEGS uses X-Windows for its display (you can send the display to another
-machine) and uses the built-in audio on HP workstations to emulate all
-Apple //gs sounds.  It supports limited serial port emulation through
-sockets.  Audio does not work under Linux yet.
+machine) and emulates all Apple //gs sounds accurately.  It supports
+limited serial port emulation through sockets.  Audio does not work
+under Linux yet.
 
 The ROMs and GS/OS (the Apple //gs operating system) are not included
 with KEGS since they are not freely distributable.  KEGS is a little
@@ -28,7 +30,7 @@ KEGS features:
 -------------
 
 Fast 65816 emulation:
-	Assembly version: about 8MHz on a 712/80, and 17-20MHz on a C180.
+	Assembly version: about 8MHz on a 712/80, and 20-25MHz on a C240.
 	C version: about 4MHz on a 712/80, 12MHz on a 266MHz Pentium II.
 		About 13MHz on a 240MHz 604e PowerCenter 240 running MkLinux.
 Emulates low-level 5.25" and 3.5" drive accesses (even nibble-copiers work!).
@@ -37,7 +39,7 @@ Emulates classic Apple II sound and 32-voice Ensoniq sound.
 Emulates all Apple //gs graphics modes, including border effects.
 	Can handle mixed-displays (superhires at the top, lores at the bottom).
 	Always does 60 video updates per second.
-Mouse and joystick support (although the joystick is hard to use).
+Mouse and joystick support.
 Emulates all Apple //gs memory "tricks" for full compatibility.
 Low-level ADB keyboard and mouse emulation enables Wolfenstein 3D to run.
 Clock chip emulation makes the Unix time available to the Apple //gs.
@@ -63,7 +65,6 @@ Included files:
 	README.kegs	- you're here
 	README.compile	- Describes how to build KEGS
 	kegs		- the executable, for HP-UX 10.20+
-	kegs.linux	- Executable for x86 Linux 2.0.30.
 	font.65sim	- C-like description of the font KEGS uses.
 	disk_conf	- disk image configuration info
 	to_pro		- Hard-to-use ProDOS volume creator
@@ -78,9 +79,8 @@ You need to provide:
 	2) a ROM file called "ROM" in the KEGS directory.  It can be either
 		from a ROM 01 (131072 bytes long) or from a ROM 03 machine
 		(262144 bytes long.)
-	3) A disk image to boot.  This needs to be in a "raw" format.
-		No header/etc.  Any size is fine.  See discussion below.
-		GS/OS would be best.
+	3) A disk image to boot.  This can be either "raw" format or 2IMG.
+		See discussion below.  GS/OS would be best.
 	4) A file called "disk_conf" describing what images you want
 		KEGS to use.
 
@@ -100,16 +100,13 @@ language interpreter loop.  Full source and a makefile is provided
 to allow you to compile for other HP-UX revisions or for other platforms.
 See the README.compile file for more info about compiling.
 
-It's not so easy for me to create x86 Linux binaries, so you must
+It's not so easy for me to create Linux binaries, so you must
 compile it yourself (It's easy, see README.compile).
-
-If you are on a PowerPC computer running Linux, run "kegs.linuxppc" instead.
-This version was compiled on MkLinux pre-DR3, but it should work
-on LinuxPPC, too.
 
 There may be a bug with drawing the border on x86 Linux with Shared Memory--
 add the options "-noshm -skip 0" to fix this up (but lose some graphics
-performance, sorry).
+performance, sorry).  Try KEGS without these options first, but use
+this as a workaround if necessary.
 
 If you want the display to go somewhere different, make sure the shell
 environment variable $DISPLAY is set, or give the command-line argument
@@ -130,7 +127,8 @@ Audio can still be sent through the HP Alib routines (see audio(5)) using the
 "-alib" cmd line option.  You can send audio to a remote machine by
 setting the AUDIO environment variable if you're using the.
 
-Audio currently is not functional on Linux.
+Audio currently is not functional on Linux, but README.compile explains
+how you can experiment with it a little bit.
 
 KEGS will open a new window and use the terminal window you started it from
 as a "debug" window.  I've reduced the debug info it prints,
@@ -158,9 +156,9 @@ until you hit "F8" again.
 If you discover KEGS freezing soon after starting, and no startup beep,
 then the workstation sound system has gotten itself wedged.  Try to kill
 any kegs processes and try again.  If it still hangs and plays no sound,
-try -hpdev, or try killing the Aserver processes.  If both of the Aserver
-processes don't die, you must reboot your workstation to use KEGS or
-use the "-audio 0" option.
+try killing the Aserver processes if you're using -alib.  If both of
+the Aserver processes don't die, you must reboot your workstation to use
+KEGS or use the "-audio 0" option.
 
 Images (disk_conf):
 ------------------
@@ -168,12 +166,14 @@ Images (disk_conf):
 You tell KEGS what disk images to use through the disk_conf file.
 You must set this up before running KEGS.
 
-KEGS only handles "raw" images right now.  This image format has no header
-of any type.  KEGS uses the Unix file permissions to encode the read/write
-status of the image.
+KEGS can handle "raw", 2IMG, or partitioned images now.  The raw image
+format has no header of any type.  KEGS uses the Unix file permissions
+to encode the read/write status of the image.  2IMG encodes some
+information in a header in front of the image (so 800K disk images
+are a little bigger than 800K).  Partitions are described below.
 
 An image is the representation of an Apple //gs disk, but in a file on
-Unix.  For 3.5" disks, for example, an image would be exactly 800K bytes
+Unix.  For 3.5" disks, for example, a raw image would be exactly 800K bytes
 long (819200 bytes).  KEGS intercepts the emulated GS accesses to the
 image, and does the correct reads and writes of the Unix file instead.
 
@@ -194,7 +194,7 @@ convert other types into raw format).  Images loaded into slot 7 (drives
 1 through 32) are assumed to be in ProDOS block format, and can be any
 size up to 4GB.  Images in slot 7 can also be partitions.
 
-KEGS boots s7d1 by default.  You can change this using the emulated
+KEGS boots s7d1 by default.  You can change this using the emulated //gs
 control panel, just like a real Apple //gs.  KEGS emulates a //gs with
 two 5.25" drives in slot 6, two 3.5" drives in slot 5, and up to 32
 "hard drives" in slot 7.
@@ -233,7 +233,7 @@ The output will list the various partition names in the first column.  You can
 mount any partition, but look at the "type" for Apple_PRODOS or
 Apple_HFS for interesting ones.  Mounting "Apple_Driver" is the
 Macintosh code for a SCSI driver--not too useful.  "Apple_Free" is a
-partition containing all the unused blocks.
+partition containing all the unused blocks--also not useful to mount.
 
 An example from the Golden Orchard CD:
 $ partls  /dev/dsk/c201d2s0   
@@ -259,7 +259,7 @@ the Unix buffer cache for a big speed boost.  For floppies or real hard
 drives, use /dev/rdsk.  I'll fix KEGS to use O_SYNC soon, which would
 mean you could use /dev/dsk all the time.
 
-The sample disk_conf has commented-out entries for the Golden Orchard
+The sample disk_conf has commented-out sample entries for the Golden Orchard
 Apple II CD-ROM.
 
 Since KEGS needs low-level access to the CD-ROM, you should make the
@@ -294,13 +294,11 @@ names.
 You can skip drive numbers--it's ok to have a disk in s7d20, and nothing
 in s7d10-s7d19.
 
-The s6d* and s5d* drives support limited "disk swapping" but it is
-very restricted, and if you make a small mistake, KEGS can hang.
-Basically, you just edit the disk_conf file while KEGS is running,
+The s6d* and s5d* drives support disk swapping and disk ejecting.
+For disk swapping, you just edit the disk_conf file while KEGS is running,
 and KEGS will re-parse the file and load in the images you request.
-Unfortunately, KEGS doesn't really understand "eject", so just commenting
-out a line doesn't eject that disk.  You have to "insert" a new image on
-top of it.
+If you comment out a line which is a mounted disk, KEGS "ejects" that
+image.
 
 One common use for disk swapping is to run a two-disk 5.25" program
 that doesn't look in s6d2.  Set up disk_conf with:
@@ -318,11 +316,15 @@ s6d1 = image2.dsk
 If a Linux user would chime in with any Linux specifics, I'd be happy
 to add them here in the future.
 
+Since a real Apple //gs can eject 3.5" disks, so can KEGS.  If the
+Apple //gs wants to eject the disk, KEGS will put a '#' in front of
+that disk image name in disk_conf, and eject the disk.
+
 
 Debugging KEGS:
 --------------
 
-First, KEGS has a lot of debug "traps"--on an unexpected event, it stops the
+KEGS has a lot of debug "traps"--on an unexpected event, it stops the
 emulation, and puts the terminal window in a debugger that is similar to
 the GS ROM monitor debugger (but not exactly).  Thus, if you think it
 should continue after what ever stopped it, type "g" then return in the
@@ -434,7 +436,7 @@ KEGS command-line option summary:
 	This switch can override the default.  -audio 0 causes KEGS to
 	not fork the background audio process, but Ensoniq emulation
 	is still 100% accurate, just the sound is not sent to the
-	workstation speaker.  Audio is always off on Linux for now.
+	workstation speaker.  Audio defaults off on Linux for now.
 -display {machine:0.0}: Same as setting the environment variable DISPLAY.
 	Sends X display to {machine:0.0}.
 
@@ -469,7 +471,7 @@ take effect (just like a real Apple //gs).  Ctrl-open_apple-Reset
 forces a reboot.  Ctrl-Close_apple-Open_apple-Reset enters selftests.
 Selftests will pass if you force speed to 2.5MHz using the middle
 button.  Watch out for ctrl-shift-Break--it will likely kill your
-Unix session since VUE will interpret that key sequence.
+HP-UX session since VUE will interpret that key sequence.
 
 Control Panel:
 -------------
@@ -506,7 +508,7 @@ which puts wolfdemo.bxy on a much larger image.
 I don't know what happens if the file, wolfdemo.bxy, is bigger than
 the image...it probably crashes.
 
-If you want to format a "blank" image, you have to put something in it.
+Even if you want to format a "blank" image, you have to put something in it.
 Like:
 
 echo "This is a lame utility" > foo
@@ -555,14 +557,11 @@ KEGS watches the file "disk_conf", and if it changes, it re-reads it
 and reloads disk images.  That is, while KEGS is running, you can
 edit disk_conf using, say, vi, and add or change disks.  KEGS will print
 messages in the debug window describing what new disks it has found.
-Changing disks in slot 7 does not work well, but you can move around
+Changing disks in slot 7 does not work, but you can move around
 disks in slots 5 and 6.  This allows you to "eject" disks and change them.
 This is especially useful for multi-disk 5.25" programs.
-Editing "disk_conf" can't really eject disks due to some lazy
-programming.  Eject disks by putting some other image in the same
-slot.
 
-KEGS uses the Unix permissions on the disk image to decide how to load
+KEGS uses the Unix permissions on raw disk images to decide how to load
 it into the emulator.  If the file is unreadable, it cannot load the
 image (duh).  KEGS also supports the concept of "Write-through-to-Unix".
 An image that is writeable usually will pass through any changes the
@@ -584,18 +583,21 @@ rw-: Read-write image.  Image will appear writeable in KEGS, and changes
 rwx: Read-only image.  Same as 'r-x'.
 
 KEGS, by default, runs the IWM (3.5" and 5.25" disks) emulation in
-an "approximate" mode.  Almost everything will work except for nibble
-copiers.  To make nibble copiers work, Press F7.
+an "approximate" mode, called "fast_disk_emul".  Almost everything will
+work except for nibble copiers.  To make nibble copiers work, Press F7.
+Unfortunately, formatting 5.25" disks under GS/OS does not work in
+fast_disk_emul mode--you must hit F7 to toggle to accurate IWM mode.
 
 KEGS supports low-level emulation of 5.25" and 3.5" drive hardware.  It
-should be very accurate, supporting nibble-copiers, etc.  Note there
-is no "nibblized" disk image format that KEGS understands currently.
-So, if the emulated image is no longer ProDOS or DOS 3.3 standard, KEGS
-will automatically treat the image as "Not-write-through-to-Unix" from
-then on.  It prints a message saying it has done so, so be careful.
-A standard reformatting will not cause that to happen.  But running
-things like a "drive-speed" test will cause further changes not to
-propagate to the Unix file.
+is very accurate, supporting nibble-copiers, etc.  Note there is no
+"nibblized" disk image format that KEGS understands currently.  So, if
+the emulated image is no longer ProDOS or DOS 3.3 standard, KEGS will
+automatically treat the image as "Not-write-through-to-Unix" from then
+on.  It prints a message saying it has done so, so be careful.  However,
+the "disk" in emulation is fully useable as long as KEGS is running.  A
+standard reformatting will not cause an image to flip to not-write-
+through-to_unix, but running things like a "drive-speed" test will cause
+further changes not to propagate to the Unix file.
 
 In full accuracy mode, 5.25" drive accesses force KEGS to run at 1MHz,
 and 3.5" drive accesses force KEGS to run at 2.5MHz.
@@ -619,26 +621,27 @@ If you force KEGS to run at 1.024MHz, it will strive to run at exactly
 briefly several times a second to maintain the 1MHz speed.  It does this
 in a Unix-friendly way that makes time available to other Unix
 processes.  This makes older Apple II games very playable just like a
-real Apple //gs on slow speed.  The 1.024MHz mode overrides the "fast"
-mode you can access through the control panel.  But, 3.5" accesses will
-"speed up" to 2.5MHz to enable that code to operate correctly while the
-3.5" disk is being accessed.  If KEGS is running fast, the small pauses
-cause KEGS to give time to other applications, which you can see via the
-Unix "top" command.
+real Apple //gs on slow speed.  KEGS is running at exactly the same
+speed as an Apple //e when in 1.024MHz mode.  The 1.024MHz mode overrides
+the "fast" mode you can access through the control panel.  But, 3.5"
+accesses will "speed up" to 2.5MHz to enable that code to operate
+correctly while the 3.5" disk is being accessed.  If KEGS is running
+fast, the small pauses cause KEGS to give time to other applications,
+which you can see via the Unix "top" command.
 
-If you force KEGS to run at 2.5MHz, KEGS wants to run at 2.5MHz.  But
+If you force KEGS to run at 2.5MHz, KEGS tries to run at 2.5MHz.  But
 like a real unaccelerated Apple //gs, if you set the control panel to
 "slow", it will really be running at 1.024MHz.  Accesses to 5.25" disk
 automatically slow down to 1.024MHz, when running the IWM in accurate
 mode (F7).  KEGS may not be able to keep up with some programs running
-at 2.5MHz due to video and sound overheads.  If that happens, it
-effectively runs slower by extending the emulated "second", like in the
-1.024MHz mode.  You can tell this is happening when Eff MHz in the
-status area falls below 2.5MHz.  If KEGS is running faster than 2.5MHz,
-it takes small pauses to slow down, just like in 1.024MHz.  Many Apple
-//gs demos must be run at 2.5MHz.  The built-in selftests
-(cmd-option-ctrl-Reset) must run at 2.5MHz.  Many Apple //gs action
-games are more playable at 2.5MHz.
+at 2.5MHz due to video and sound overheads on lower-end machines.  If
+that happens, it effectively runs slower by extending the emulated
+"second", like in the 1.024MHz mode.  You can tell this is happening
+when Eff MHz in the status area falls below 2.5MHz.  If KEGS is running
+faster than 2.5MHz, it takes small pauses to slow down, just like in
+1.024MHz.  Many Apple //gs demos must be run at 2.5MHz.  The built-in
+selftests (cmd-option-ctrl-Reset) must run at 2.5MHz.  Many Apple //gs
+action games are more playable at 2.5MHz.
 
 Letting KEGS run "as fast as possible" means KEGS will run at whatever
 speed it is able to, above 1.024MHz (if it falls below 1.024, it
@@ -646,15 +649,15 @@ extends the emulated second).  Eff MHz gives you the current Apple //gs
 equivalent speed.  Many games will be unplayable at the unlimited setting.
 Setting the //gs control panel speed to "slow" will slow down to 1MHz.
 
-Sound output has an interesting relationship to KEGS timing.
-KEGS has a need to play one second of sound per second of emulated time.
-Normally, this works out exactly right.  But as noted above, if
-KEGS can't maintain the needed speed, it extends the emulated second.
-If it extends the second to 1.4 real seconds, that means KEGS only
-produces 1.0 second of sound data every 1.4 seconds--the sound breaks
-up!  Unfortunately, some demos require 2.5MHz timing--you just have to
-let the sound break up to see the visual effects (especially border
-effects).  Sorry.  Get a faster workstation and this problem goes away.
+Sound output has an interesting relationship to KEGS timing.  KEGS must
+play one second of sound per second of emulated time.  Normally, this
+works out exactly right.  But as noted above, if KEGS can't maintain the
+needed speed, it extends the emulated second.  If it extends the second
+to 1.4 real seconds, that means KEGS only produces 1.0 second of sound
+data every 1.4 seconds--the sound breaks up!  Unfortunately, some demos
+require 2.5MHz timing--on slow machines, you just have to let the sound
+break up to see the visual effects (especially border effects).  Sorry.
+Get a faster workstation and this problem goes away.
 
 
 KEGS SAMPLE_DISK:
@@ -800,11 +803,9 @@ sound and video overhead.
 In Rastan, the music plays at a slow tempo UNLESS you are moving--then
 it plays the music just fine.
 
-Under GS/OS, the 5.25" drive emulation does not seem to work right.
-I'm working on fixing this.
-
 x86 Linux may draw the border wrong with Shared Memory on--use -noshm
 on Linux to avoid this for now.
+
 
 Sound emulation:
 ---------------
@@ -825,8 +826,8 @@ You may be able to send the sound to a different workstation.  If you:
 
 export AUDIO=myboss:0
 
-and then run KEGS, the machine "myboss" may play the sound.  I have not
-tested this.  Let me know if it works!
+and then run KEGS with -alib, the machine "myboss" may play the sound.
+I have not tested this.  Let me know if it works!
 
 When KEGS determines that no sound has been produced for more than
 5 seconds, it turns off the sound calculation routines for a small
@@ -834,16 +835,15 @@ speedup.  It describes that it has done this by saying "Pausing sound"
 in the debug window.  However, when sound restarts, it sometimes
 "breaks-up" a little.  I will work on fixes for this.
 
-By default, KEGS uses the HP Alib routines to do sound output.  You
-can use the low-level /dev/audio sound output routines by running
-with the "-hpdev" option to KEGS.  Warning: On 10.X, make sure you
-have the latest audio patches installed if you use -hpdev, or else you
-may panic the machine!
+By default, KEGS uses the /dev/audio device for sound output.  You can
+use the HP Alib sound output routines by running with the "-alib" option
+to KEGS.  Warning:  On 10.X, make sure you have the latest audio patches
+installed if you are not using -alib, or else you may panic the machine!
 
 If your display is not using shared memory, audio defaults to off unless
 you override it with "-audio 1".
 
-There is no sound on Linux yet.
+Sound on Linux is fairly broken now.
 
 SCC emulation:
 -------------
@@ -873,7 +873,8 @@ BASIC by using something like PR#1 in KEGS and
 "telnet localhost 6501 | tee file.out" in another window.
 
 Feel free to let me know what doesn't work, but a lot is known not
-to work.  GNO's tty interface does not work.
+to work.  GNO's tty interface may work, but I'm having problems
+testing it.
 
 
 KEGS status area:
@@ -910,7 +911,7 @@ pal:	Super-hires palette that is unavailable.  KEGS needs one palette
 		impact.
 
 Line 2: (Video and X info)
-ior:  Number of Unix processor cycles passed handling smartport reads and
+ior:  Number of Unix processor cycles spent handling smartport reads and
 		writes.  Probably only interesting to me.
 xred_cs:	Number of Unix processor cycles that were spent in the X
 		server (or other processes on the machine).
@@ -939,6 +940,8 @@ act:	Some instructions are handled by the main interpreter loop returning
 		special status "actions" to main event loop.  This is the
 		number over the last second.  Should be low.
 hev:	This is really getting too complicated.  This tracks HALT_EVENTs.
+		KEGS returns to the main loop to recalculate effective
+		speed whenever any speed-changing I/O location is touched.
 		See the code.
 esi:	This counts the number of superhires scan-line interrupts
 		taken in the last second.
@@ -1011,7 +1014,7 @@ Alt_R, Meta_r, Menu, Print:         Option key
 Alt_L, Meta_L, Cancel, Scroll_lock:  Command key
 
 There is no way to enter a //gs Keypad '=' in KEGS right now, unless
-you have a Unix keyboard with an '=' key on it (mine doesn't).
+you have a Unix keyboard with an '=' key on it's keypad (mine doesn't).
 
 
 Documentation To-Do:

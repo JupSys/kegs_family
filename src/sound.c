@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.71 98/07/04 19:32:26 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.73 98/07/25 22:41:58 kentd Exp $";
 
 #include "defc.h"
 
@@ -23,7 +23,6 @@ const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.71 98/07/04 19:32:26 kent
 #if 0
 #endif
 
-extern int stepping;
 extern int Verbose;
 extern int g_use_shmem;
 extern word32 g_vbl_count;
@@ -53,8 +52,13 @@ int	g_queued_nonsamps = 0;
 #ifdef HPUX
 int	g_audio_enable = -1;
 #else
+# ifdef __linux__
+/* default to off for now */
+int	g_audio_enable = 0;
+# else
 /* Default to sound off */
 int	g_audio_enable = 0;
+# endif
 #endif
 
 Doc_reg g_doc_regs[32];
@@ -876,11 +880,24 @@ sound_play(double dcycs)
 	
 	
 				outptr += 2;
-	
-#ifdef KEGS_LITTLE_ENDIAN
+
+#ifdef __linux__
+				/* Linux seems to expect little-endian */
+				/*  samples always, even on PowerPC */
+# ifdef KEGS_LITTLE_ENDIAN
 				sndptr[pos] = (val << 16) + (val0 & 0xffff);
+# else
+				sndptr[pos] = ((val & 0xff) << 24) +
+						((val & 0xff00) << 8) +
+						((val0 & 0xff) << 8) +
+						((val0 >> 8) & 0xff);
+# endif
 #else
+# ifdef KEGS_LITTLE_ENDIAN
+				sndptr[pos] = (val << 16) + (val0 & 0xffff);
+# else
 				sndptr[pos] = (val0 << 16) + (val & 0xffff);
+# endif
 #endif
 				pos++;
 				if(pos >= SOUND_SHM_SAMP_SIZE) {

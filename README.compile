@@ -8,7 +8,8 @@ scripts to point to wherever you installed perl).  Perl version 4 or 5 is
 fine.
 
 After the "make" has finished, it will create three executables:  kegs,
-partls, and to_pro.  Just move them to where you want to put executables.
+partls, and to_pro.  Just move them to where you want to put executables,
+which is usually in the previous directory level.
 
 If you get an error like 'as not found', make sure /usr/ccs/bin is in
 your $PATH.
@@ -31,9 +32,10 @@ mv Makefile_c Makefile
 
 And then type make.
 
-This makefile uses gcc, since it takes over 2 hours and 650MB to compile with
-HP's C compiler.  I'm working on getting this fixed.  With gcc, it
-takes about 3 minutes to fully compile KEGS on a 712/80.
+This makefile uses gcc and compiles in about 2-3 minutes.  It takes over
+2 hours and 650MB to compile with HP's C compiler.  I'm working on
+getting this fixed.
+
 
 X86 Linux build instructions:
 ----------------------------
@@ -51,7 +53,10 @@ need to edit the first line of make_inst and make_size to point to the
 correct place.
 
 Audio is currently disabled by using the sound_dummy.c file in
-place of code to really use /dev/audio on Linux.
+place of code to really use /dev/audio on Linux.  I've started modifying
+sound_hp.c (it will be renamed soon) to add Linux support--just
+list sound_hp.c instead of sound_dummy.c in the Makefile, and
+run kegs -audio 1.  It sounds horrible to me, but sounds do come out.
 
 PowerPC Linux build instructions:
 ----------------------------
@@ -70,7 +75,8 @@ correct place.  Or add a symbolic link in /usr/local/bin/perl to
 /usr/bin/perl.
 
 Audio is currently disabled by using the sound_dummy.c file in
-place of code to really use /dev/audio on Linux.
+place of code to really use /dev/audio on Linux.  You can try sound_hp.c
+(see x86 Linux instructions) but it sounds pretty bad.
 
 
 Other platform "C" build instructions:
@@ -88,4 +94,8 @@ rewrite xdriver.c and sound_hp.c/sound_dummy.c.  You'll probably have
 to make changes to scc.c (BSD sockets) and smartport.c (Unix file
 handling).  clock.c assumes gettimeofday() is accurate and fast, and
 also uses select() for a microsecond sleep operation.
-.
+
+A user tells me KEGS compiles and runs under OS/2 (with modifications
+that I put into v0.38) but that he had to create a new makefile.
+When I get that makefile, it will be in the next KEGS release.
+

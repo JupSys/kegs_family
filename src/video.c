@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.87 98/07/10 00:25:18 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.89 98/07/28 00:11:58 kentd Exp $";
 
 #include <time.h>
 
@@ -34,8 +34,8 @@ int mode_superhires[25];
 int mode_border[25];
 
 byte cur_border_colors[270];
-byte new_special_border[62][64];
-byte cur_special_border[62][64];
+byte new_special_border[64][64];
+byte cur_special_border[64][64];
 
 word32	a2_screen_buffer_changed = -1;
 word32	g_full_refresh_needed = -1;
@@ -415,14 +415,14 @@ int	g_show_screen = 1;
 word32	g_cycs_in_check_input = 0;
 
 void
-video_update()
+video_update(double old_drecip_cycles_in_16ms)
 {
 	register word32 start_time;
 	register word32 end_time;
 
 	update_a2_line_info();
 
-	update_border_info();
+	update_border_info(old_drecip_cycles_in_16ms);
 
 	GET_ITIMER(start_time);
 	check_input_events();
@@ -460,9 +460,11 @@ change_display_mode(double dcycs)
 	int	line;
 	int	i;
 
-	line = (get_lines_since_vbl(dcycs) >> 8) + 2 - 62;
+	line = ((get_lines_since_vbl(dcycs) + 0xff) >> 8);
 	if(line < 0) {
 		line = 0;
+		printf("Line < 0!\n");
+		set_halt(1);
 	}
 	line = line >> 3;
 	if(line > 24) {
@@ -746,7 +748,7 @@ int	g_border_last_vbl_changes = 0;
 extern double g_drecip_cycles_in_16ms;
 
 void
-update_border_info()
+update_border_info(double old_drecip_cycles_in_16ms)
 {
 	float	flines_per_fcyc;
 	int	new_line;
@@ -758,7 +760,7 @@ update_border_info()
 
 	color_now = g_vbl_border_color;
 
-	flines_per_fcyc = (float)262.0 * (float)g_drecip_cycles_in_16ms;
+	flines_per_fcyc = (float)(262.0 * old_drecip_cycles_in_16ms);
 	limit = g_num_border_changes;
 	last_line = 0;
 	for(i = 0; i < limit; i++) {
@@ -815,11 +817,16 @@ update_border_line(int line_in, int color)
 
 	val = (color + (g_a2vid_palette << 4));
 	val = (val << 24) + (val << 16) + (val << 8) + val;
-	if(line_in < 62 || line_in >= (262-8)) {
-		if(line_in < 62) {
-			line = 8 + (line_in >> 1);
+	if(line_in >= 192) {
+		if(line_in >= 200) {
+			if(line_in >= 262) {
+				printf("line_in: %d out of range!\n", line_in);
+				set_halt(1);
+				line_in = 200;
+			}
+			line = (line_in - 200) >> 1;
 		} else {
-			line = line_in - 262 + 8;
+			line = line_in - 192;
 			g_border_line24_refresh_needed = 1;
 		}
 		if(2*line >= (X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8) ||
@@ -829,7 +836,7 @@ update_border_line(int line_in, int color)
 		}
 
 		ptr =(word32 *)&(data_border_special[2*line*X_A2_WINDOW_WIDTH]);
-		limit = (2*X_A2_WINDOW_WIDTH) >> 2;
+		limit = (4*X_A2_WINDOW_WIDTH) >> 2;
 
 		g_border_special_refresh_needed = 1;
 		for(i = 0; i < limit; i++) {
@@ -837,13 +844,8 @@ update_border_line(int line_in, int color)
 		}
 	}
 
-	if(line_in >= 62) {
-		if(line_in >= 262) {
-			printf("line_in: %d out of range!\n", line_in);
-			set_halt(1);
-			line_in = 62;
-		}
-		line = line_in - 62;
+	if(line_in < 200) {
+		line = line_in;
 		ptr = (word32 *)&(data_border_sides[2*line * EFF_BORDER_WIDTH]);
 		limit = (2 * EFF_BORDER_WIDTH) >> 2;
 		g_border_sides_refresh_needed = 1;
@@ -2526,7 +2528,7 @@ read_a2_font(char *fontname)
 	int	mask;
 	int	pix;
 
-	font_file = fopen(fontname, "r");
+	font_file = fopen(fontname, "rt");
 	if(font_file == (FILE *)0) {
 		printf("fopen of %s ret %08x, errno: %d\n", fontname,
 				(word32)font_file, errno);

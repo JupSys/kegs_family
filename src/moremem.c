@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.191 98/07/04 21:34:43 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.194 98/07/26 23:53:17 kentd Exp $";
 
 #include "defc.h"
 
@@ -29,7 +29,6 @@ extern int g_num_breakpoints;
 extern word32 g_breakpts[];
 
 extern int halt_sim;
-extern int stepping;
 extern double g_dcycles_in_16ms;
 extern double g_drecip_cycles_in_16ms;
 extern double g_last_vbl_dcycs;
@@ -91,6 +90,7 @@ int	shadow_text = 1;
 int	g_border_color = 0;
 
 int	speed_fast = 1;
+word32	g_slot_motor_detect = 0;
 int	power_on_clear = 0;
 
 
@@ -1289,7 +1289,8 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		case 0x35: /* 0xc035 */
 			return shadow_reg;
 		case 0x36: /* 0xc036 = CYAREG */
-			tmp = (speed_fast << 7) + (power_on_clear << 6);
+			tmp = (speed_fast << 7) + (power_on_clear << 6) +
+				g_slot_motor_detect;
 			return tmp;
 		case 0x37: /* 0xc037 */
 			return 0;
@@ -1557,7 +1558,10 @@ io_read(word32 loc, Cyc *cyc_ptr)
 			UNIMPL_READ;
 
 		/* 0xc0b0 - 0xc0bf */
-		case 0xb0: case 0xb1: case 0xb2: case 0xb3:
+		case 0xb0:
+			/* c0b0: female voice tool033 look at this */
+			return 0;
+		case 0xb1: case 0xb2: case 0xb3:
 		case 0xb4: case 0xb5: case 0xb6: case 0xb7:
 		case 0xb9: case 0xba: case 0xbb:
 		case 0xbc: case 0xbd: case 0xbe: case 0xbf:
@@ -1843,9 +1847,12 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 		case 0x25: /* 0xc025 */
 		case 0x28: /* 0xc028 */
 		case 0x2c: /* 0xc02c */
+			UNIMPL_WRITE;
 		case 0x2e: /* 0xc02e */
 		case 0x2f: /* 0xc02f */
-			UNIMPL_WRITE;
+			/* Modulae writes to this--just ignore them */
+			return;
+			break;
 
 		/* 0xc030 - 0xc03f */
 		case 0x30: /* 0xc030 */
@@ -1918,6 +1925,10 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 				set_halt(HALT_EVENT);
 			}
 			speed_fast = tmp;
+			if((val & 0xf) != g_slot_motor_detect) {
+				set_halt(HALT_EVENT);
+			}
+			g_slot_motor_detect = (val & 0xf);
 
 			power_on_clear = (val >> 6) & 1;
 			if((val & 0x7b) != 0) {
@@ -2322,7 +2333,6 @@ const double g_drecip_lines_in_16ms = (1.0/262.0);
 /* Note: lines are then 0-0x60 effectively, for 192 lines */
 /* vertical blanking engages on line 192, even if in super hires mode */
 /* (Last 8 lines in SHR are drawn with vbl_active set */
-/* but for our simplicity, we'll engage vertical blanking on line 200 */
 
 word32
 get_lines_since_vbl(double dcycs)
@@ -2372,7 +2382,7 @@ in_vblank(double dcycs)
 
 	lines_since_vbl = get_lines_since_vbl(dcycs);
 
-	if(lines_since_vbl < 0x3e00 || lines_since_vbl >= 0xfe00) {
+	if(lines_since_vbl >= 0xc000) {
 		return 1;
 	}
 
@@ -2389,9 +2399,9 @@ read_vid_counters(int loc, double dcycs)
 
 	lines_since_vbl = get_lines_since_vbl(dcycs);
 
-	lines_since_vbl += 0x1c800;
+	lines_since_vbl += 0x10000;
 	if(lines_since_vbl >= 0x20000) {
-		lines_since_vbl -= 0x10600;
+		lines_since_vbl -= (0x20000 + 0xfa00);
 	}
 
 	if(lines_since_vbl > 0x1ffff) {
@@ -2409,7 +2419,7 @@ read_vid_counters(int loc, double dcycs)
 
 	lines_since_vbl = (lines_since_vbl & 0xff);
 	if(lines_since_vbl >= 0x01) {
-		lines_since_vbl = lines_since_vbl + 0x3f;
+		lines_since_vbl = (lines_since_vbl + 0x3f) & 0x7f;
 	}
 	return (mask | (lines_since_vbl & 0xff));
 }

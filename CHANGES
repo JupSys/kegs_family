@@ -1,4 +1,28 @@
 
+Changes in KEGS v0.38 since v0.37
+- IWM bugs:
+	- fast_disk_emul off under GS/OS caused I/O errors.
+	  KEGS was always slowing down to 1MHz when 5.25" drive was on, when
+	  it should have been obeying the $C036 register.
+	- bug in IWM on little-endian processors
+- disk ejection should now work, but a beta user claimed some bugs on
+	x86 Linux.
+- 2IMG support, but only lightly tested.
+- Removed some internal breaks on access to $C0B0 for tool033.
+- Modulae also stumbled into some breakpoints by writing to $C02F,
+	which does nothing.
+- Screen refresh simplified (for me) by redrawing the screen while
+	raster is on first scan-line, rather than line 200.
+	However, a side effect is some of the graphics during the XMAS DEMO
+	look a bit choppier.
+- More SCC fixes to avoid breakpoints under GNO.
+- Start support for sound under Linux, but it sounds horrible right now.
+	Any Linux sound gurus want to help out?
+- Fixed possible array-overrun bug in video.c around border effects.
+	Maybe shared memory works under x86 Linux now?
+- Made changes for OS/2 port to fopen() text files.  From Blue Neon.
+
+
 Changes in KEGS v0.37 since v0.36
 - Linux PPC port completed and functional.  KEGS has been tested to
   run quite well and quite fast on a 240MHz 604e running

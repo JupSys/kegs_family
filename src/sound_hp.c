@@ -11,13 +11,20 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_hp_c[] = "@(#)$Header: sound_hp.c,v 1.14 97/09/07 18:25:45 kentd Exp $";
+const char rcsid_sound_hp_c[] = "@(#)$Header: sound_hp.c,v 1.15 98/07/20 01:10:36 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"
 
-#include <sys/audio.h>
-#include "Alib.h"
+#ifdef HPUX
+# include <sys/audio.h>
+# include "Alib.h"
+#endif
+
+#ifdef __linux__
+# include <sys/soundcard.h>
+#endif
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -26,11 +33,14 @@ extern int errno;
 extern int Verbose;
 extern int g_use_alib;
 
+extern int g_audio_rate;
 
 int	g_audio_socket = -1;
 int	g_bytes_written = 0;
+#ifdef HPUX
 Audio	*g_audio = 0;
 ATransID g_xid;
+#endif
 
 #define ZERO_BUF_SIZE		2048
 
@@ -39,6 +49,9 @@ word32 zero_buf[ZERO_BUF_SIZE];
 #define ZERO_PAUSE_SAFETY_SAMPS		(AUDIO_RATE/50)
 #define ZERO_PAUSE_NUM_SAMPS		(5*AUDIO_RATE)
 
+void child_sound_init_linux();
+void child_sound_init_hpdev();
+void child_sound_init_alib();
 
 void
 reliable_buf_write(word32 *shm_addr, int pos, int size)
@@ -100,11 +113,16 @@ child_sound_loop(int read_fd, word32 *shm_addr)
 
 	doc_printf("Child pipe fd: %d\n", read_fd);
 
+#ifdef HPUX
 	if(g_use_alib) {
 		child_sound_init_alib();
 	} else {
 		child_sound_init_hpdev();
 	}
+#endif
+#ifdef __linux__
+	child_sound_init_linux();
+#endif
 
 
 	zeroes_buffered = 0;
@@ -204,16 +222,20 @@ child_sound_loop(int read_fd, word32 *shm_addr)
 	}
 
 
+#ifdef HPUX
 	if(g_use_alib) {
 		ACloseAudio(g_audio, &status_return);
 	} else {
 		ioctl(g_audio_socket, AUDIO_DRAIN, 0);
 	}
+#endif
+	close(g_audio_socket);
 
 	exit(0);
 }
 
 
+#ifdef HPUX
 void
 child_sound_init_hpdev()
 {
@@ -397,4 +419,74 @@ child_sound_init_alib()
 		exit(1);
 	}
 }
+#endif
 
+#ifdef __linux__
+void
+child_sound_init_linux()
+{
+	int	stereo;
+	int	sample_size;
+	int	rate;
+	int	fragment;
+	int	fmt;
+	char	*str;
+	int	ret;
+	int	i;
+
+	g_audio_socket = open("/dev/dsp", O_WRONLY, 0);
+	if(g_audio_socket < 0) {
+		printf("open /dev/audio failed, ret: %d, errno:%d\n",
+			g_audio_socket, errno);
+		exit(1);
+	}
+
+#if 0
+	fragment = 0x00200009;
+	ret = ioctl(g_audio_socket, SNDCTL_DSP_SETFRAGMENT, &fragment);
+	if(ret < 0) {
+		printf("ioctl SETFRAGEMNT failed, ret:%d, errno:%d\n",
+			ret, errno);
+		exit(1);
+	}
+#endif
+
+	sample_size = 16;
+	ret = ioctl(g_audio_socket, SNDCTL_DSP_SAMPLESIZE, &sample_size);
+	if(ret < 0) {
+		printf("ioctl SNDCTL_DSP_SAMPLESIZE failed, ret:%d, errno:%d\n",
+			ret, errno);
+		exit(1);
+	}
+
+#ifdef KEGS_LITTLE_ENDIAN
+	fmt = AFMT_S16_LE;
+#else
+	fmt = AFMT_S16_BE;
+#endif
+	ret = ioctl(g_audio_socket, SNDCTL_DSP_SETFMT, &fmt);
+	if(ret < 0) {
+		printf("ioctl SNDCTL_DSP_SETFMT failed, ret:%d, errno:%d\n",
+			ret, errno);
+		exit(1);
+	}
+
+	stereo = 1;
+	ret = ioctl(g_audio_socket, SNDCTL_DSP_STEREO, &stereo);
+	if(ret < 0) {
+		printf("ioctl SNDCTL_DSP_STEREO failed, ret:%d, errno:%d\n",
+			ret, errno);
+		exit(1);
+	}
+
+	rate = g_audio_rate;
+	ret = ioctl(g_audio_socket, SNDCTL_DSP_SPEED, &rate);
+	if(ret < 0) {
+		printf("ioctl AUDIO_SET_SAMPLE_RATE failed, ret:%d, errno:%d\n",
+			ret, errno);
+		exit(1);
+	}
+
+	printf("Sound initialized\n");
+}
+#endif

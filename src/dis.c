@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.67 98/06/16 00:15:43 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.69 98/07/28 00:11:51 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -44,7 +44,7 @@ extern Engine_reg engine;
 #define W_BUF_LEN	128
 char w_buff[W_BUF_LEN];
 
-int stepping = 0;
+int g_stepping = 0;
 
 int list_pc;
 int list_pcbank;
@@ -108,7 +108,7 @@ do_debug_intfc()
 	a1bank = 0; a2bank = 0; a3bank = 0; a4bank = 0;
 	list_pc = engine.pc;
 	list_pcbank = engine.kbank;
-	stepping = 0;
+	g_stepping = 0;
 	mode = 0; old_mode = 0;
 	done = 0;
 	stop_run_at = -1;
@@ -237,7 +237,7 @@ do_debug_intfc()
 				show_adb_log();
 				break;
 			case 's':
-				stepping = 1;
+				g_stepping = 1;
 				if(got_num) {
 					engine.pc = a2;
 					engine.kbank = a2bank;
@@ -263,7 +263,7 @@ do_debug_intfc()
 			case 'g':
 			case 'G':
 				printf("Going..\n");
-				stepping = 0;
+				g_stepping = 0;
 				if(got_num) {
 					engine.pc = a2;
 					engine.kbank = a2bank;
@@ -374,7 +374,7 @@ show_toolset_tables(word32 a2bank, word32 addr)
 
 	addr = (a2bank << 16) + (addr & 0xffff);
 
-	toolfile = fopen("tool_set_info", "w");
+	toolfile = fopen("tool_set_info", "wt");
 	if(toolfile == 0) {
 		fprintf(stderr, "fopen of tool_set_info failed: %d\n", errno);
 		exit(2);
@@ -472,7 +472,7 @@ do_blank()
 		if(tmp == 0) tmp = 1;
 		enter_debug = 0;
 		for(i=0;i < tmp;i++) {
-			stepping = 1;
+			g_stepping = 1;
 			do_step();
 			if(enter_debug || halt_sim != HALT_STEP) {
 				break;

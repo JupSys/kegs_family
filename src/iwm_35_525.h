@@ -1,6 +1,6 @@
 
 #ifdef INCLUDE_IWM_RCSID_C
-const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.4 98/07/11 01:28:18 kentd Exp $";
+const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.5 98/07/26 23:53:59 kentd Exp $";
 #endif
 
 int
@@ -64,10 +64,13 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 	if(fast_disk_emul) {
 		cycs_passed = cycs_this_nib;
 		dcycs_passed = dcycs_this_nib;
+
 		/* pull a trick to make disk motor-on test pass ($bd34 RWTS) */
 		/*  if this would be a sync byte, and we didn't just do this */
 		/*  then don't return whole byte */
-		if(size > 8 && (g_iwm_fake_fast == 0)) {
+		/* BUT, don't do this if g_fast_disk_unnib, since it will */
+		/*  cause the dsk->unix routines to break */
+		if(size > 8 && !g_fast_disk_unnib && (g_iwm_fake_fast == 0)) {
 			cycs_passed = cycs_passed >> 1;
 			dcycs_passed = dcycs_passed * 0.5;
 			g_iwm_fake_fast = 1;
