@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.2 99/01/30 17:57:40 kentd Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.3 99/02/08 23:51:25 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"
@@ -496,12 +496,15 @@ child_sound_init_linux()
 			ret, errno);
 		exit(1);
 	}
-	if(ret < 8000) {
-		printf("Audio rate of %d which is < 8000 not supported!\n",ret);
+	if(ret > 0) {
+		rate = ret;	/* rate is returned value */
+	}
+	if(rate < 8000) {
+		printf("Audio rate of %d which is < 8000!\n", rate);
 		exit(1);
 	}
 	
-	g_audio_rate = ret;
+	g_audio_rate = rate;
 
 	printf("Sound initialized\n");
 }

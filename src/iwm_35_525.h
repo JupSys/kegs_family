@@ -1,6 +1,6 @@
 
 #ifdef INCLUDE_IWM_RCSID_C
-const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.6 99/01/31 22:15:48 kentd Exp $";
+const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.7 99/02/08 23:50:34 kentd Exp $";
 #endif
 
 int
@@ -26,7 +26,7 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 	double	track_dcycs;
 	double	dtmp;
 
-	iwm.previous_write_bits = -1;
+	iwm.previous_write_bits = 0;
 
 	qtr_track = dsk->cur_qtr_track;
 
@@ -275,15 +275,20 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 	}
 
 	val = val & (mask - 1);
-	if(prev_bits > 0) {
-		/* always force out prev_val if it had any bits before */
+	if(prev_bits) {
+		/* force out prev_val if it had many bits before */
 		/*  this prevents writes of 0 from messing us up */
-		iwm.previous_write_val = val;
-		iwm.previous_write_bits = bits_read;
-
-		iwm_printf("iwm_write: prev: %02x, %d, left:%02x, %d\n",
-			prev_val, prev_bits, val, bits_read);
-		disk_nib_out(dsk, prev_val, prev_bits);
+		if(((prev_val & 0x80) == 0) && (prev_bits < 10)) {
+			/* special case: we still don't have enough to go */
+			iwm_printf("iwm_write: zip2: %02x, %d, left:%02x,%d\n",
+					prev_val, prev_bits, val,bits_read);
+			val = prev_val;
+			bits_read = prev_bits;
+		} else {
+			iwm_printf("iwm_write: prev: %02x, %d, left:%02x, %d\n",
+				prev_val, prev_bits, val, bits_read);
+			disk_nib_out(dsk, prev_val, prev_bits);
+		}
 	} else if(val & 0x80) {
 		iwm_printf("iwm_write: new: %02x, %d\n", val,bits_read);
 		disk_nib_out(dsk, val, bits_read);
@@ -295,6 +300,11 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 
 	iwm.previous_write_val = val;
 	iwm.previous_write_bits = bits_read;
+	if(bits_read < 0) {
+		printf("iwm, bits_read:%d, val:%08x, prev:%02x, prevbit:%d\n",
+			bits_read, val, prev_val, prev_bits);
+		set_halt(1);
+	}
 
 	sdiff = dcycs - dcycs_last_read;
 	if(sdiff < (dcycs_this_nib) || (sdiff > (2*dcycs_this_nib)) ) {

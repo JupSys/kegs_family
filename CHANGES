@@ -1,4 +1,9 @@
 
+Changes in KEGS v0.43 since v0.42
+- Support .nib 5.25" format as read-only
+- Faster 3.5" nibblization routines (should make startup faster)
+- Fixed a very-old 3.5" disk writing bug that made bit-copiers not work
+
 Changes in KEGS v0.42 since v0.41
 - Include <errno.h> to fix Linux compile problem
 - Fix relative branch timing bug that was making IWM emulation flaky

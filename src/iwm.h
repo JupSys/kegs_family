@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$Header: iwm.h,v 1.6 99/01/19 23:07:58 kentd Exp $";
+const char rcsid_iwm_h[] = "@(#)$Header: iwm.h,v 1.7 99/02/15 20:38:54 kentd Exp $";
 #endif
 
 #define MAX_TRACKS	(2*80)
@@ -40,7 +40,7 @@ struct _Disk {
 	int	disk_525;
 	int	drive;
 	int	cur_qtr_track;
-	int	prodos_order;
+	int	image_type;
 	int	vol_num;
 	int	write_prot;
 	int	write_through_to_unix;

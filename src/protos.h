@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.116 99/02/01 23:01:39 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.118 99/02/15 20:43:48 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -33,28 +33,11 @@ void update_status_line(int line, const char *string);
 void redraw_status_lines(void);
 void x_refresh_ximage(void);
 
-
-
-
-/* iwm.c */
-void iwm_init(void);
-void iwm_reset(void);
-void iwm_show_stats(void);
-void iwm_show_track(int slot_drive, int track);
-int read_iwm(int loc, double dcycs);
-void write_iwm(int loc, int val, double dcycs);
-void smartport_init(void);
-void smartport_error(void);
-void iwm_vbl_update(void);
-void do_c70d(word32 arg0);
-void do_c70a(word32 arg0);
-void do_c700(word32 ret);
-
 /* test65.c */
 void do_gen_test(int got_num, int base_seed);
 
 
-/* engine.s */
+/* engine.s and engine_c.c */
 word32 get_itimer_asm(void);
 
 word32 get_memory_c(word32 addr, int cycs);
@@ -153,29 +136,6 @@ void do_debug_load(void);
 int do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize, int op_provided, word32 instr);
 void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, char *string);
 
-/* engine_c.c */
-void check_breakpoints(word32 addr);
-word32 get_memory8_io_stub(word32 addr, word32 stat, float *fcycs_ptr, float fplus_x_m1);
-word32 get_memory16_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
-word32 get_memory24_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
-void set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr, float fplus_x_m1);
-void set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
-void set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
-word32 get_memory_c(word32 addr, int cycs);
-word32 get_memory16_c(word32 addr, int cycs);
-word32 get_memory24_c(word32 addr, int cycs);
-void set_memory_c(word32 addr, word32 val, int cycs);
-void set_memory16_c(word32 addr, word32 val, int cycs);
-void set_memory24_c(word32 addr, word32 val, int cycs);
-word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
-word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
-byte *memalloc_align(int size);
-void memory_ptrs_init(void);
-void set_halt_act(int val);
-void clr_halt_act(void);
-word32 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr);
-int enter_engine(Engine_reg *engine_ptr);
-
 /* scc.c */
 void scc_init(void);
 void scc_reset(void);
@@ -232,6 +192,7 @@ int disk_track_to_unix(Disk *dsk, int qtr_track, byte *outbuf);
 void show_hex_data(byte *buf, int count);
 void disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size);
 void disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len, int nib_len);
+void iwm_nibblize_track_nib525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
 void iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
 void iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
 void disk_4x4_nib_out(Disk *dsk, word32 val);

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.83 99/01/31 22:15:20 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.86 99/02/15 21:24:26 kentd Exp $";
 
 #include "defc.h"
 
@@ -25,6 +25,10 @@ extern word32 g_slot_motor_detect;
 #define NIBS_FROM_ADDR_TO_DATA		20
 
 #define DISK_CONF_FILE			"disk_conf"
+
+#define DSK_TYPE_RAW			0
+#define DSK_TYPE_PRODOS			1
+#define DSK_TYPE_NIB			2
 
 const byte phys_to_dos_sec[] = {
 	0x00, 0x07, 0x0e, 0x06,  0x0d, 0x05, 0x0c, 0x04,
@@ -112,7 +116,7 @@ iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525)
 	dsk->disk_525 = disk_525;
 	dsk->drive = drive;
 	dsk->cur_qtr_track = 0;
-	dsk->prodos_order = 0;
+	dsk->image_type = 0;
 	dsk->vol_num = 254;
 	dsk->write_prot = 1;
 	dsk->write_through_to_unix = 0;
@@ -477,7 +481,7 @@ iwm_touch_switches(int loc, double dcycs)
 	}
 
 	if(!iwm.q7) {
-		iwm.previous_write_bits = -1;
+		iwm.previous_write_bits = 0;
 	}
 
 	if((dcycs > g_dcycs_end_emul_wr) && g_slow_525_emul_wr) {
@@ -1171,7 +1175,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 				phys_sec);
 			break;
 		}
-		if(dsk->prodos_order) {
+		if(dsk->image_type == DSK_TYPE_PRODOS) {
 			log_sec = phys_to_prodos_sec[phys_sec];
 		} else {
 			log_sec = phys_to_dos_sec[phys_sec];
@@ -1319,9 +1323,9 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 int
 iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 {
-	byte	buf_c00[0x100];
-	byte	buf_d00[0x100];
-	byte	buf_e00[0x100];
+	word32	buf_c00[0x100];
+	word32	buf_d00[0x100];
+	word32	buf_e00[0x100];
 	byte	*buf;
 	word32	tmp_5c, tmp_5d, tmp_5e;
 	word32	tmp_66, tmp_67;
@@ -1484,13 +1488,9 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			}
 			tmp_66 = val2;
 
-			if(tmp_5c & 0x80) {
-				tmp_5c = ((tmp_5c << 1) + 1) & 0xff;
-				carry = 1;
-			} else {
-				tmp_5c = (tmp_5c << 1) & 0xff;
-				carry = 0;
-			}
+			tmp_5c = tmp_5c << 1;
+			carry = (tmp_5c >> 8);
+			tmp_5c = (tmp_5c + carry) & 0xff;
 
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
@@ -1505,11 +1505,8 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			buf_c00[y] = val2;
 
 			tmp_5e = val2 + tmp_5e + carry;
-			carry = 0;
-			if(tmp_5e >= 0x100) {
-				tmp_5e = tmp_5e & 0xff;
-				carry = 1;
-			}
+			carry = (tmp_5e >> 8);
+			tmp_5e = tmp_5e & 0xff;
 /* 62b8 */
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
@@ -1518,11 +1515,8 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			buf_d00[y] = val2;
 			tmp_5d = val2 + tmp_5d + carry;
 
-			carry = 0;
-			if(tmp_5d >= 0x100) {
-				tmp_5d = tmp_5d & 0xff;
-				carry = 1;
-			}
+			carry = (tmp_5d >> 8);
+			tmp_5d = tmp_5d & 0xff;
 
 			y--;
 			if(y <= 0) {
@@ -1537,11 +1531,8 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			buf_e00[y+1] = val2;
 
 			tmp_5c = val2 + tmp_5c + carry;
-			carry = 0;
-			if(tmp_5c >= 0x100) {
-				tmp_5c = tmp_5c & 0xff;
-				carry = 1;
-			}
+			carry = (tmp_5c >> 8);
+			tmp_5c = tmp_5c & 0xff;
 		}
 
 /* 62d0 */
@@ -1713,8 +1704,6 @@ disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size)
 	int	ret, ret2;
 	int	i;
 
-	return;
-
 	for(i = 0; i < size; i++) {
 		buffer[i] = 0;
 	}
@@ -1765,6 +1754,11 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 	/* Read track from dsk int track_buf */
 
 	must_clear_track = 0;
+
+	if(unix_len > TRACK_BUF_LEN) {
+		printf("diks_unix_to_nib: requested len of image %s = %05x\n",
+			dsk->name_ptr, unix_len);
+	}
 
 	if(unix_pos >= 0) {
 		ret = lseek(dsk->fd, unix_pos, SEEK_SET);
@@ -1821,11 +1815,32 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 
 	/* create nibblized image */
 
-	if(dsk->disk_525) {
+	if(dsk->disk_525 && dsk->image_type == DSK_TYPE_NIB) {
+		iwm_nibblize_track_nib525(dsk, trk, track_buf, qtr_track);
+	} else if(dsk->disk_525) {
 		iwm_nibblize_track_525(dsk, trk, track_buf, qtr_track);
 	} else {
 		iwm_nibblize_track_35(dsk, trk, track_buf, qtr_track);
 	}
+}
+
+void
+iwm_nibblize_track_nib525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
+{
+	byte	*nib_ptr;
+	byte	*trk_ptr;
+	int	len;
+	int	i;
+
+	len = trk->track_len;
+	trk_ptr = track_buf;
+	nib_ptr = &(trk->nib_area[0]);
+	for(i = 0; i < len; i += 2) {
+		nib_ptr[i] = 8;
+		nib_ptr[i+1] = *trk_ptr++;;
+	}
+
+	iwm_printf("Nibblized q_track %02x\n", qtr_track);
 }
 
 void
@@ -1853,7 +1868,7 @@ iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 
 
 	for(phys_sec = 0; phys_sec < 16; phys_sec++) {
-		if(dsk->prodos_order) {
+		if(dsk->image_type == DSK_TYPE_PRODOS) {
 			log_sec = phys_to_prodos_sec[phys_sec];
 		} else {
 			log_sec = phys_to_dos_sec[phys_sec];
@@ -1924,9 +1939,9 @@ void
 iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 {
 	int	phys_to_log_sec[16];
-	byte	buf_c00[0x100];
-	byte	buf_d00[0x100];
-	byte	buf_e00[0x100];
+	word32	buf_c00[0x100];
+	word32	buf_d00[0x100];
+	word32	buf_e00[0x100];
 	byte	*buf;
 	word32	*word_ptr;
 	word32	val;
@@ -2047,21 +2062,14 @@ iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 
 		while(x >= 0) {
 /* 6338 */
-			if(tmp_5c & 0x80) {
-				tmp_5c = ((tmp_5c << 1) + 1) & 0xff;
-				carry = 1;
-			} else {
-				tmp_5c = (tmp_5c << 1) & 0xff;
-				carry = 0;
-			}
+			tmp_5c = tmp_5c << 1;
+			carry = (tmp_5c >> 8);
+			tmp_5c = (tmp_5c + carry) & 0xff;
 
 			val = buf[y];
 			tmp_5e = val + tmp_5e + carry;
-			carry = 0;
-			if(tmp_5e >= 0x100) {
-				tmp_5e = tmp_5e & 0xff;
-				carry = 1;
-			}
+			carry = (tmp_5e >> 8);
+			tmp_5e = tmp_5e & 0xff;
 
 			val = val ^ tmp_5c;
 			buf_c00[x] = val;
@@ -2069,11 +2077,8 @@ iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 /* 634c */
 			val = buf[y];
 			tmp_5d = tmp_5d + val + carry;
-			carry = 0;
-			if(tmp_5d >= 0x100) {
-				tmp_5d = tmp_5d & 0xff;
-				carry = 1;
-			}
+			carry = (tmp_5d >> 8);
+			tmp_5d = tmp_5d & 0xff;
 			val = val ^ tmp_5e;
 			buf_d00[x] = val;
 			y++;
@@ -2085,11 +2090,8 @@ iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 /* 632a */
 			val = buf[y];
 			tmp_5c = tmp_5c + val + carry;
-			carry = 0;
-			if(tmp_5d >= 0x100) {
-				tmp_5d = tmp_5d & 0xff;
-				carry = 1;
-			}
+			carry = (tmp_5c >> 8);
+			tmp_5c = tmp_5c & 0xff;
 
 			val = val ^ tmp_5d;
 			buf_e00[x+1] = val;
@@ -2549,6 +2551,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	char	*name_ptr;
 	char	*partition_name;
 	int	cmp_o, cmp_p, cmp_dot;
+	int	cmp_b, cmp_i, cmp_n;
 	int	acc, acc2;
 	int	can_write;
 	int	len;
@@ -2687,9 +2690,9 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 
 		if(buf_2img[12] == 0) {
 			printf("2IMG is in DOS 3.3 sector order\n");
-			dsk->prodos_order = 0;
+			dsk->image_type = 0;
 		} else {
-			dsk->prodos_order = 1;
+			dsk->image_type = DSK_TYPE_PRODOS;
 		}
 		if(buf_2img[19] & 0x80) {
 			/* disk is locked */
@@ -2697,7 +2700,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 			dsk->write_prot = 1;
 			dsk->write_through_to_unix = 0;
 		}
-		if((buf_2img[17] & 1) && (dsk->prodos_order == 0)) {
+		if((buf_2img[17] & 1) && (dsk->image_type == 0)) {
 			dsk->vol_num = buf_2img[16];
 			printf("Setting DOS 3.3 vol num to %d\n", dsk->vol_num);
 		}
@@ -2715,7 +2718,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		}
 		dsk->image_size = size;
 		if(dsk->disk_525) {
-			dsk->prodos_order = 0;
+			dsk->image_type = 0;
 			if(name_len >= 5) {
 				cmp_o = dsk->name_ptr[name_len-2];
 				cmp_p = dsk->name_ptr[name_len-3];
@@ -2723,13 +2726,29 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 				if(cmp_dot == '.' &&
 					  (cmp_p == 'p' || cmp_p == 'P') &&
 					  (cmp_o == 'o' || cmp_o == 'O')) {
-					dsk->prodos_order = 1;
+					dsk->image_type = DSK_TYPE_PRODOS;
+				}
+
+				cmp_b = dsk->name_ptr[name_len-2];
+				cmp_i = dsk->name_ptr[name_len-3];
+				cmp_n = dsk->name_ptr[name_len-4];
+				cmp_dot = dsk->name_ptr[name_len-5];
+				if(cmp_dot == '.' &&
+					  (cmp_n == 'n' || cmp_n == 'N') &&
+					  (cmp_i == 'i' || cmp_i == 'I') &&
+					  (cmp_b == 'b' || cmp_b == 'B')) {
+					dsk->image_type = DSK_TYPE_NIB;
+					dsk->write_prot = 1;
+					dsk->write_through_to_unix = 0;
 				}
 			}
 		} else {
-			dsk->prodos_order = 1;
+			dsk->image_type = 0;
 		}
 	}
+
+	dsk->disk_dirty = 0;
+	dsk->nib_pos = 0;
 
 	if(dsk->smartport) {
 		if(partition_name) {
@@ -2750,14 +2769,21 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	} else if(dsk->disk_525) {
 		unix_pos = dsk->image_start;
 		size = dsk->image_size;
-		if(size != 140*1024) {
-			printf("Disk 5.25 error: size is %d, not 140K\n",size);
-		}
 		dsk->num_tracks = 4*35;
+		len = 0x1000;
+		nibs = NIB_LEN_525;
+		if(dsk->image_type == DSK_TYPE_NIB) {
+			len = dsk->image_size / 35;;
+			nibs = len;
+		}
+		if(size != 35*len) {
+			printf("Disk 5.25 error: size is %d, not %d\n",size,
+					35*len);
+		}
 		for(i = 0; i < 35; i++) {
 			iwm_move_to_track(dsk, 4*i);
-			disk_unix_to_nib(dsk, 4*i, unix_pos + i*0x1000, 0x1000,
-								NIB_LEN_525);
+			disk_unix_to_nib(dsk, 4*i, unix_pos, len, nibs);
+			unix_pos += len;
 		}
 	} else {
 		/* disk_35 */
@@ -2784,6 +2810,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	}
 
 	iwm_move_to_track(dsk, save_track);
+
 }
 
 void

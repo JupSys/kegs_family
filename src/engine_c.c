@@ -11,9 +11,10 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.25 99/01/18 01:08:01 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.26 99/02/15 20:43:18 kentd Exp $";
 
 #include "defc.h"
+#include "protos_engine_c.h"
 
 #if 0
 # define LOG_PC

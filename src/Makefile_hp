@@ -110,4 +110,4 @@ xdriver.o:  iwm.h protos.h protos_xdriver.h
 engine_s.o: defs.h defcomm.h op_routs.h defs_instr.h 8inst_s 16inst_s 8size
 engine_s.o: 16size
 engine_c.o: defc.h defcomm.h op_routs.h defs_instr.h 8inst_c 16inst_c size_c
-engine_c.o: protos.h iwm.h
+engine_c.o: protos.h iwm.h protos_engine_c.h
