@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.263 98/08/21 00:25:13 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.264 98/10/12 23:14:59 kentd Exp $";
 
 #include <math.h>
 
@@ -702,6 +702,12 @@ main(int argc, char **argv)
 		} else if(!strcmp("-24", argv[i])) {
 			printf("Using 24-bit visual\n");
 			g_visual_depth = 24;
+		} else if(!strcmp("-16", argv[i])) {
+			printf("Using 16-bit visual\n");
+			g_visual_depth = 16;
+		} else if(!strcmp("-15", argv[i])) {
+			printf("Using 15-bit visual\n");
+			g_visual_depth = 15;
 		} else if(!strcmp("-skip", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
@@ -1373,7 +1379,6 @@ extern word32 g_cycs_in_40col;
 extern word32 g_cycs_in_xredraw;
 extern word32 g_cycs_in_check_input;
 extern word32 g_cycs_in_refresh_line;
-extern word32 g_cycs_in_refresh_line2;
 extern word32 g_cycs_in_refresh_ximage;
 extern word32 g_cycs_in_io_read;
 extern word32 g_cycs_in_sound1;
@@ -1382,6 +1387,7 @@ extern word32 g_cycs_in_sound3;
 extern word32 g_cycs_in_sound4;
 extern word32 g_cycs_in_start_sound;
 extern word32 g_cycs_in_est_sound;
+extern word32 g_refresh_bytes_xfer;
 
 extern int g_num_snd_plays;
 extern int g_num_doc_events;
@@ -1484,9 +1490,9 @@ update_60hz(double dcycs, double dtime_now)
 			dtime_diff_1sec, g_doc_vol, g_a2vid_palette);
 		update_status_line(0, status_buf);
 
-		sprintf(status_buf, "rl2:%08x, xred_cs:%03x_%05x, "
+		sprintf(status_buf, "xfer:%08x, xred_cs:%03x_%05x, "
 			"ch_in:%08x ref_l:%08x ref_x:%08x",
-			g_cycs_in_refresh_line2,
+			g_refresh_bytes_xfer,
 			g_cycs_in_xredraw >> 20, g_cycs_in_xredraw & 0xfffff,
 			g_cycs_in_check_input, g_cycs_in_refresh_line,
 			g_cycs_in_refresh_ximage);
@@ -1518,7 +1524,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.39");
+		update_status_line(6, "KEGS v0.40");
 
 		g_status_refresh_needed = 1;
 
@@ -1536,7 +1542,6 @@ update_60hz(double dcycs, double dtime_now)
 		g_cycs_in_xredraw = 0;
 		g_cycs_in_check_input = 0;
 		g_cycs_in_refresh_line = 0;
-		g_cycs_in_refresh_line2 = 0;
 		g_cycs_in_refresh_ximage = 0;
 		g_cycs_in_io_read = 0;
 		g_cycs_in_sound1 = 0;
@@ -1545,6 +1550,7 @@ update_60hz(double dcycs, double dtime_now)
 		g_cycs_in_sound4 = 0;
 		g_cycs_in_start_sound = 0;
 		g_cycs_in_est_sound = 0;
+		g_refresh_bytes_xfer = 0;
 
 		g_num_snd_plays = 0;
 		g_num_doc_events = 0;

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.80 98/05/17 01:49:14 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.81 98/10/12 23:17:29 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -172,7 +172,7 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.80 98/05/17 01:49:14
 #define EFF_BORDER_WIDTH	(BORDER_WIDTH + (640-560))
 
 #define BASE_MARGIN_TOP		32
-#define BASE_MARGIN_BOTTOM	32
+#define BASE_MARGIN_BOTTOM	30
 #define BASE_MARGIN_LEFT	BORDER_WIDTH
 #define BASE_MARGIN_RIGHT	BORDER_WIDTH
 

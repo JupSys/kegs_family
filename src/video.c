@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.89 98/07/28 00:11:58 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.90 98/10/12 23:16:36 kentd Exp $";
 
 #include <time.h>
 
@@ -84,6 +84,9 @@ int	g_border_sides_refresh_needed = 1;
 int	g_border_special_refresh_needed = 1;
 int	g_border_line24_refresh_needed = 1;
 int	g_status_refresh_needed = 1;
+
+int	g_vbl_border_color = 0;
+int	g_border_last_vbl_changes = 0;
 
 #define A2_MAX_ALL_STAT		34
 
@@ -398,7 +401,7 @@ void
 video_reset()
 {
 
-	g_installed_full_superhires_colormap = 0;
+	g_installed_full_superhires_colormap = (g_visual_depth != 8);
 	g_cur_a2_stat = ALL_STAT_TEXT | ALL_STAT_ANNUNC3 |
 		(0xf << BIT_ALL_STAT_TEXT_COLOR);
 
@@ -582,8 +585,9 @@ update_a2_ptrs(int line, int new_stat)
 		mode_hires[1][line] = -1;
 		break;
 	case MODE_BORDER:
-		ptr = data_border_special;
-		xim = ximage_border_special;
+		/* Hack: reuse text page last line as the special border */
+		ptr = data_text[0];
+		xim = ximage_text[0];
 		mode_ptr = &(mode_border[0]);
 		break;
 	default:
@@ -629,7 +633,10 @@ change_a2vid_palette(int new_palette)
 	g_border_special_refresh_needed = 1;
 	g_status_refresh_needed = 1;
 	g_palette_changed = 1;
-
+	g_border_last_vbl_changes = 1;
+	for(i = 0; i < 262; i++) {
+		cur_border_colors[i] ^= 1;;
+	}
 }
 
 int g_num_a2vid_palette_checks = 1;
@@ -648,7 +655,7 @@ check_a2vid_palette()
 	/* determine if g_a2vid_palette should change */
 
 	g_num_a2vid_palette_checks--;
-	if(g_num_a2vid_palette_checks) {
+	if(g_num_a2vid_palette_checks || g_installed_full_superhires_colormap){
 		return;
 	}
 
@@ -743,8 +750,6 @@ change_border_color(double dcycs, int val)
 	}
 }
 
-int	g_vbl_border_color = 0;
-int	g_border_last_vbl_changes = 0;
 extern double g_drecip_cycles_in_16ms;
 
 void
@@ -757,6 +762,10 @@ update_border_info(double old_drecip_cycles_in_16ms)
 	int	limit;
 	int	color_now;
 	int	i, j;
+
+	/* to get this routine to redraw the border, change */
+	/*  g_vbl_border_color,  set g_border_last_vbl_changes = 1 */
+	/*  and change the cur_border_colors[] array */
 
 	color_now = g_vbl_border_color;
 
@@ -781,7 +790,7 @@ update_border_info(double old_drecip_cycles_in_16ms)
 	}
 
 	/* check remaining lines */
-	if(g_border_last_vbl_changes) {
+	if(g_border_last_vbl_changes || limit) {
 		for(j = last_line; j < 262; j++) {
 			if(cur_border_colors[j] != color_now) {
 				update_border_line(j, color_now);
@@ -817,18 +826,15 @@ update_border_line(int line_in, int color)
 
 	val = (color + (g_a2vid_palette << 4));
 	val = (val << 24) + (val << 16) + (val << 8) + val;
-	if(line_in >= 192) {
-		if(line_in >= 200) {
-			if(line_in >= 262) {
-				printf("line_in: %d out of range!\n", line_in);
-				set_halt(1);
-				line_in = 200;
-			}
-			line = (line_in - 200) >> 1;
-		} else {
-			line = line_in - 192;
-			g_border_line24_refresh_needed = 1;
+
+	if(line_in >= 200) {
+		if(line_in >= 262) {
+			printf("line_in: %d out of range!\n", line_in);
+			set_halt(1);
+			line_in = 200;
 		}
+		line = (line_in - 200) >> 1;
+
 		if(2*line >= (X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8) ||
 				(line < 0)) {
 			printf("Line out of range: %d\n", line);
@@ -836,14 +842,29 @@ update_border_line(int line_in, int color)
 		}
 
 		ptr =(word32 *)&(data_border_special[2*line*X_A2_WINDOW_WIDTH]);
-		limit = (4*X_A2_WINDOW_WIDTH) >> 2;
+		limit = (2*X_A2_WINDOW_WIDTH) >> 2;
 
 		g_border_special_refresh_needed = 1;
 		for(i = 0; i < limit; i++) {
 			*ptr++ = val;
 		}
-	}
+	} else if(line_in >= 192) {
+		line = line_in - 192;
 
+		if(line >= 8) {
+			printf("Line out of range2: %d\n", line);
+			line = 0;
+		}
+
+		ptr =(word32 *)&(data_text[0][2*(192 + line)*A2_WINDOW_WIDTH]);
+		limit = (2*A2_WINDOW_WIDTH) >> 2;
+
+		g_border_line24_refresh_needed = 1;
+		for(i = 0; i < limit; i++) {
+			*ptr++ = val;
+		}
+
+	}
 	if(line_in < 200) {
 		line = line_in;
 		ptr = (word32 *)&(data_border_sides[2*line * EFF_BORDER_WIDTH]);
@@ -2001,6 +2022,7 @@ check_super_hires_palette_changes(int reparse)
 	int	diffs;
 	int	low_delta, low_color;
 	int	delta;
+	int	full;
 	int	i, j, k;
 
 	palette_changed = 0;
@@ -2013,6 +2035,8 @@ check_super_hires_palette_changes(int reparse)
 	if(saved_a2vid_palette != a2vid_palette) {
 		reparse = 1;
 	}
+
+	full = g_installed_full_superhires_colormap;
 
 	ch_ptr = &(slow_mem_changed[0x9e00 >> CHANGE_SHIFT]);
 	ch_mask = ch_ptr[0] | ch_ptr[1];
@@ -2030,6 +2054,7 @@ check_super_hires_palette_changes(int reparse)
 		for(j = 0; j < 8; j++) {
 			if(word_ptr[j] != g_saved_palettes[i][j]) {
 				diffs = 1;
+				break;
 			}
 		}
 
@@ -2045,7 +2070,7 @@ check_super_hires_palette_changes(int reparse)
 			g_saved_palettes[i][j] = word_ptr[j];
 		}
 
-		if(i == a2vid_palette) {
+		if(i == a2vid_palette && !full) {
 			/* construct new color approximations from lores */
 			for(j = 0; j < 16; j++) {
 				tmp = *byte_ptr++;
@@ -2227,6 +2252,9 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 	ch_ptr[4] = 0;
 
 	a2vid_palette = g_a2vid_palette;
+	if(g_installed_full_superhires_colormap) {
+		a2vid_palette = -1;
+	}
 
 	all_checks = 0;
 	for(line = 0; line < 8; line++) {
@@ -2347,7 +2375,6 @@ display_screen()
 }
 
 word32 g_cycs_in_refresh_line = 0;
-word32 g_cycs_in_refresh_line2 = 0;
 word32 g_cycs_in_refresh_ximage = 0;
 
 int	g_num_lines_a2vid = 0;
@@ -2370,12 +2397,6 @@ refresh_screen()
 	for(i = 0; i < 25; i++) {
 		refresh_line(i);
 	}
-	GET_ITIMER(end_time2);
-
-	g_cycs_in_refresh_line2 += (end_time2 - start_time2);
-
-
-	g_installed_full_superhires_colormap = 0;
 
 	if(g_palette_changed) {
 		update_physical_colormap();
@@ -2470,14 +2491,15 @@ refresh_line(int line)
 		redraw_changed_super_hires(0, line, must_reparse, ptr);
 		break;
 	case MODE_BORDER:
+		g_num_lines_a2vid++;
 		if(line != 24) {
 			printf("Border line not 24!\n");
 			set_halt(1);
 		}
 		a2_line_full_left_edge[line] = 0;
 		a2_line_left_edge[line] = 0;
-		a2_line_full_right_edge[line] = 640;
-		a2_line_right_edge[line] = 640;
+		a2_line_full_right_edge[line] = 560;
+		a2_line_right_edge[line] = 560;
 		if(g_border_line24_refresh_needed) {
 			g_border_line24_refresh_needed = 0;
 			a2_screen_buffer_changed |= (1 << 24);

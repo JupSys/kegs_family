@@ -1,4 +1,15 @@
 
+Changes in KEGS v0.40 since v0.39
+- 15 and 24 bit depth displays now supported (though somewhat slower than
+	8 bit displays).  But Super-hires displays now show 256
+	simultaneous colors on a 16- or 24-bit X display.
+	Select a 15-bit display with the cmd line option "-15" and
+	a 24-bit display with "-24".  Otherwise, KEGS defaults to looking
+	for an 8-bit display, and fails if it cannot find one.
+- Some border fixes--border colors now update correctly when palette
+	changes occur (like via F10).
+- Alias F1 to ESC for OS/2.
+
 Changes in KEGS v0.39 since v0.38
 - OS/2 port by Tschopp Gilles
 	- handle cr&lf better in disk_conf

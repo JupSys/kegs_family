@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.136 98/08/16 21:07:47 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.141 98/10/25 18:08:56 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -52,6 +52,7 @@ extern int g_fast_disk_emul;
 
 extern int g_warp_pointer;
 extern int g_visual_depth;
+int g_visual_mdepth = 0;
 
 extern int g_swap_paddles;
 extern int g_invert_paddles;
@@ -81,11 +82,20 @@ byte *data_hires[2];
 byte *data_superhires;
 byte *data_border_special;
 byte *data_border_sides;
+
+byte *dint_border_sides;
+byte *dint_border_special;
+byte *dint_main_win;
+
 XImage *ximage_text[2];
 XImage *ximage_hires[2];
 XImage *ximage_superhires;
 XImage *ximage_border_special;
 XImage *ximage_border_sides;
+
+XImage *xint_border_sides;
+XImage *xint_border_special;
+XImage *xint_main_win;
 
 #ifdef X_SHARED_MEM
 XShmSegmentInfo shm_text_seginfo[2];
@@ -93,6 +103,10 @@ XShmSegmentInfo shm_hires_seginfo[2];
 XShmSegmentInfo shm_superhires_seginfo;
 XShmSegmentInfo shm_border_special_seginfo;
 XShmSegmentInfo shm_border_sides_seginfo;
+
+XShmSegmentInfo shmint_border_sides_seginfo;
+XShmSegmentInfo shmint_border_special_seginfo;
+XShmSegmentInfo shmint_main_win_seginfo;
 #endif
 
 int Max_color_size = 256;
@@ -100,6 +114,11 @@ int Max_color_size = 256;
 XColor xcolor_a2vid_array[256];
 XColor xcolor_superhires_array[256];
 XColor dummy_xcolor;
+int g_palette_internal[200];
+word32 g_palette_8to16[256];
+word32 g_a2palette_8to16[256];
+word32 g_palette_8to24[256];
+word32 g_a2palette_8to24[256];
 
 int g_Control_L_up = 1;
 int g_Control_R_up = 1;
@@ -274,6 +293,9 @@ update_color_array(int col_num, int a2_color)
 {
 	XColor	*xcol, *xcol2;
 	int	palette;
+	int	red, blue, green;
+	int	doit;
+	int	full;
 
 	if(col_num >= 256 || col_num < 0) {
 		printf("update_color_array called: col: %03x\n", col_num);
@@ -281,38 +303,56 @@ update_color_array(int col_num, int a2_color)
 		return;
 	}
 
+	full = g_installed_full_superhires_colormap;
+
 	xcol = &xcolor_superhires_array[col_num];
 	xcol2 = &xcolor_a2vid_array[col_num];
 	palette = col_num >> 4;
-	if(palette == g_a2vid_palette) {
+	doit = 1;
+	if(!full && palette == g_a2vid_palette) {
 		xcol2 = &dummy_xcolor;
+		doit = 0;
 	}
 
-	convert_to_xcolor(xcol, xcol2, a2_color);
+	if(g_visual_depth != 8) {
+		/* redraw whole superhires for now */
+		g_full_refresh_needed = -1;
+	}
+
+	convert_to_xcolor(xcol, xcol2, col_num, a2_color, doit);
 }
 
-#define HAS(a,b)  (((a) & (b)) == (b))
-
-
 #define MAKE_4(val)	( (val << 12) + (val << 8) + (val << 4) + val)
+#define	MAKE_COL16(red, green, blue)				\
+		(((red) << 11) + \
+		((green) << 6) + \
+		((blue) << 1))
+#define	MAKE_COL24(red, green, blue)				\
+		(((red) << 20) + ((green) << 12) + ((blue) << 4))
 
 void
-convert_to_xcolor(XColor *xcol, XColor *xcol2, int a2_color)
+convert_to_xcolor(XColor *xcol, XColor *xcol2, int col_num,
+			int a2_color, int doit)
 {
-	int	tmp;
+	int	red, green, blue;
 
-	tmp = (a2_color >> 8) & 0xf;
-	xcol->red = MAKE_4(tmp);
-	xcol2->red = MAKE_4(tmp);
-	tmp = (a2_color >> 4) & 0xf;
-	xcol->green = MAKE_4(tmp);
-	xcol2->green = MAKE_4(tmp);
-	tmp = (a2_color) & 0xf;
-	xcol->blue = MAKE_4(tmp);
-	xcol2->blue = MAKE_4(tmp);
+	red = (a2_color >> 8) & 0xf;
+	green = (a2_color >> 4) & 0xf;
+	blue = (a2_color) & 0xf;
+	if(g_visual_depth == 8 || !doit) {
+		xcol->red = MAKE_4(red);
+		xcol2->red = MAKE_4(red);
+		xcol->green = MAKE_4(green);
+		xcol2->green = MAKE_4(green);
+		xcol->blue = MAKE_4(blue);
+		xcol2->blue = MAKE_4(blue);
 
-	xcol->flags = DoRed | DoGreen | DoBlue;
-	xcol2->flags = DoRed | DoGreen | DoBlue;
+		xcol->flags = DoRed | DoGreen | DoBlue;
+		xcol2->flags = DoRed | DoGreen | DoBlue;
+	} else {
+		g_palette_8to16[col_num] = MAKE_COL16(red, green, blue);
+		g_palette_8to24[col_num] = MAKE_COL24(red, green, blue);
+	}
 }
 
 
@@ -322,16 +362,28 @@ void
 update_physical_colormap()
 {
 	int	palette;
+	int	full;
 	int	i;
 
-	palette = g_a2vid_palette << 4;
 
-	for(i = 0; i < 16; i++) {
-		convert_to_xcolor(&xcolor_a2vid_array[palette + i],
-			&dummy_xcolor, lores_colors[i]);
+	full = g_installed_full_superhires_colormap;
+
+	if(!full) {
+		palette = g_a2vid_palette << 4;
+		for(i = 0; i < 16; i++) {
+			convert_to_xcolor(&xcolor_a2vid_array[palette + i],
+				&dummy_xcolor, palette + i, lores_colors[i], 1);
+		}
 	}
 
-	if(g_installed_full_superhires_colormap) {
+	if(full) {
+		if(g_visual_depth != 8) {
+			/* Must redraw all, for now */
+			a2_screen_buffer_changed = -1;
+			g_full_refresh_needed = -1;
+			return;
+		}
+		/* Not really supported any more */
 		XStoreColors(display, g_a2_colormap,
 			&xcolor_superhires_array[0], Max_color_size);
 	} else {
@@ -346,6 +398,9 @@ show_xcolor_array()
 	int i;
 
 	for(i = 0; i < 256; i++) {
+		printf("%02x: %08x, %08x\n", i,
+			g_palette_8to16[i], g_palette_8to24[i]);
+			
 #if 0
 		printf("%02x: %04x %04x %04x, %02x %x\n",
 			i, xcolor_array[i].red, xcolor_array[i].green,
@@ -379,6 +434,34 @@ xdriver_end()
 }
 
 void
+show_colormap(char *str, Colormap cmap, int index1, int index2, int index3)
+{
+	XColor	xcol;
+	int	i;
+	int	pix;
+
+	printf("Show colormap: %08x = %s, cmap cells: %d,%d,%d\n", cmap, str,
+			index1, index2, index3);
+	for(i = 0; i < index1 + index2 + index3; i++) {
+		pix = i;
+		if(i >= index1) {
+			pix = (i-index1)*index1;
+			if(i >= (index1 + index2)) {
+				pix = (i - index1 - index2)*index2*index1;
+			}
+		}
+		if(i == 0 && index1 < 250) {
+			pix = 0x842;
+		}
+		xcol.pixel = pix;
+		XQueryColor(display, cmap, &xcol);
+		printf("Cell %03x: pix: %03x, R:%04x, G:%04x, B:%04x\n",
+			i, xcol.pixel, xcol.red, xcol.green, xcol.blue);
+	}
+}
+
+
+void
 dev_video_init()
 {
 	XGCValues new_gc;
@@ -388,20 +471,28 @@ dev_video_init()
 	XClassHint my_winClassHint;
 	XTextProperty my_winText;
 	XVisualInfo *visualList;
+	XVisualInfo my_vis;
 	Visual	*vis;
+	word16	*ptr16;
 	char	cursor_data;
 	char	**font_ptr;
 	int	match8, match24;
+	int	depth, mdepth;
 	word32	create_win_list;
 	int	needs_cmap;
+	int	cmap_alloc_amt;
 	int	cnt;
 	int	font_height;
 	int	screen_num;
 	int	visualsMatched;
 	char	*myTextString[1];
 	int	visual_chosen;
+	int	red, green, blue;
+	word32	lores_col;
+	word32	val;
+	int	sh;
 	int	ret;
-	int	i;
+	int	i, j;
 	int	keycode;
 	int	tmp_array[0x80];
 
@@ -447,7 +538,8 @@ dev_video_init()
 	vTemplate.screen = screen_num;
 	vTemplate.depth = g_visual_depth;
 
-	visualList = XGetVisualInfo(display, VisualScreenMask | VisualDepthMask,
+	visualList = XGetVisualInfo(display,
+		(VisualScreenMask | VisualDepthMask),
 		&vTemplate, &visualsMatched);
 
 	vid_printf("visuals matched: %d\n", visualsMatched);
@@ -480,14 +572,13 @@ dev_video_init()
 			needs_cmap = 1;
 			break;
 		}
-		if((g_visual_depth == 8) && match24) {
+		if((g_visual_depth != 8) && match24) {
 			visual_chosen = i;
 			Max_color_size = -1;
 			needs_cmap = 0;
 			break;
 		}
 	}
-
 	if(visual_chosen < 0) {
 		fprintf(stderr,"Couldn't find any good visuals!\n");
 		exit(3);
@@ -498,6 +589,18 @@ dev_video_init()
 
 	vis = visualList[visual_chosen].visual;
 
+	/* structure copy */
+	my_vis = visualList[visual_chosen];
+
+	depth = g_visual_depth;
+	mdepth = depth;
+	if(depth == 15) {
+		mdepth = 16;
+	}
+	if(depth == 24) {
+		mdepth = 32;
+	}
+	g_visual_mdepth = mdepth;
 
 	g_default_colormap = XDefaultColormap(display, screen_num);
 	if(!g_default_colormap) {
@@ -505,20 +608,28 @@ dev_video_init()
 		exit(4);
 	}
 
-
 	g_a2_colormap = -1;
+	cmap_alloc_amt = AllocNone;
 	if(needs_cmap) {
-		g_a2_colormap = XCreateColormap(display,
-				RootWindow(display,screen_num), vis, AllocAll);
+		cmap_alloc_amt = AllocAll;
+	}
+	g_a2_colormap = XCreateColormap(display,
+			RootWindow(display,screen_num), vis, cmap_alloc_amt);
 
-		vid_printf("g_a2_colormap: %08x, main: %08x\n",
+	vid_printf("g_a2_colormap: %08x, main: %08x\n",
 			(word32)g_a2_colormap, (word32)g_default_colormap);
 
-		if(g_a2_colormap == g_default_colormap) {
-			printf("A2_colormap = default colormap!\n");
-			exit(4);
-		}
+	if(needs_cmap && g_a2_colormap == g_default_colormap) {
+		printf("A2_colormap = default colormap!\n");
+		exit(4);
 	}
+
+#if 0
+	show_colormap("a2_colormap", g_a2_colormap, my_vis.colormap_size,
+			my_vis.colormap_size, my_vis.colormap_size);
+	show_colormap("default_colormap", g_a2_colormap, my_vis.colormap_size,
+				my_vis.colormap_size, my_vis.colormap_size);
+#endif
 
 	/* and define cursor */
 	cursor_data = 0;
@@ -536,7 +647,6 @@ dev_video_init()
 	XFlush(display);
 
 	win_attr.event_mask = X_A2_WIN_EVENT_LIST;
-
 	win_attr.colormap = g_a2_colormap;
 	win_attr.backing_store = WhenMapped;
 	if(g_warp_pointer) {
@@ -549,18 +659,15 @@ dev_video_init()
 	fflush(stdout);
 
 	create_win_list = CWEventMask | CWBackingStore | CWCursor;
-	if(needs_cmap) {
-		create_win_list |= CWColormap;
-	}
+	create_win_list |= CWColormap;
 	a2_win = XCreateWindow(display, RootWindow(display, screen_num),
 		0, 0, BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT,
 		0, vTemplate.depth, InputOutput, vis,
-		CWEventMask | CWColormap | CWBackingStore | CWCursor,
-		&win_attr);
+		create_win_list, &win_attr);
 
 	if(needs_cmap) {
-		XSetWindowColormap(display, a2_win, g_a2_colormap);
 	}
+	XSetWindowColormap(display, a2_win, g_a2_colormap);
 
 	XFlush(display);
 
@@ -605,6 +712,18 @@ dev_video_init()
 		g_use_shmem = get_shm(&ximage_border_sides, display,
 			&data_border_sides, vis, &shm_border_sides_seginfo, 2);
 	}
+	if(g_visual_depth != 8 && g_use_shmem) {
+		/* allocate special buffers for this screen */
+		g_use_shmem &= get_shm(&xint_border_sides, display,
+			&dint_border_sides, vis,
+			&shmint_border_sides_seginfo, 0x10 + 2);
+		g_use_shmem &= get_shm(&xint_border_special, display,
+			&dint_border_special, vis,
+			&shmint_border_special_seginfo, 0x10 + 1);
+		g_use_shmem &= get_shm(&xint_main_win, display,
+			&dint_main_win, vis,
+			&shmint_main_win_seginfo, 0x10);
+	}
 #endif
 	if(!g_use_shmem) {
 		if(g_screen_redraw_skip_amt < 0) {
@@ -624,6 +743,13 @@ dev_video_init()
 						&data_border_special, vis, 1);
 		ximage_border_sides = get_ximage(display, &data_border_sides,
 									vis, 2);
+
+		xint_border_special = get_ximage(display,
+					&dint_border_special, vis, 0x10 + 1);
+		xint_border_sides = get_ximage(display,
+					&dint_border_sides, vis, 0x10 + 2);
+		xint_main_win = get_ximage(display,
+					&dint_main_win, vis, 0x10);
 	}
 
 	vid_printf("data_text[0]: %08x, g_use_shmem: %d\n",
@@ -633,17 +759,17 @@ dev_video_init()
 	XFree(visualList);
 
 	for(i = 0; i < 256; i++) {
-		xcolor_a2vid_array[i].flags = DoRed | DoGreen | DoBlue;
 		xcolor_a2vid_array[i].pixel = i;
-		xcolor_a2vid_array[i].red = i*256;
-		xcolor_a2vid_array[i].green = i*256;
-		xcolor_a2vid_array[i].blue = i*256;
-
-		xcolor_superhires_array[i].flags = DoRed | DoGreen | DoBlue;
 		xcolor_superhires_array[i].pixel = i;
-		xcolor_superhires_array[i].red = i*256;
-		xcolor_superhires_array[i].green = i*256;
-		xcolor_superhires_array[i].blue = i*256;
+		lores_col = lores_colors[i & 0xf];
+		convert_to_xcolor(&xcolor_a2vid_array[i],
+			&xcolor_superhires_array[i], i,
+			lores_col, 1);
+		red = (lores_col >> 8) & 0xf;
+		green = (lores_col >> 4) & 0xf;
+		blue = (lores_col) & 0xf;
+		g_a2palette_8to16[i] = MAKE_COL16(red, green, blue);
+		g_a2palette_8to24[i] = MAKE_COL24(red, green, blue);
 	}
 
 	if(needs_cmap) {
@@ -651,7 +777,7 @@ dev_video_init()
 			Max_color_size);
 	}
 
-	g_installed_full_superhires_colormap = 0;
+	g_installed_full_superhires_colormap = !needs_cmap;
 	
 	myTextString[0] = "Sim65";
 
@@ -693,6 +819,29 @@ dev_video_init()
 	XChangeGC(display, a2_winGC, GCFillStyle | GCFont, &new_gc);
 
 	/* XSync(display, False); */
+#if 0
+/* MkLinux for Powermac depth 15 has bugs--this was to try to debug them */
+	if(g_visual_depth == 15) {
+		/* draw phony screen */
+		ptr16 = (word16 *)dint_main_win;
+		for(i = 0; i < 320*400; i++) {
+			ptr16[i] = 0;
+		}
+		for(i = 0; i < 400; i++) {
+			for(j = 0; j < 640; j++) {
+				sh = (j / 20) & 0x1f;
+				val = sh;
+				val = val;
+				*ptr16++ = val;
+			}
+		}
+		XPutImage(display, a2_win, a2_winGC, xint_main_win,
+			0, 0,
+			BASE_MARGIN_LEFT, BASE_MARGIN_TOP,
+			640, 400);
+		XFlush(display);
+	}
+#endif
 
 
 	XFlush(display);
@@ -717,22 +866,34 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 	int	(*old_x_handler)(Display *, XErrorEvent *);
 	int	width;
 	int	height;
+	int	depth;
 
 	width = A2_WINDOW_WIDTH;
 	height = A2_WINDOW_HEIGHT;
-	if(extended_info == 1) {
+	if((extended_info & 0xf) == 1) {
 		/* border at top and bottom of screen */
 		width = X_A2_WINDOW_WIDTH;
 		height = X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8;
 	}
-	if(extended_info == 2) {
+	if((extended_info & 0xf) == 2) {
 		/* border at sides of screen */
 		width = EFF_BORDER_WIDTH;
 		height = A2_WINDOW_HEIGHT;
 	}
 
-	xim = XShmCreateImage(display, visual, g_visual_depth, ZPixmap,
+	depth = 8;
+	if(extended_info & 0x10) {
+		depth = g_visual_depth;
+	}
+	xim = XShmCreateImage(display, visual, depth, ZPixmap,
 		(char *)0, seginfo, width, height);
+	if(extended_info & 0x10) {
+		/* check mdepth! */
+		if(xim->bits_per_pixel != g_visual_mdepth) {
+			printf("shm_ximage bits_per_pix: %d != %d\n",
+					xim->bits_per_pixel, g_visual_mdepth);
+		}
+	}
 
 	vid_printf("xim: %08x\n", (word32)xim);
 	*xim_in = xim;
@@ -798,33 +959,48 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 	byte	*ptr;
 	int	width;
 	int	height;
+	int	depth;
+	int	mdepth;
 
 	width = A2_WINDOW_WIDTH;
 	height = A2_WINDOW_HEIGHT;
-	if(extended_info == 1) {
+	if((extended_info & 0xf) == 1) {
 		/* border at top and bottom of screen */
 		width = X_A2_WINDOW_WIDTH;
 		height = X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8;
 	}
-	if(extended_info == 2) {
+	if((extended_info & 0xf) == 2) {
 		/* border at sides of screen */
 		width = EFF_BORDER_WIDTH;
 		height = A2_WINDOW_HEIGHT;
 	}
 
-	ptr = (byte *)malloc((width * height * g_visual_depth) / 8);
+	depth = 8;
+	mdepth = 8;
+	if(extended_info & 0x10) {
+		depth = g_visual_depth;
+		mdepth = g_visual_mdepth;
+	}
+	ptr = (byte *)malloc((width * height * mdepth) >> 3);
 
 	vid_printf("ptr: %08x\n", (word32)ptr);
 
 	if(ptr == 0) {
-		printf("malloc for data failed\n");
+		printf("malloc for data failed, mdepth: %d\n", mdepth);
 		exit(2);
 	}
 
 	*data_ptr = ptr;
 
-	xim = XCreateImage(display, vis, g_visual_depth, ZPixmap, 0,
+	xim = XCreateImage(display, vis, depth, ZPixmap, 0,
 		(char *)ptr, width, height, 8, 0);
+	if(extended_info & 0x10) {
+		/* check mdepth! */
+		if(xim->bits_per_pixel != g_visual_mdepth) {
+			printf("shm_ximage bits_per_pix: %d != %d\n",
+					xim->bits_per_pixel, g_visual_mdepth);
+		}
+	}
 
 	vid_printf("xim.data: %08x\n", (word32)xim->data);
 
@@ -876,12 +1052,19 @@ redraw_status_lines()
 	int	line;
 	int	height;
 	int	margin;
+	word32	white, black;
 
 	height = text_FontSt->ascent + text_FontSt->descent;
 	margin = text_FontSt->ascent;
 
-	XSetForeground(display, a2_winGC, (g_a2vid_palette << 4) + 0xf);
-	XSetBackground(display, a2_winGC, (g_a2vid_palette << 4) + 0x0);
+	white = (g_a2vid_palette << 4) + 0xf;
+	black = (g_a2vid_palette << 4) + 0x0;
+	if(g_visual_depth != 8) {
+		white = (2 << (g_visual_depth - 1)) - 1;
+		black = 0;
+	}
+	XSetForeground(display, a2_winGC, white);
+	XSetBackground(display, a2_winGC, black);
 
 	for(line = 0; line < MAX_STATUS_LINES; line++) {
 		buf = &(g_status_buf[line][0]);
@@ -896,6 +1079,7 @@ redraw_status_lines()
 
 
 word32 g_cycs_in_xredraw = 0;
+word32 g_refresh_bytes_xfer = 0;
 
 void
 x_refresh_ximage()
@@ -1011,9 +1195,24 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 
 	if(xim == ximage_border_special) {
 		/* fix up y pos in src */
+		printf("x_refresh_lines called, ximage_border_special!!\n");
 		srcy = 0;
 	}
 
+	if(g_visual_depth > 8 && g_visual_depth <= 16) {
+		/* translate from 8-bit pseudo to correct visual */
+		x_convert_8to16(xim, xint_main_win, left_pix, srcy,
+			(right_pix - left_pix), 16*(end_line - start_line));
+		xim = xint_main_win;
+	}
+	if(g_visual_depth == 24) {
+		/* translate from 8-bit pseudo to correct visual */
+		x_convert_8to24(xim, xint_main_win, left_pix, srcy,
+			(right_pix - left_pix), 16*(end_line - start_line));
+		xim = xint_main_win;
+	}
+	g_refresh_bytes_xfer += 16*(end_line - start_line) *
+							(right_pix - left_pix);
 #ifdef X_SHARED_MEM
 	if(g_use_shmem) {
 		XShmPutImage(display, a2_win, a2_winGC,
@@ -1036,6 +1235,7 @@ void
 x_redraw_border_sides_lines(int end_x, int width, int start_line,
 	int end_line)
 {
+	XImage	*xim;
 
 	if(start_line < 0 || width < 0) {
 		return;
@@ -1045,17 +1245,31 @@ x_redraw_border_sides_lines(int end_x, int width, int start_line,
 	printf("redraw_border_sides lines:%d-%d from %d to %d\n",
 		start_line, end_line, end_x - width, end_x);
 #endif
+	xim = ximage_border_sides;
+	if(g_visual_depth > 8 && g_visual_depth <= 16) {
+		/* translate from 8-bit pseudo to correct visual */
+		x_convert_8to16(xim, xint_border_sides, 0, 16*start_line,
+			width, 16*(end_line - start_line));
+		xim = xint_border_sides;
+	}
+	if(g_visual_depth == 24) {
+		/* translate from 8-bit pseudo to correct visual */
+		x_convert_8to24(xim, xint_border_sides, 0, 16*start_line,
+			width, 16*(end_line - start_line));
+		xim = xint_border_sides;
+	}
+	g_refresh_bytes_xfer += 16 * (end_line - start_line) * width;
 
 #ifdef X_SHARED_MEM
 	if(g_use_shmem) {
-		XShmPutImage(display, a2_win, a2_winGC, ximage_border_sides,
+		XShmPutImage(display, a2_win, a2_winGC, xim,
 			0, 16*start_line,
 			end_x - width, BASE_MARGIN_TOP + 16*start_line,
 			width, 16*(end_line - start_line), False);
 	}
 #endif
 	if(!g_use_shmem) {
-		XPutImage(display, a2_win, a2_winGC, ximage_border_sides,
+		XPutImage(display, a2_win, a2_winGC, xim,
 			0, 16*start_line,
 			end_x - width, BASE_MARGIN_TOP + 16*start_line,
 			width, 16*(end_line - start_line));
@@ -1086,7 +1300,7 @@ x_refresh_border_sides()
 	for(i = 0; i < 25; i++) {
 		mode = (a2_line_stat[i] >> 4) & 7;
 		width = EFF_BORDER_WIDTH;
-		if(mode == MODE_SUPER_HIRES || mode == MODE_BORDER) {
+		if(mode == MODE_SUPER_HIRES) {
 			width = BORDER_WIDTH;
 		}
 		if(width != old_width) {
@@ -1105,34 +1319,128 @@ x_refresh_border_sides()
 void
 x_refresh_border_special()
 {
+	XImage	*xim;
 	int	width, height;
 
 	width = X_A2_WINDOW_WIDTH;
 	height = BASE_MARGIN_TOP;
+
+	xim = ximage_border_special;
+	if(g_visual_depth > 8 && g_visual_depth <= 16) {
+		/* translate from 8-bit pseudo to correct visual */
+		x_convert_8to16(xim, xint_border_special, 0, 0,
+			width, BASE_MARGIN_BOTTOM);
+		x_convert_8to16(xim, xint_border_special, 0, BASE_MARGIN_BOTTOM,
+			width, BASE_MARGIN_TOP);
+		xim = xint_border_special;
+	}
+	if(g_visual_depth == 24) {
+		/* translate from 8-bit pseudo to correct visual */
+		x_convert_8to24(xim, xint_border_special, 0, 0,
+			width, BASE_MARGIN_BOTTOM);
+		x_convert_8to24(xim, xint_border_special, 0, BASE_MARGIN_BOTTOM,
+			width, BASE_MARGIN_TOP);
+		xim = xint_border_special;
+	}
+	g_refresh_bytes_xfer += 16 * width *
+				(BASE_MARGIN_TOP + BASE_MARGIN_BOTTOM);
 #ifdef X_SHARED_MEM
 	if(g_use_shmem) {
-		XShmPutImage(display, a2_win, a2_winGC, ximage_border_special,
+		XShmPutImage(display, a2_win, a2_winGC, xim,
 			0, 0,
 			0, BASE_MARGIN_TOP + A2_WINDOW_HEIGHT,
 			width, BASE_MARGIN_BOTTOM, False);
 
-		XShmPutImage(display, a2_win, a2_winGC, ximage_border_special,
+		XShmPutImage(display, a2_win, a2_winGC, xim,
 			0, BASE_MARGIN_BOTTOM,
 			0, 0,
 			width, BASE_MARGIN_TOP, False);
 	}
 #endif
 	if(!g_use_shmem) {
-		XPutImage(display, a2_win, a2_winGC, ximage_border_special,
+		XPutImage(display, a2_win, a2_winGC, xim,
 			0, 0,
 			0, BASE_MARGIN_TOP + A2_WINDOW_HEIGHT,
 			width, BASE_MARGIN_BOTTOM);
-		XPutImage(display, a2_win, a2_winGC, ximage_border_special,
+		XPutImage(display, a2_win, a2_winGC, xim,
 			0, BASE_MARGIN_BOTTOM,
 			0, 0,
 			width, BASE_MARGIN_TOP);
 	}
 }
+
+void
+x_convert_8to16(XImage *xim, XImage *xout, int startx, int starty,
+		int width, int height)
+{
+	byte	*indata, *inptr;
+	word16	*outdata, *outptr;
+	word32	*palptr;
+	int	x, y;
+
+	indata = (byte *)xim->data;
+	outdata = (word16 *)xout->data;
+
+	if(indata == data_superhires) {
+		palptr = &(g_palette_8to16[0]);
+	} else {
+		palptr = &(g_a2palette_8to16[0]);
+	}
+
+	for(y = 0; y < height; y++) {
+		if(indata == data_border_special) {
+			inptr = &indata[(starty + y)*X_A2_WINDOW_WIDTH+startx];
+			outptr = &outdata[(starty+ y)*X_A2_WINDOW_WIDTH+startx];
+		} else if(indata == data_border_sides) {
+			inptr = &indata[(starty + y)*EFF_BORDER_WIDTH + startx];
+			outptr = &outdata[(starty + y)*EFF_BORDER_WIDTH+startx];
+		} else {
+			inptr = &indata[(starty + y)*A2_WINDOW_WIDTH + startx];
+			outptr = &outdata[(starty + y)*A2_WINDOW_WIDTH +startx];
+		}
+		for(x = 0; x < width; x++) {
+			*outptr++ = palptr[*inptr++];
+		}
+	}
+}
+
+void
+x_convert_8to24(XImage *xim, XImage *xout, int startx, int starty,
+		int width, int height)
+{
+	byte	*indata, *inptr;
+	word32	*outdata, *outptr;
+	word32	*palptr;
+	int	x, y;
+
+	indata = (byte *)xim->data;
+	outdata = (word32 *)xout->data;
+
+	if(indata == data_superhires) {
+		palptr = &(g_palette_8to24[0]);
+	} else {
+		palptr = &(g_a2palette_8to24[0]);
+	}
+
+	for(y = 0; y < height; y++) {
+		if(indata == data_border_special) {
+			inptr = &indata[(starty + y)*X_A2_WINDOW_WIDTH+startx];
+			outptr = &outdata[(starty+ y)*X_A2_WINDOW_WIDTH+startx];
+		} else if(indata == data_border_sides) {
+			inptr = &indata[(starty + y)*EFF_BORDER_WIDTH + startx];
+			outptr = &outdata[(starty + y)*EFF_BORDER_WIDTH+startx];
+		} else {
+			inptr = &indata[(starty + y)*A2_WINDOW_WIDTH + startx];
+			outptr = &outdata[(starty + y)*A2_WINDOW_WIDTH +startx];
+		}
+		for(x = 0; x < width; x++) {
+			*outptr++ = palptr[*inptr++];
+		}
+	}
+}
+
+
+
 
 #if 0
 void
@@ -1154,6 +1462,7 @@ check_input_events()
 	XEvent	ev;
 	int	len;
 	int	motion;
+	int	refresh_needed;
 
 	g_num_check_input_calls--;
 	if(g_num_check_input_calls < 0) {
@@ -1164,6 +1473,7 @@ check_input_events()
 	}
 
 	motion = 0;
+	refresh_needed = 0;
 	while(len > 0) {
 		XNextEvent(display, &ev);
 		len--;
@@ -1238,7 +1548,7 @@ check_input_events()
 			}
 			break;
 		case Expose:
-			g_full_refresh_needed = -1;
+			refresh_needed = -1;
 			break;
 		case NoExpose:
 			/* do nothing */
@@ -1276,7 +1586,8 @@ check_input_events()
 		update_mouse(-1,-1,-1,-1);
 	}
 
-	if(g_full_refresh_needed) {
+	if(refresh_needed) {
+		printf("Full refresh needed\n");
 		a2_screen_buffer_changed = -1;
 		g_full_refresh_needed = -1;
 
@@ -1313,6 +1624,10 @@ handle_keysym(XEvent *xev_in)
 	is_up = 0;
 	if(type == KeyRelease) {
 		is_up = 1;
+	}
+	if(keysym == XK_F1) {
+		/* Alias F1 to escape for OS/2 */
+		keysym = XK_Escape;
 	}
 
 	if((keysym == XK_F7) && !is_up) {
