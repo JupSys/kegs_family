@@ -1,0 +1,19 @@
+# Paths to images for KEGS
+
+#s6d1 = dos33.dsk
+#s6d2 = another.dsk
+
+s5d1 = XMAS_DEMO
+#s5d2 = another_35_image
+
+s7d1 = NUCLEUS03
+s7d2 = SAMPLE_IMAGE
+
+#s7d1 = GSOS
+#s7d5 = /dev/dsk/c201d2s0:GO.ProDOS
+#s7d6 = /dev/dsk/c201d2s0:GO-Main
+#s7d7 = /dev/dsk/c201d2s0:GO-Misc16bit
+#s7d8 = /dev/dsk/c201d2s0:GO-Programming
+#s7d9 = /dev/dsk/c201d2s0:GO-Disks
+#s7d10 = /dev/dsk/c201d2s0:GO-Applications
+#s7d11 = /dev/dsk/c201d2s0:GO-G.S.

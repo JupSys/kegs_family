@@ -1,0 +1,10 @@
+
+KEGS is easy to compile.  Just cd to the src directory and type "make".
+KEGS requires perl installed in /usr/local/bin/perl (or just edit the
+scripts to point to wherever you installed perl).  Perl version 4 or 5 is
+fine.
+
+I build KEGS using a complex build process, so the provided Makefile
+has no dependency info or other usual makefile niceties.  Sorry.
+If you change header files, you'll probably have to erase all the *.o's
+and then remake.
