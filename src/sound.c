@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.77 99/01/30 17:57:19 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.78 99/02/21 23:33:05 kentd Exp $";
 
 #include "defc.h"
 
@@ -26,6 +26,7 @@ const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.77 99/01/30 17:57:19 kent
 extern int Verbose;
 extern int g_use_shmem;
 extern word32 g_vbl_count;
+extern int g_preferred_rate;
 
 
 extern double g_dcycles_in_16ms;
@@ -221,6 +222,7 @@ sound_init()
 	}
 
 	if(g_audio_enable == 0) {
+		set_audio_rate(g_preferred_rate);
 		return;
 	}
 
@@ -304,13 +306,18 @@ parent_sound_get_sample_rate(int read_fd)
 		exit(1);
 	}
 	close(read_fd);
+	set_audio_rate(tmp);
+}
 
-	g_audio_rate = tmp;
-	g_daudio_rate = (tmp)*1.0;
-	g_drecip_audio_rate = 1.0/(tmp);
-	g_dsamps_per_dcyc = ((tmp*1.0) / DCYCS_1_MHZ);
-	g_dcycs_per_samp = (DCYCS_1_MHZ / (tmp*1.0));
-	g_fsamps_per_dcyc = (float)((tmp*1.0) / DCYCS_1_MHZ);
+void
+set_audio_rate(int rate)
+{
+	g_audio_rate = rate;
+	g_daudio_rate = (rate)*1.0;
+	g_drecip_audio_rate = 1.0/(rate);
+	g_dsamps_per_dcyc = ((rate*1.0) / DCYCS_1_MHZ);
+	g_dcycs_per_samp = (DCYCS_1_MHZ / (rate*1.0));
+	g_fsamps_per_dcyc = (float)((rate*1.0) / DCYCS_1_MHZ);
 }
 
 void

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.118 99/02/15 20:43:48 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.119 99/02/21 23:33:19 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -311,6 +311,7 @@ void doc_log_rout(char *msg, int osc, double dcycs, int etc);
 void show_doc_log(void);
 void sound_init(void);
 void parent_sound_get_sample_rate(int read_fd);
+void set_audio_rate(int rate);
 void sound_reset(double dcycs);
 void sound_shutdown(void);
 void sound_update(double dcycs);

@@ -49,8 +49,9 @@ need to edit the first line of make_inst and make_size to point to the
 correct place.
 
 Audio is currently disabled by default, but you can try turning it on
-by runnning "kegs -audio 1".  It sounds horrible to me, but sounds do
-come out.
+by runnning "kegs -audio 1".
+
+A user recommends using "egcs -O6 -mpentium" for the best performance.
 
 PowerPC Linux build instructions:
 ----------------------------

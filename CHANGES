@@ -1,4 +1,9 @@
 
+Changes in KEGS v0.44 since v0.43
+- -audio 0 option would often cause programs to hang.  Bug was that the
+   audio rate was defaulting to '0' which confused KEGS.
+- Made keycode 0x072 be the XK_Break key for XFree86
+
 Changes in KEGS v0.43 since v0.42
 - Support .nib 5.25" format as read-only
 - Faster 3.5" nibblization routines (should make startup faster)

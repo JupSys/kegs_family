@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.141 98/10/25 18:08:56 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.142 99/02/23 21:34:10 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -1695,6 +1695,7 @@ handle_keysym(XEvent *xev_in)
 		break;
 	case NoSymbol:
 		switch(keycode) {
+		/* 94-95 are for my PC101 kbd + windows keys on HPUX */
 		case 0x0095:
 			/* left windows key = option */
 			keysym = XK_Print;
@@ -1703,6 +1704,10 @@ handle_keysym(XEvent *xev_in)
 		case 0x0094:
 			/* right windows key = cmd */
 			keysym = XK_Scroll_Lock;
+			break;
+		/* 0072 is for cra@WPI.EDU who says it's Break under XFree86 */
+		case 0x0072:
+			keysym = XK_Break;
 			break;
 		}
 	}

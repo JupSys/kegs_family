@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.269 99/02/16 23:31:35 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.270 99/02/21 22:56:10 kentd Exp $";
 
 #include <math.h>
 
@@ -1536,7 +1536,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.43");
+		update_status_line(6, "KEGS v0.44");
 
 		g_status_refresh_needed = 1;
 
