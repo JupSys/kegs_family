@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.135 98/07/10 00:28:44 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.136 98/08/16 21:07:47 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -772,12 +772,13 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 	vid_printf("about to RMID the shmid\n");
 	shmctl(seginfo->shmid, IPC_RMID, 0);
 
+	XFlush(display);
+	XSetErrorHandler(old_x_handler);
+
 	if(xshm_error) {
-		XFlush(display);
 		XDestroyImage(xim);
 		/* We could release the shared mem segment, but by doing the */
 		/* RMID, it will go away when we die now, so just leave it */
-		XSetErrorHandler(old_x_handler);
 		printf("Not using shared memory\n");
 		return 0;
 	}

@@ -1,4 +1,15 @@
 
+Changes in KEGS v0.39 since v0.38
+- OS/2 port by Tschopp Gilles
+	- handle cr&lf better in disk_conf
+	- Drive letters work and are not confused with partition names, so
+		s7d1 = D:\images\cd:1 will open partition 1 correctly.
+	- KEGS no longer uses system() to do file copies, it does it all
+		using POSIX calls.
+	- Unix-specific socket calls moved from scc.c to scc_driver.h
+	- Default X handler re-installed properly now for better debug
+- Nasty core dump bug found and fixed by Tschopp Gilles in disk switch code
+
 Changes in KEGS v0.38 since v0.37
 - IWM bugs:
 	- fast_disk_emul off under GS/OS caused I/O errors.

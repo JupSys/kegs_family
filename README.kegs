@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.38
+KEGS: Kent's Emulated GS version 0.39
 
 What is this?
 -------------
@@ -64,6 +64,10 @@ Included files:
 	CHANGES		- Description of changes since last release
 	README.kegs	- you're here
 	README.compile	- Describes how to build KEGS
+	INTERNALS.overview - description of how KEGS works
+	INTERNALS.xdriver - Describes the xdriver.c routines for porting
+	INTERNALS.iwm	- Describes the internal 3.5" and 5.25" disk handling
+			   routines
 	kegs		- the executable, for HP-UX 10.20+
 	font.65sim	- C-like description of the font KEGS uses.
 	disk_conf	- disk image configuration info
@@ -1002,6 +1006,7 @@ enters the window.
 Key summary:
 -----------
 
+F1:    Alias of ESC for OS/2 compatibility.
 F7:    Toggle fast_disk_emul on/off
 F8/F9: Toggle X window pointer hiding on/off (it's both since the F9
 	key doesn't work on my keyboard...sigh).

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_hp_c[] = "@(#)$Header: sound_hp.c,v 1.15 98/07/20 01:10:36 kentd Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.1 98/08/23 22:50:20 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.79 98/07/28 00:11:55 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.81 98/08/22 23:51:40 kentd Exp $";
 
 #include "defc.h"
 
@@ -2408,11 +2408,14 @@ maybe_parse_disk_conf_file()
 		}
 
 		line++;
-		/* strip off newline */
+		/* strip off newline(s) */
 		len = strlen(buf);
-		if(len) {
-			len--;
-			buf[len] = 0;
+		for(i = len - 1; i >= 0; i--) {
+			if((buf[i] != 0x0d) && (buf[i] != 0x0a)) {
+				break;
+			}
+			len = i;
+			buf[i] = 0;
 		}
 
 		iwm_printf("disk_conf[%d]: %s\n", line, buf);
@@ -2585,7 +2588,8 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	partition_name = 0;
 	tmp_buf[0] = 0;
 	for(i = 0; i < name_len; i++) {
-		if(name_ptr[i] == ':') {
+		/* ignore drive letters--look for partition names at char 3 */
+		if((i > 2) && (name_ptr[i] == ':')) {
 			/* yup, it's got a partition name! */
 			partition_name = &name_ptr[i+1];
 			break;
@@ -2593,6 +2597,14 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		tmp_buf[i] = name_ptr[i];
 		tmp_buf[i+1] = 0;
 	}
+
+	/* first, see if file exists.  If it doesn't just return */
+	dsk->fd = open(tmp_buf, O_RDONLY, 0x1b6);
+	if(dsk->fd < 0) {
+		printf("Disk image %s does not exist!\n", tmp_buf);
+		return;
+	}
+	close(dsk->fd);
 
 	dsk->fd = open(tmp_buf, O_RDWR | O_BINARY, 0x1b6);
 	can_write = 1;
@@ -2811,7 +2823,6 @@ eject_disk(Disk *dsk)
 		dsk->tracks[i].nib_area = 0;
 		dsk->tracks[i].track_len = 0;
 	}
-	free(dsk->tracks);
 	dsk->num_tracks = 0;
 
 	/* close file, clean up dsk struct */
@@ -2830,6 +2841,54 @@ eject_disk(Disk *dsk)
 }
 
 
+#define	COPY_BUF_SIZE	4096
+
+void
+kegs_file_copy(char *orig_name, char *new_name)
+{
+	char	copy_buf[COPY_BUF_SIZE];
+	int	fd_in, fd_out;
+	int	len;
+	int	ret;
+
+	fd_in = open(orig_name, O_RDONLY, 0x1b6);
+	if(fd_in < 0) {
+		printf("kegs_file_copy: open %s failed: %d %d\n",
+			orig_name, fd_in, errno);
+		exit(1);
+	}
+
+	fd_out = open(new_name, O_WRONLY | O_TRUNC | O_CREAT, 0x1b6);
+	if(fd_out < 0) {
+		printf("kegs_file_copy: open %s failed: %d %d\n",
+			orig_name, fd_out, errno);
+		exit(1);
+	}
+
+	while(1) {
+		len = read(fd_in, &copy_buf[0], COPY_BUF_SIZE);
+		if(len == 0) {
+			break;
+		}
+		if(len < 0) {
+			if(errno == EINTR) {
+				continue;
+			}
+			printf("Error reading from file %s, errno: %d\n",
+				orig_name, errno);
+			exit(1);
+		}
+		ret = write(fd_out, &copy_buf[0], len);
+		if(ret != len) {
+			printf("Error writing to file %s: ret:%d, %d\n",
+				new_name, ret, errno);
+			exit(1);
+		}
+	}
+	close(fd_in);
+	close(fd_out);
+}
+
 void
 eject_disk_by_num(int slot, int drive)
 {
@@ -2843,16 +2902,8 @@ eject_disk_by_num(int slot, int drive)
 
 	sprintf(tmp_buf2, "%s.ktmp1", DISK_CONF_FILE);
 
-	sprintf(tmp_buf, "rm -f %s; cp %s %s", tmp_buf2, DISK_CONF_FILE,
-			tmp_buf2);
-
-	printf("Running: %s\n", tmp_buf);
-	ret = system(tmp_buf);
-	if(ret != 0) {
-		printf("copy of %s failed\n", DISK_CONF_FILE);
-		set_halt(1);
-		return;
-	}
+	(void)unlink(tmp_buf2);			/* "rm -f tmp_buf2" */
+	kegs_file_copy(DISK_CONF_FILE, tmp_buf2);
 
 	fconf_old = fopen(tmp_buf2, "rt");
 	fconf_new = fopen(DISK_CONF_FILE, "wt+");
@@ -2879,6 +2930,8 @@ eject_disk_by_num(int slot, int drive)
 	}
 	fclose(fconf_old);
 	fclose(fconf_new);
+
+	(void)unlink(tmp_buf2);			/* "rm -f tmp_buf2" */
 
 	/* and make sure it gets reparsed */
 	g_disk_conf_mtime = 0;
