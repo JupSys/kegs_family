@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.272 99/03/21 23:36:59 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.275 99/04/05 00:12:14 kentd Exp $";
 
 #include <math.h>
 
@@ -35,6 +35,7 @@ const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.272 99/03/21 23:36:
 #define EV_SCAN_INT	3
 #define EV_DOC_INT	4
 #define EV_VBL_INT	5
+#define EV_SCC		6
 
 extern int g_stepping;
 
@@ -983,6 +984,16 @@ add_event_doc(double dcycs, int osc)
 }
 
 void
+add_event_scc(double dcycs, int type)
+{
+	if(dcycs < g_cur_dcycs) {
+		dcycs = g_cur_dcycs;
+	}
+
+	add_event_entry(dcycs, EV_SCC + (type << 8));
+}
+
+void
 add_event_vbl()
 {
 	double	dcycs;
@@ -996,6 +1007,12 @@ double
 remove_event_doc(int osc)
 {
 	return remove_event_entry(EV_DOC_INT + (osc << 8));
+}
+
+double
+remove_event_scc(int type)
+{
+	return remove_event_entry(EV_SCC + (type << 8));
 }
 
 void
@@ -1215,6 +1232,9 @@ run_prog(word32 cycles)
 				break;
 			case EV_VBL_INT:
 				do_vbl_int();
+				break;
+			case EV_SCC:
+				do_scc_event(type >> 8, dcycs);
 				break;
 			default:
 				printf("Unknown event: %d!\n", type);
@@ -1536,7 +1556,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.46");
+		update_status_line(6, "KEGS v0.47");
 
 		g_status_refresh_needed = 1;
 
@@ -1711,7 +1731,7 @@ update_60hz(double dcycs, double dtime_now)
 	video_update(old_drecip_cycles_in_16ms);
 	sound_update(dcycs);
 	clock_update();
-	scc_update();
+	scc_update(dcycs);
 }
 
 void

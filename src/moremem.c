@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.195 99/01/31 22:16:45 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.196 99/04/05 00:11:44 kentd Exp $";
 
 #include "defc.h"
 
@@ -2007,12 +2007,14 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 			c046_vbl_int_status = 0;
 			c046_25sec_int_status = 0;
 			return;
+		case 0x48: /* c048 */
+			/* diversitune writes this--ignore it */
+			return;
 		case 0x40: /* c040 */
 		case 0x42: /* c042 */
 		case 0x43: /* c043 */
 		case 0x44: /* c044 */
 		case 0x45: /* c045 */
-		case 0x48: /* c048 */
 		case 0x49: /* c049 */
 		case 0x4a: /* c04a */
 		case 0x4b: /* c04b */

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.28 99/03/21 23:23:26 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.29 99/03/22 22:22:53 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -57,7 +57,7 @@ int bogus[] = {
 #define CYCLES_MINUS_1	fcycles -= fplus_1;
 #define CYCLES_MINUS_2	fcycles -= fplus_2;
 
-#define CYCLES_FINISH	fcycles = fcycles_stop;
+#define CYCLES_FINISH	fcycles = fcycles_stop + fplus_1;
 
 #define FCYCLES_ROUND	fcycles = (int)(fcycles + fplus_x_m1);
 

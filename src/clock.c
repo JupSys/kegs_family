@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.15 98/07/10 00:26:05 kentd Exp $";
+const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.16 99/04/05 00:10:11 kentd Exp $";
 
 #include "defc.h"
 #include <time.h>
@@ -190,7 +190,7 @@ clock_write_c034(word32 val)
 	if((val & 0x80) != 0) {
 		if((val & 0x20) == 0) {
 			printf("c034 write not last = 1\n");
-			set_halt(1);
+			/* set_halt(1); */
 		}
 		do_clock_data();
 	}
@@ -244,7 +244,7 @@ do_clock_data()
 			}
 		} else {
 			printf("clk read from IDLE mode!\n");
-			set_halt(1);
+			/* set_halt(1); */
 			g_clk_mode = CLK_IDLE;
 		}
 		break;
@@ -340,7 +340,7 @@ do_clock_data()
 				if(c033_data & 0xc0) {
 					printf("Writing test reg: %02x!\n",
 						c033_data);
-					set_halt(1);
+					/* set_halt(1); */
 				}
 				break;
 			case 0x1:	/* write protect reg */
@@ -349,7 +349,7 @@ do_clock_data()
 				if(c033_data & 0x80) {
 					printf("Stop, wr clk wr_prot: %02x\n",
 						c033_data);
-					set_halt(1);
+					/* set_halt(1); */
 				}
 				break;
 			default:

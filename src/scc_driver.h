@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_driver_h[] = "@(#)$Header: scc_driver.h,v 1.2 99/01/18 01:04:22 kentd Exp $";
+const char rcsid_scc_driver_h[] = "@(#)$Header: scc_driver.h,v 1.3 99/04/05 00:12:00 kentd Exp $";
 
 /* This file contains the Unix socket calls */
 
@@ -105,7 +105,7 @@ scc_accept_socket(int port)
 }
 
 void
-scc_try_fill_readbuf(int port)
+scc_try_fill_readbuf(int port, double dcycs)
 {
 	byte	tmp_buf[256];
 	Scc	*scc_ptr;
@@ -131,7 +131,7 @@ scc_try_fill_readbuf(int port)
 				/* Skip null chars */
 				continue;
 			}
-			scc_add_to_readbuf(port, tmp_buf[i]);
+			scc_add_to_readbuf(port, tmp_buf[i], dcycs);
 		}
 	}
 	
@@ -187,7 +187,6 @@ scc_try_to_empty_writebuf(int port)
 				rdptr = rdptr - SCC_OUTBUF_SIZE;
 			}
 			scc_ptr->out_rdptr = rdptr;
-			scc_set_tx_int(port);
 		}
 	}
 }

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.79 99/03/02 00:07:45 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.80 99/04/05 00:11:14 kentd Exp $";
 
 #include "defc.h"
 
@@ -1523,7 +1523,7 @@ doc_read_c03d(double dcycs)
 #if 0
 			printf("Reading doc_data_reg[%02x]!\n", osc);
 #endif
-			doc_saved_val = 0;
+			doc_saved_val = osc << 3;
 			break;
 		case 0x4:	/* wave ptr register */
 			doc_saved_val = rptr->waveptr;
@@ -1551,9 +1551,11 @@ doc_read_c03d(double dcycs)
 				break;
 			case 0x02:	/* 0xe2 */
 				doc_saved_val = 0x80;
+#if 0
 				printf("Reading doc 0xe2, ret: %02x\n",
 								doc_saved_val);
 				set_halt(1);
+#endif
 				break;
 			default:
 				doc_saved_val = 0;

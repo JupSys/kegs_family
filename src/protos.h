@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.120 99/03/02 00:08:15 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.122 99/04/05 00:11:34 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -90,8 +90,8 @@ int update_mouse(int x, int y, int button_state, int button_valid);
 int mouse_read_c024(void);
 int read_paddles(int paddle, double dcycs);
 void adb_key_event(int a2code, int is_up);
-int adb_read_c000(void);
-int adb_access_c010(void);
+word32 adb_read_c000(void);
+word32 adb_access_c010(void);
 word32 adb_read_c025(void);
 int adb_is_cmd_key_down(void);
 int adb_is_option_key_down(void);
@@ -140,23 +140,33 @@ void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, c
 /* scc.c */
 void scc_init(void);
 void scc_reset(void);
-void scc_update(void);
+void scc_hard_reset_port(int port);
+void scc_reset_port(int port);
+void scc_regen_clocks(int port);
+void scc_update(double dcycs);
+void do_scc_event(int type, double dcycs);
 void show_scc_state(void);
 void scc_log(int regnum, word32 val, double dcycs);
 void show_scc_log(void);
 word32 scc_read_reg(int port, double dcycs);
 void scc_write_reg(int port, word32 val, double dcycs);
-void scc_set_rx_int(int port);
+void scc_maybe_br_event(int port, double dcycs);
+void scc_evaluate_ints(int port);
+void scc_maybe_rx_event(int port, double dcycs);
+void scc_maybe_rx_int(int port, double dcycs);
 void scc_clr_rx_int(int port);
-void scc_set_tx_int(int port);
+void scc_handle_tx_event(int port, double dcycs);
+void scc_maybe_tx_event(int port, double dcycs);
 void scc_clr_tx_int(int port);
-void scc_add_to_readbuf(int port, word32 val);
-void scc_add_to_writebuf(int port, word32 val);
+void scc_set_zerocnt_int(int port);
+void scc_clr_zerocnt_int(int port);
+void scc_add_to_readbuf(int port, word32 val, double dcycs);
+void scc_add_to_writebuf(int port, word32 val, double dcycs);
 word32 scc_read_data(int port, double dcycs);
 void scc_write_data(int port, word32 val, double dcycs);
 int scc_socket_init(int port);
 void scc_accept_socket(int port);
-void scc_try_fill_readbuf(int port);
+void scc_try_fill_readbuf(int port, double dcycs);
 void scc_try_to_empty_writebuf(int port);
 
 /* iwm.c */
@@ -271,8 +281,10 @@ void add_event_entry(double dcycs, int type);
 double remove_event_entry(int type);
 void add_event_stop(double dcycs);
 void add_event_doc(double dcycs, int osc);
+void add_event_scc(double dcycs, int type);
 void add_event_vbl(void);
 double remove_event_doc(int osc);
+double remove_event_scc(int type);
 void show_all_events(void);
 void show_pmhz(void);
 void run_prog(word32 cycles);

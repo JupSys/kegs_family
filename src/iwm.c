@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.88 99/03/20 22:47:00 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.89 99/03/22 22:52:21 kentd Exp $";
 
 #include "defc.h"
 
@@ -742,9 +742,10 @@ iwm_do_action35(double dcycs)
 			printf("Ejecting disk!\n");
 			dsk->just_ejected = 4;
 			eject_disk_by_num(5, drive+1);
-#if 0
-			set_halt(1);
-#endif
+			break;
+		case 0x02:
+		case 0x07:
+		case 0x0b: /* hacks to allow AE 1.6MB driver to not crash me */
 			break;
 		default:
 			printf("Do 3.5 action, state: %02x\n", state);

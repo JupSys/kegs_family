@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.28 99/01/18 01:04:47 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.30 99/04/05 00:09:43 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -46,6 +46,9 @@ int halt_on_all_c027 = 0;
 
 word32	g_adb_repeat_delay = 45;
 word32	g_adb_repeat_rate = 3;
+word32	g_adb_repeat_info = 0x23;
+word32	g_adb_char_set = 0x0;
+word32	g_adb_layout_lang = 0x0;
 
 word32	g_adb_interrupt_byte = 0;
 int	g_adb_state = ADB_IDLE;
@@ -94,6 +97,7 @@ int	g_adb_kbd_srq_sent = 0;
 #define MAX_KBD_BUF		8
 
 int	g_key_down = 0;
+int	g_hard_key_down = 0;
 int	g_a2code_down = 0;
 int	g_kbd_read_no_update = 0;
 int	g_kbd_chars_buffered = 0;
@@ -125,10 +129,6 @@ int g_kbd_reg0_pos = 0;
 int g_kbd_reg0_data[MAX_ADB_KBD_REG3];
 int g_kbd_reg3_16bit = 0x602;			/* also set in adb_reset()! */
 
-
-/* PROTOTYPES */
-void adb_virtual_key_update(int a2code, int is_up);
-/* END PROTOTYPES */
 
 int	g_adb_init = 0;
 
@@ -653,6 +653,7 @@ void
 adb_write_c026(int val)
 {
 	word32	dev;
+	word32	tmp;
 
 	adb_printf("Writing c026 with %02x\n", val);
 	adb_log(0x1c026, val);
@@ -710,8 +711,18 @@ adb_write_c026(int val)
 			break;
 		case 0x0a:	/* Read modes byte */
 			printf("Performing read_modes cmd!\n");
-			set_halt(1);
+			/* set_halt(1); */
 			adb_send_1byte(g_adb_mode);
+			break;
+		case 0x0b:	/* Read config bytes */
+			printf("Performing read_configs cmd!\n");
+			tmp = (g_mouse_ctl_addr << 20) +
+				(g_kbd_ctl_addr << 16) +
+				(g_adb_char_set << 12) +
+				(g_adb_layout_lang << 8) +
+				(g_adb_repeat_info << 0);
+			tmp = (0x82 << 24) + tmp;
+			adb_send_bytes(4, tmp, 0, 0);
 			break;
 		case 0x0d:	/* Get Version */
 			adb_printf("Performing get_version cmd!\n");
@@ -1358,11 +1369,13 @@ adb_key_event(int a2code, int is_up)
 			if(g_adb_repeat_delay == 0) {
 				g_key_down = 0;
 			}
+			g_hard_key_down = 1;
 		}
 
 		g_c025_val = g_c025_val | special;
 		adb_printf("new c025_or: %02x\n", g_c025_val);
 	} else {
+		g_hard_key_down = 0;
 		/* Turn off repeat */
 		g_key_down = 0;
 
@@ -1379,7 +1392,7 @@ adb_key_event(int a2code, int is_up)
 
 }
 
-int
+word32
 adb_read_c000()
 {
 
@@ -1387,8 +1400,7 @@ adb_read_c000()
 		/* got one */
 		if((g_kbd_read_no_update++ > 5) && (g_kbd_chars_buffered > 1)) {
 			/* read 5 times, keys pending, let's move it along */
-			printf("Read %02x 3 times, tossing it\n",
-								g_kbd_buf[0]);
+			printf("Read %02x 3 times, tossing\n", g_kbd_buf[0]);
 			adb_access_c010();
 		}
 	} else if(g_vbl_count >= g_adb_repeat_vbl && g_key_down) {
@@ -1401,15 +1413,18 @@ adb_read_c000()
 	return g_kbd_buf[0];
 }
 
-int
+word32
 adb_access_c010()
 {
+	int	tmp;
 	int	i;
 
 	g_kbd_read_no_update = 0;
 
-	g_kbd_buf[0] &= 0x7f;
+	tmp = g_kbd_buf[0] & 0x7f;
+	g_kbd_buf[0] = tmp;
 
+	tmp = tmp | (g_hard_key_down << 7);
 	if(g_kbd_chars_buffered) {
 		for(i = 1; i < g_kbd_chars_buffered; i++) {
 			g_kbd_buf[i - 1] = g_kbd_buf[i];
@@ -1419,7 +1434,7 @@ adb_access_c010()
 
 	g_c025_val = g_c025_val & (~ (0x08));
 
-	return g_kbd_buf[0];
+	return tmp;
 }
 
 word32

@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.135 99/01/18 00:18:10 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.136 99/03/22 22:22:42 kentd Exp $"
 
 	.code
 
@@ -120,7 +120,7 @@ rcsid_engine_s_s
 #define	CYCLES_MINUS_1		fsub,sgl fcycles,fr_plus_1,fcycles
 #define	CYCLES_MINUS_2		fsub,sgl fcycles,fr_plus_2,fcycles
 
-#define CYCLES_FINISH		fcpy,sgl fcycles_stop,fcycles
+#define CYCLES_FINISH		fadd,sgl fcycles_stop,fr_plus_1,fcycles
 
 #define FCYCLES_ROUND_1		fadd,sgl fcycles,fr_plus_x_m1,ftmp1
 #define FCYCLES_ROUND_2		fcnvfxt,sgl,sgl ftmp1,ftmp1

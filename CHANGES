@@ -1,4 +1,12 @@
 
+Changes in KEGS v0.47 since v0.46
+- ADB fix #1: reading $c010 should give key-down status better
+- ADB fix #2: key repeat was stopping if modifier key pressed
+- ADB fix #3: The game "Pirates" was crashing on startup due to a small bug.
+- Bard's Tale 2 was freezing on startup due to a bug in the WAI instruction.
+- Major serial port rewrite.  Diversi-Tune now runs and sound OK (but there
+	are some small problems) and serial port emulation is better.
+
 Changes in KEGS v0.46 since v0.45
 - Fix for undefined var in engine_c.c.  Oops.
 - Fix for old bug in engine_c.c causing KEGS to sometimes misinterpret
