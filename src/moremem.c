@@ -8,18 +8,20 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.227 2003-11-03 22:14:25-05 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.230 2003-11-19 19:53:04-05 kentd Exp $";
 
 #include "defc.h"
 
 extern int daylight;
+
+extern char g_kegs_version_str[];
 
 extern byte *g_memory_ptr;
 extern byte *g_dummy_memory1_ptr;
 extern byte *g_slow_memory_ptr;
 extern byte *g_rom_fc_ff_ptr;
 extern byte *g_rom_cards_ptr;
-extern word32 g_mem_size_base, g_mem_size_exp;
+extern word32 g_mem_size_total;
 
 extern word32 slow_mem_changed[];
 
@@ -61,6 +63,8 @@ int	g_zipgs_reg_c05b = 0x40;
 	// 2==rombank, 1-0==ram size (00:8K, 01=16K, 10=32K, 11=64K)
 int	g_zipgs_reg_c05c = 0x00;
 	// 7:1==slot delay enable (for 52-54ms), 0==speaker 5ms delay
+
+int	g_emubyte_cnt = 0;
 
 int	statereg;
 int	halt_on_c02a = 0;
@@ -906,7 +910,7 @@ fixup_shadow_all_banks()
 	if(g_shadow_all_banks && ((shadow_reg & 0x08) == 0)) {
 		shadow = BANK_SHADOW2;
 	}
-	num_banks = g_mem_size_exp >> 16;	/* short a few, but it's ok */
+	num_banks = g_mem_size_total >> 16;
 	for(k = 3; k < num_banks; k += 2) {
 		mem0rd = &(g_memory_ptr[k*0x10000 + 0x2000]) + shadow;
 		for(j = 0x20; j < 0xa0; j++) {
@@ -923,7 +927,8 @@ setup_pageinfo()
 	word32	mem_size_pages;
 
 	/* first, set all of memory to point to itself */
-	mem_size_pages = (g_mem_size_base + g_mem_size_exp)/256;
+	
+	mem_size_pages = g_mem_size_total >> 8;
 	mem0rd = &(g_memory_ptr[0]);
 	fixup_any_bank_any_page(0, mem_size_pages, mem0rd, mem0rd);
 
@@ -1016,7 +1021,7 @@ show_addr(byte *ptr)
 {
 	word32	mem_size;
 
-	mem_size = g_mem_size_base + g_mem_size_exp;
+	mem_size = g_mem_size_total;
 	if(ptr >= g_memory_ptr && ptr < &g_memory_ptr[mem_size]) {
 		printf("%p--memory[%06x]", ptr,
 					(word32)(ptr - g_memory_ptr));
@@ -1225,6 +1230,25 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x42: /* 0xc042 */
 		case 0x43: /* 0xc043 */
 			return 0;
+		case 0x4f: /* 0xc04f */
+			/* for information on c04f, see: */
+			/* www.sheppyware.net/tech/hardware/softswitches.html */
+			/* write to $c04f to start.  Then read $c04f to get */
+			/* emulator ($16=sweet16, $fe=bernie II). */
+			/* Then read again to get version: $21 == 2.1 */
+			switch(g_emubyte_cnt) {
+			case 1:
+				g_emubyte_cnt = 2;
+				return 'K';
+			case 2:
+				g_emubyte_cnt = 0;
+				tmp = g_kegs_version_str[0] - '0';
+				i = g_kegs_version_str[2] - '0';
+				return ((tmp & 0xf) << 4) + (i & 0xf);
+			default:
+				g_emubyte_cnt = 0;
+				return 0;
+			}
 		case 0x44: /* 0xc044 */
 		case 0x48: /* 0xc048 */
 		case 0x49: /* 0xc049 */
@@ -1233,7 +1257,6 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x4c: /* 0xc04c */
 		case 0x4d: /* 0xc04d */
 		case 0x4e: /* 0xc04e */
-		case 0x4f: /* 0xc04f */
 			UNIMPL_READ;
 
 		/* 0xc050 - 0xc05f */
@@ -1494,6 +1517,9 @@ io_read(word32 loc, double *cyc_ptr)
 	case 0xf:
 		if(INTCX || (int_crom[3] == 0)) {
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
+		}
+		if((loc & 0xfff) == 0xfff) {
+			return g_rom_fc_ff_ptr[0x3cfff];
 		}
 		UNIMPL_READ;
 	}
@@ -1875,6 +1901,9 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x42: /* c042 */
 		case 0x43: /* c043 */
 			return;
+		case 0x4f: /* c04f */
+			g_emubyte_cnt = 1;
+			return;
 		case 0x40: /* c040 */
 		case 0x44: /* c044 */
 		case 0x45: /* c045 */
@@ -1884,7 +1913,6 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x4c: /* c04c */
 		case 0x4d: /* c04d */
 		case 0x4e: /* c04e */
-		case 0x4f: /* c04f */
 			UNIMPL_WRITE;
 
 		/* 0xc050 - 0xc05f */
@@ -2039,9 +2067,9 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x70: /* 0xc070 = Trigger paddles */
 			paddle_trigger(dcycs);
 			return;
-		case 0x73: /* 0xc073 = slinky ram card bank addr? */
+		case 0x73: /* 0xc073 = multibank ram card bank addr? */
 			return;
-		case 0x71: /* 0xc071 = another slinky card enable? */
+		case 0x71: /* 0xc071 = another multibank ram card enable? */
 		case 0x7e: /* 0xc07e */
 		case 0x7f: /* 0xc07f */
 			return;
@@ -2158,11 +2186,15 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		break;
 	case 1: case 2: case 3: case 4: case 5: case 6: case 7:
 		/* c1000 - c7ff */
-			UNIMPL_WRITE;
+		UNIMPL_WRITE;
 	case 8: case 9: case 0xa: case 0xb: case 0xc: case 0xd: case 0xe:
-			UNIMPL_WRITE;
+		UNIMPL_WRITE;
 	case 0xf:
-			UNIMPL_WRITE;
+		if((loc & 0xfff) == 0xfff) {
+			/* cfff */
+			return;
+		}
+		UNIMPL_WRITE;
 	}
 	printf("Huh2? Write loc: %x\n", loc);
 	exit(-290);

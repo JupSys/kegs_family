@@ -10,7 +10,7 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$KmKId: instable.h,v 1.98 2003-01-23 01:11:55-05 kentd Exp $"
+	.stringz "@(#)$KmKId: instable.h,v 1.99 2003-11-17 23:00:59-05 kentd Exp $"
 # endif
 #endif
 
@@ -840,7 +840,7 @@ inst44_out_of_time_SYM
 	dbank = arg & 0xff;
 	tmp1 = (arg >> 8) & 0xff;
 	while(1) {
-		CYCLES_PLUS_3;
+		CYCLES_PLUS_1;
 		GET_MEMORY8((tmp1 << 16) + xreg, arg);
 		SET_MEMORY8((dbank << 16) + yreg, arg);
 		CYCLES_PLUS_2;
@@ -854,6 +854,7 @@ inst44_out_of_time_SYM
 		if(fcycles >= g_fcycles_stop) {
 			break;
 		}
+		CYCLES_PLUS_2;
 	}
 #endif
 
@@ -1064,7 +1065,7 @@ inst54_notnat_SYM
 	dbank = arg & 0xff;
 	tmp1 = (arg >> 8) & 0xff;
 	while(1) {
-		CYCLES_PLUS_3;
+		CYCLES_PLUS_1;
 		GET_MEMORY8((tmp1 << 16) + xreg, arg);
 		SET_MEMORY8((dbank << 16) + yreg, arg);
 		CYCLES_PLUS_2;
@@ -1078,6 +1079,7 @@ inst54_notnat_SYM
 		if(fcycles >= g_fcycles_stop) {
 			break;
 		}
+		CYCLES_PLUS_2;
 	}
 #endif
 

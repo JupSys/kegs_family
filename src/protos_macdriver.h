@@ -8,17 +8,18 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_protos_mac_h[] = "@(#)$KmKId: protos_macdriver.h,v 1.4 2003-10-20 22:37:41-04 kentd Exp $";
+const char rcsid_protos_mac_h[] = "@(#)$KmKId: protos_macdriver.h,v 1.5 2003-11-19 19:50:29-05 kentd Exp $";
 
 /* END_HDR */
+
 /* macdriver.c */
-OSStatus quit_event_handler(EventHandlerCallRef call_ref, EventRef event, void *ignore);
+pascal OSStatus quit_event_handler(EventHandlerCallRef call_ref, EventRef event, void *ignore);
 void show_alert(const char *str1, const char *str2, const char *str3, int num);
-OSStatus my_cmd_handler(EventHandlerCallRef handlerRef, EventRef event, void *userdata);
+pascal OSStatus my_cmd_handler(EventHandlerCallRef handlerRef, EventRef event, void *userdata);
 void update_window(void);
 void show_event(UInt32 event_class, UInt32 event_kind, int handled);
-OSStatus my_win_handler(EventHandlerCallRef handlerRef, EventRef event, void *userdata);
-OSStatus dummy_event_handler(EventHandlerCallRef call_ref, EventRef in_event, void *ignore);
+pascal OSStatus my_win_handler(EventHandlerCallRef handlerRef, EventRef event, void *userdata);
+pascal OSStatus dummy_event_handler(EventHandlerCallRef call_ref, EventRef in_event, void *ignore);
 void mac_update_modifiers(word32 state);
 void mac_warp_mouse(void);
 void check_input_events(void);

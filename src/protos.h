@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.170 2003-11-06 11:46:33-05 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.171 2003-11-19 19:49:49-05 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -69,8 +69,14 @@ void scc_serial_win_change_params(int port);
 void scc_serial_win_fill_readbuf(int port, double dcycs);
 void scc_serial_win_empty_writebuf(int port);
 
+/* special joystick_driver.c prototypes */
+void joystick_init(void);
+void joystick_update(void);
+void joystick_update_button(void);
+
 
 /* END_HDR */
+
 /* adb.c */
 void adb_init(void);
 void adb_reset(void);
@@ -110,6 +116,7 @@ void adb_physical_key_update(int a2code, int is_up);
 void adb_virtual_key_update(int a2code, int is_up);
 void adb_kbd_repeat_off(void);
 
+
 /* clock.c */
 double get_dtime(void);
 int micro_sleep(double dtime);
@@ -126,7 +133,9 @@ void clock_write_c033(word32 val);
 void clock_write_c034(word32 val);
 void do_clock_data(void);
 
+
 /* compile_time.c */
+
 
 /* config.c */
 void config_init_menus(Cfg_menu *menuptr);
@@ -172,6 +181,7 @@ void cfg_file_selected(void);
 void cfg_file_handle_key(int key);
 void config_control_panel(void);
 
+
 /* dis.c */
 int get_num(void);
 void debugger_help(void);
@@ -179,7 +189,6 @@ void do_debug_intfc(void);
 word32 dis_get_memory_ptr(word32 addr);
 void show_one_toolset(FILE *toolfile, int toolnum, word32 addr);
 void show_toolset_tables(word32 a2bank, word32 addr);
-void do_gen_test(int got_num, int base_seed);
 void set_bp(word32 addr);
 void show_bp(void);
 void delete_bp(word32 addr);
@@ -197,6 +206,7 @@ int do_dis(FILE *outfile, word32 kpc, int accsize, int xsize, int op_provided, w
 void show_line(FILE *outfile, word32 kaddr, word32 operand, int size, char *string);
 void halt_printf(const char *fmt, ...);
 void halt2_printf(const char *fmt, ...);
+
 
 /* scc.c */
 void scc_init(void);
@@ -229,6 +239,7 @@ void scc_add_to_writebuf(int port, word32 val, double dcycs);
 word32 scc_read_data(int port, double dcycs);
 void scc_write_data(int port, word32 val, double dcycs);
 
+
 /* scc_socket_driver.c */
 void scc_socket_init(int port);
 void scc_socket_change_params(int port);
@@ -236,9 +247,12 @@ void scc_accept_socket(int port);
 void scc_socket_fill_readbuf(int port, double dcycs);
 void scc_socket_empty_writebuf(int port);
 
+
 /* scc_windriver.c */
 
+
 /* scc_macdriver.c */
+
 
 /* iwm.c */
 void iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525);
@@ -262,10 +276,6 @@ int iwm_read_enable2_handshake(double dcycs);
 void iwm_write_enable2(int val, double dcycs);
 int iwm_read_data(Disk *dsk, int fast_disk_emul, double dcycs);
 void iwm_write_data(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
-int iwm_read_data_35(Disk *dsk, int fast_disk_emul, double dcycs);
-void iwm_write_data_35(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
-int iwm_read_data_525(Disk *dsk, int fast_disk_emul, double dcycs);
-void iwm_write_data_525(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
 void sector_to_partial_nib(byte *in, byte *nib_ptr);
 int disk_unnib_4x4(Disk *dsk);
 int iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf);
@@ -283,10 +293,9 @@ void disk_nib_end_track(Disk *dsk);
 void iwm_show_track(int slot_drive, int track);
 void iwm_show_a_track(Track *trk);
 
+
 /* joystick_driver.c */
-void joystick_init(void);
-void joystick_update(void);
-void joystick_update_button(void);
+
 
 /* moremem.c */
 void fixup_brks(void);
@@ -322,10 +331,12 @@ word32 get_lines_since_vbl(double dcycs);
 int in_vblank(double dcycs);
 int read_vid_counters(int loc, double dcycs);
 
+
 /* paddles.c */
 void paddle_trigger(double dcycs);
 void paddle_trigger_mouse(double dcycs);
 int read_paddles(int paddle, double dcycs);
+
 
 /* sim65816.c */
 void show_pc_log(void);
@@ -377,6 +388,7 @@ void do_wai(void);
 void do_stp(void);
 void size_fail(int val, word32 v1, word32 v2);
 
+
 /* smartport.c */
 void smartport_error(void);
 void smartport_log(word32 start_addr, int cmd, int rts_addr, int cmd_list);
@@ -386,6 +398,7 @@ int do_read_c7(int unit_num, word32 buf, int blk);
 int do_write_c7(int unit_num, word32 buf, int blk);
 int do_format_c7(int unit_num);
 void do_c700(word32 ret);
+
 
 /* sound.c */
 void doc_log_rout(char *msg, int osc, double dsamps, int etc);
@@ -423,11 +436,13 @@ void doc_write_c03e(int val);
 void doc_write_c03f(int val);
 void doc_show_ensoniq_state(int osc);
 
+
 /* sound_driver.c */
 void reliable_buf_write(word32 *shm_addr, int pos, int size);
 void reliable_zero_write(int amt);
 void child_sound_loop(int read_fd, int write_fd, word32 *shm_addr);
 void child_sound_playit(word32 tmp);
+
 
 /* video.c */
 void video_init(void);
@@ -441,7 +456,6 @@ void check_a2vid_palette(void);
 void change_display_mode(double dcycs);
 void video_update_all_stat_through_line(int line);
 void change_border_color(double dcycs, int val);
-void add_border_log(int st_line_offset, int end_line_offset, int line, int color);
 void update_border_info(void);
 void update_border_line(int st_line_offset, int end_line_offset, int color);
 void video_border_pixel_write(Kimage *kimage_ptr, int starty, int num_lines, word32 val, int st_off, int end_off);
@@ -456,12 +470,6 @@ void redraw_changed_dbl_hires(int start_offset, int start_line, int num_lines, i
 void redraw_changed_dbl_hires_bw(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
 void redraw_changed_dbl_hires_color(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
 int video_rebuild_super_hires_palette(word32 scan_info, int line, int reparse);
-void redraw_changed_super_hires_oneline_nofill_8(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
-void redraw_changed_super_hires_oneline_nofill_16(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
-void redraw_changed_super_hires_oneline_nofill_32(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
-void redraw_changed_super_hires_oneline_fill_8(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
-void redraw_changed_super_hires_oneline_fill_16(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
-void redraw_changed_super_hires_oneline_fill_32(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
 void redraw_changed_super_hires(int start_offset, int start_line, int num_lines, int in_reparse, byte *screen_data);
 void display_screen(void);
 void video_update_event_line(int line);
@@ -474,7 +482,7 @@ void video_get_kimage(Kimage *kimage_ptr, int extend_info, int depth, int mdepth
 void video_get_kimages(void);
 void video_convert_kimage_depth(Kimage *kim_in, Kimage *kim_out, int startx, int starty, int width, int height);
 void video_push_lines(Kimage *kimage_ptr, int start_line, int end_line, int left_pix, int right_pix);
-void video_push_border_sides_lines(int src_x, int end_x, int width, int start_line, int end_line);
+void video_push_border_sides_lines(int src_x, int dest_x, int width, int start_line, int end_line);
 void video_push_border_sides(void);
 void video_push_border_special(void);
 void video_push_kimages(void);

@@ -690,8 +690,9 @@ is the recommended setting.
 The NinjaForce Megademo mostly works, but sometimes hangs in the BBS Demo.
 Just skip that demo if it happens.
 
-The California Demo hangs at startup.  The KEGS-OSX ports have made it work,
-so when they pass along the info to me, I'll fix the main KEGS code.
+The California Demo hangs at startup unless you use the IIgs control panel
+to boot from slot 5, and then do a ctrl-Open_Apple-Reset to boot, then
+it works fine.  This seems to be a bug in the demo.
 
 
 KEGS bugs:

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.28 2003-10-17 15:10:12-04 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.29 2003-11-17 15:44:44-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -262,9 +262,9 @@ do_c70d(word32 arg0)
 				set_memory_c(status_ptr +i, 0x20, 0);
 			}
 			set_memory_c(status_ptr +5, 'K', 0);
-			set_memory_c(status_ptr +6, 'D', 0);
-			set_memory_c(status_ptr +7, '3', 0);
-			set_memory_c(status_ptr +8, '5', 0);
+			set_memory_c(status_ptr +6, 'E', 0);
+			set_memory_c(status_ptr +7, 'G', 0);
+			set_memory_c(status_ptr +8, 'S', 0);
 
 			/* hard disk supporting extended calls */
 			set_memory_c(status_ptr + 21, 0x02, 0);
@@ -492,50 +492,39 @@ do_c70a(word32 arg0)
 
 	smartport_log(0xc70a, cmd, blk, buf);
 
-	if(cmd == 0x01) {
-		ret = do_read_c7(unit, buf, blk);
-		smartport_log(0, unit, buf, blk);
-		engine.psr &= ~1;
-		if(ret != 0) {
-			engine.psr |= 1;
-		}
-		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
-		if(g_rom_version >= 3) {
-			engine.kpc = 0xc764;
-		} else {
-			engine.kpc = 0xc765;
-		}
-		return;
-	} else if(cmd == 0x00) {
+	engine.psr &= ~1;	/* clear carry */
+	if(g_rom_version >= 3) {
+		engine.kpc = 0xc764;
+	} else {
+		engine.kpc = 0xc765;
+	}
+
+	ret = 0x27;	/* I/O error */
+	if(cmd == 0x00) {
 		size = iwm.smartport[unit].image_size;
 		size = (size+511) / 512;
 
 		smartport_log(0, unit, size, 0);
 
-		engine.psr &= ~1;
 		ret = 0;
-		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
-		if(g_rom_version >= 3) {
-			engine.kpc = 0xc764;
-		} else {
-			engine.kpc = 0xc765;
-		}
 		engine.xreg = size & 0xff;
 		engine.yreg = size >> 8;
-		return;
+	} else if(cmd == 0x01) {
+		smartport_log(0, unit, buf, blk);
+		ret = do_read_c7(unit, buf, blk);
 	} else if(cmd == 0x02) {
 		smartport_log(0, unit, buf, blk);
 		ret = do_write_c7(unit, buf, blk);
-		engine.psr &= ~1;
-		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
-		if(g_rom_version >= 3) {
-			engine.kpc = 0xc764;
-		} else {
-			engine.kpc = 0xc765;
-		}
-		return;
+	} else if(cmd == 0x03) {	/* format */
+		smartport_log(0, unit, buf, blk);
+		ret = do_format_c7(unit);
 	}
-	halt_printf("cmd unknown: %02x, unit: %02x!!!!\n", cmd, unit);
+
+	engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
+	if(ret != 0) {
+		engine.psr |= 1;
+	}
+	return;
 }
 
 int

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.336 2003-11-06 11:46:39-05 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.338 2003-11-18 17:35:43-05 kentd Exp $";
 
 #include <math.h>
 
@@ -104,7 +104,7 @@ int	g_use_alib = 0;
 int	g_raw_serial = 1;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.82";
+const char g_kegs_version_str[] = "0.83";
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
@@ -150,6 +150,7 @@ int Halt_on = 0;
 
 word32 g_mem_size_base = 256*1024;	/* size of motherboard memory */
 word32 g_mem_size_exp = 4*1024*1024;	/* size of expansion RAM card */
+word32 g_mem_size_total = 256*1024;	/* Total contiguous RAM from 0 */
 
 extern word32 slow_mem_changed[];
 
@@ -358,7 +359,7 @@ get_memory_io(word32 loc, double *cyc_ptr)
 	}
 
 	/* Else it's an illegal addr...skip if memory sizing */
-	if(loc >= (g_mem_size_base + g_mem_size_exp)) {
+	if(loc >= g_mem_size_total) {
 		if((loc & 0xfffe) == 0) {
 #if 0
 			printf("get_io assuming mem sizing, not halting\n");
@@ -476,7 +477,7 @@ set_memory_io(word32 loc, int val, double *cyc_ptr)
 	}
 
 	/* Else it's an illegal addr */
-	if(loc >= (g_mem_size_base + g_mem_size_exp)) {
+	if(loc >= g_mem_size_total) {
 		if((loc & 0xfffe) == 0) {
 #if 0
 			printf("set_io assuming mem sizing, not halting\n");
@@ -691,7 +692,8 @@ memory_ptr_init()
 {
 	word32	mem_size;
 
-	mem_size = g_mem_size_base + g_mem_size_exp;
+	mem_size = MIN(0xdf0000, g_mem_size_base + g_mem_size_exp);
+	g_mem_size_total = mem_size;
 	g_memory_ptr = memalloc_align(mem_size, 3*1024);
 
 	printf("RAM size is 0 - %06x (%.2fMB)\n", mem_size,
@@ -859,7 +861,7 @@ kegsmain(int argc, char **argv)
 	video_init();
 
 #ifndef _WIN32
-	sleep(1);
+	//sleep(1);
 #endif
 	sound_init();
 

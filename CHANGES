@@ -1,4 +1,11 @@
 
+Changes in KEGS v0.83 since v0.82 (11/19/03)
+- Add Memory Size to config panel, with support for up to 14MB of memory
+	(Geoff Weiss)
+- Add $C04F EMUBYTE support which Bernie II the Rescue defined. (Geoff Weiss)
+- Fix $CFFF code red's reported by David Wilson.
+- Add smartport $C70A Format routine (David Wilson).
+
 Changes in KEGS v0.82 since v0.81 (11/06/03)
 - Fix superhires display glitch introduced in v0.81.
 - Improved border handling--XMAS demo looks great.

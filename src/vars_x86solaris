@@ -1,6 +1,6 @@
 
 TARGET = xkegs
-OBJECTS = $(OBJECTS1) engine_c.o sound_driver.o xdriver.o
+OBJECTS = $(OBJECTS1) xdriver.o
 CC = gcc
 CCOPTS = -O
 OPTS =  -DNDEBUG -DSOLARIS -DKEGS_LITTLE_ENDIAN -DOSS

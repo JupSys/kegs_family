@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.120 2003-11-06 11:50:34-05 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.121 2003-11-06 21:54:39-05 kentd Exp $";
 
 #include <time.h>
 
@@ -823,7 +823,7 @@ update_border_info()
 		offset = ((int)(dcycs - dcyc_line_start)) & 0xff;
 
 		/* here comes the tricky part */
-		/* offset is from 0 to 65, where 0-3 is the right border of
+		/* offset is from 0 to 65, where 0-3 is the right border of */
 		/*  the previous line, 4-20 is horiz blanking, 21-24 is the */
 		/*  left border and 25-64 is the main window */
 		/* Convert this to a new notation which is 0-3 is the left */

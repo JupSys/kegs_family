@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.23 2003-11-04 10:46:36-05 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.24 2003-11-18 17:36:07-05 kentd Exp $";
 
 #include "defc.h"
 #include <stdarg.h>
@@ -31,6 +31,7 @@ extern word32 g_adb_repeat_vbl;
 
 extern int g_force_depth;
 extern int g_raw_serial;
+extern word32 g_mem_size_exp;
 
 extern int g_screen_index[];
 extern word32 g_full_refresh_needed;
@@ -107,9 +108,12 @@ Cfg_menu g_cfg_disk_menu[] = {
 Cfg_menu g_cfg_main_menu[] = {
 { "KEGS Configuration", g_cfg_main_menu, 0, 0, CFGTYPE_MENU },
 { "Disk Configuration", g_cfg_disk_menu, 0, 0, CFGTYPE_MENU },
-{ "Force display depth", KNMP(g_force_depth), CFGTYPE_INT },
+{ "Force X-windows display depth", KNMP(g_force_depth), CFGTYPE_INT },
 { "Auto-update config.kegs,0,Manual,1,Immediately",
 		KNMP(g_config_kegs_auto_update), CFGTYPE_INT },
+{ "Expansion Mem Size,0,0MB,0x100000,1MB,0x200000,2MB,0x300000,3MB,"
+	"0x400000,4MB,0x600000,6MB,0x800000,8MB,0xa00000,10MB,0xc00000,12MB,"
+	"0xe00000,14MB", KNMP(g_mem_size_exp), CFGTYPE_INT },
 { "Serial Ports,0,Only use sockets 6501-6502,1,Use real ports if avail",
 		KNMP(g_raw_serial), CFGTYPE_INT },
 { "Dump text screen to file", (void *)cfg_text_screen_dump, 0, 0, CFGTYPE_FUNC},
@@ -310,7 +314,7 @@ config_parse_option(char *buf, int pos, int len, int line)
 	pos++;
 
 	// Eat up all whitespace and '='
-	num_equals = 1;
+	num_equals = 0;
 	while(pos < len) {
 		c = buf[pos];
 		if((c == '=') && num_equals == 0) {

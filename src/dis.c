@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.89 2003-11-06 11:46:21-05 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.90 2003-11-18 17:35:30-05 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -759,6 +759,8 @@ load_roms()
 	char	name_buf[256];
 	struct stat stat_buf;
 	const char **names_ptr;
+	int	more_than_8mb;
+	int	changed_rom;
 	int	len;
 	int	fd;
 	int	ret;
@@ -850,26 +852,40 @@ load_roms()
 		}
 	}
 
+	more_than_8mb = (g_mem_size_exp > 0x800000);
+	/* Only do the patch if users wants more than 8MB of expansion mem */
+
+	changed_rom = 0;
 	if(g_rom_version == 1) {
 		/* make some patches to ROM 01 */
 #if 0
 		/* 1: Patch ROM selftest to not do speed test */
 		printf("Patching out speed test failures from ROM 01\n");
 		g_rom_fc_ff_ptr[0x3785a] = 0x18;
+		changed_rom = 1;
 #endif
 
 #if 0
-		/* 2: Patch ROM selftest to not do ROM cksum */
-		g_rom_fc_ff_ptr[0x37a06] = 0x18;
-		g_rom_fc_ff_ptr[0x37a07] = 0x18;
-#endif
-
-#if 0
-		/* 3: Patch ROM selftests not to do tests 2,4 */
+		/* 2: Patch ROM selftests not to do tests 2,4 */
 		/* 0 = skip, 1 = do it, test 1 is bit 0 of LSByte */
 		g_rom_fc_ff_ptr[0x371e9] = 0xf5;
 		g_rom_fc_ff_ptr[0x371ea] = 0xff;
+		changed_rom = 1;
 #endif
+
+		if(more_than_8mb) {
+			/* Geoff Weiss patch to use up to 14MB of RAM */
+			g_rom_fc_ff_ptr[0x30302] = 0xdf;
+			g_rom_fc_ff_ptr[0x30314] = 0xdf;
+			g_rom_fc_ff_ptr[0x3031c] = 0x00;
+			changed_rom = 1;
+		}
+
+		/* Patch ROM selftest to not do ROM cksum if any changes*/
+		if(changed_rom) {
+			g_rom_fc_ff_ptr[0x37a06] = 0x18;
+			g_rom_fc_ff_ptr[0x37a07] = 0x18;
+		}
 	} else if(g_rom_version == 3) {
 		/* patch ROM 03 */
 		printf("Patching ROM 03 smartport bug\n");
@@ -879,32 +895,46 @@ load_roms()
 		/*   IWM status reg bit 4 must be 0 (7MHz)..., otherwise */
 		/*   it might have turned on shadowing in all banks! */
 		g_rom_fc_ff_ptr[0x357c9] = 0x00;
-
-		/* patch ROM 03 selftest to not do ROM cksum */
-		g_rom_fc_ff_ptr[0x36cb0] = 0x18;
-		g_rom_fc_ff_ptr[0x36cb1] = 0x18;
+		changed_rom = 1;
 
 #if 0
 		/* patch ROM 03 to not to speed test */
 		/*  skip fast speed test */
 		g_rom_fc_ff_ptr[0x36ad7] = 0x18;
 		g_rom_fc_ff_ptr[0x36ad8] = 0x18;
+		changed_rom = 1;
 #endif
 
 #if 0
 		/*  skip slow speed test */
 		g_rom_fc_ff_ptr[0x36ae7] = 0x18;
 		g_rom_fc_ff_ptr[0x36ae8] = 0x6b;
+		changed_rom = 1;
 #endif
 
 #if 0
 		/* 4: Patch ROM 03 selftests not to do tests 1-4 */
 		g_rom_fc_ff_ptr[0x364a9] = 0xf0;
 		g_rom_fc_ff_ptr[0x364aa] = 0xff;
+		changed_rom = 1;
 #endif
 
 		/* ROM tests are in ff/6403-642x, where 6403 = addr of */
 		/*  test 1, etc. */
+
+		if(more_than_8mb) {
+			/* Geoff Weiss patch to use up to 14MB of RAM */
+			g_rom_fc_ff_ptr[0x30b] = 0xdf;
+			g_rom_fc_ff_ptr[0x31d] = 0xdf;
+			g_rom_fc_ff_ptr[0x325] = 0x00;
+			changed_rom = 1;
+		}
+
+		if(changed_rom) {
+			/* patch ROM 03 selftest to not do ROM cksum */
+			g_rom_fc_ff_ptr[0x36cb0] = 0x18;
+			g_rom_fc_ff_ptr[0x36cb1] = 0x18;
+		}
 
 	}
 }
