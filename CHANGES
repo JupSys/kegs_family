@@ -1,4 +1,15 @@
 
+Changes in KEGS v0.90 since v0.88 (10/19/04)
+- Make Keypad Joystick the default joystick emulation
+- Fix timezone calculation on Mac OS X for central time zone.
+- Fix handling of long paths in config panel, reported by David Scruffham.
+- Always call joystick_init at startup.
+- Fix F2 keymappings for X Windows, to fix some issue reported by
+	David Wilson.
+- Fixed some documentation issues reported by David Wilson.
+- Fixed a bug in joystick_driver.c reported by Doug Mitton.
+- Add README.a2.compatibility to discuss known issues with programs.
+
 Changes in KEGS v0.89 since v0.88 (10/17/04)
 - Make old mouse button presses disappear after .5 seconds.
 - Add Keypad Joystick, along with configuration menu choices to enable it.

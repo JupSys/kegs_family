@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.132 2004-10-17 12:54:10-04 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.133 2004-10-19 17:51:49-04 kentd Exp $";
 
 #include <time.h>
 
@@ -806,7 +806,7 @@ update_border_info()
 
 	color_now = g_vbl_border_color;
 
-	dlines_per_dcyc = (double)(262.0 / DCYCS_IN_16MS);
+	dlines_per_dcyc = (double)(1.0 / 65.0);
 	limit = g_num_border_changes;
 	if(g_border_last_vbl_changes || limit) {
 		/* add a dummy entry */
@@ -819,7 +819,7 @@ update_border_info()
 		dcycs = g_border_changes[i].fcycs;
 		dline = dcycs * dlines_per_dcyc;
 		new_line = (int)dline;
-		dcyc_line_start = (double)new_line * (DCYCS_IN_16MS/262.0);
+		dcyc_line_start = (double)new_line * 65.0;
 		offset = ((int)(dcycs - dcyc_line_start)) & 0xff;
 
 		/* here comes the tricky part */
@@ -936,8 +936,8 @@ update_border_line(int st_line_offset, int end_line_offset, int color)
 			right = MIN(4, end_offset - 44);
 			video_border_pixel_write(&g_kimage_border_sides,
 				2*line, 2, val,
-				32 + (left * EFF_BORDER_WIDTH/4),
-				32 + (right * EFF_BORDER_WIDTH/4));
+				BORDER_WIDTH + (left * EFF_BORDER_WIDTH/4),
+				BORDER_WIDTH + (right * EFF_BORDER_WIDTH/4));
 			g_border_sides_refresh_needed = 1;
 		}
 	}

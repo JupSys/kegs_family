@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.358 2004-10-15 03:11:37-04 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.360 2004-10-18 11:03:55-04 kentd Exp $";
 
 #include <math.h>
 
@@ -103,7 +103,7 @@ int	g_iw2_emul = 0;
 int	g_serial_out_masking = 0;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.89";
+const char g_kegs_version_str[] = "0.90";
 
 #define START_DCYCS	(0.0)
 
@@ -823,8 +823,7 @@ kegsmain(int argc, char **argv)
 			printf("Not using X shared memory\n");
 			g_use_shmem = 0;
 		} else if(!strcmp("-joystick", argv[i])) {
-			printf("Trying to use joystick\n");
-			joystick_init();
+			printf("Ignoring -joystick option\n");
 		} else if(!strcmp("-dhr140", argv[i])) {
 			printf("Using simple dhires color map\n");
 			g_use_dhr140 = 1;
@@ -888,6 +887,10 @@ kegsmain(int argc, char **argv)
 	scc_init();
 	clk_setup_bram_version();	/* load_roms must be called first! */
 	adb_init();
+	joystick_init();
+	if(g_rom_version >= 3) {
+		g_c036_val_speed |= 0x40;	/* set power-on bit */
+	}
 
 	do_reset();
 	g_stepping = 0;

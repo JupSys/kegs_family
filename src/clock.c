@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_clock_c[] = "@(#)$KmKId: clock.c,v 1.30 2004-10-14 01:19:57-04 kentd Exp $";
+const char rcsid_clock_c[] = "@(#)$KmKId: clock.c,v 1.31 2004-10-19 17:32:07-04 kentd Exp $";
 
 #include "defc.h"
 #include <time.h>
@@ -173,12 +173,19 @@ update_cur_time()
 	tm_ptr = localtime(&cur_time);
 	secs = mktime(tm_ptr);
 
+#ifdef MAC
+	/* Mac OS X's mktime function modifies the tm_ptr passed in for */
+	/*  the CDT timezone and breaks this algorithm.  So on a Mac, we */
+	/*  will use the tm_ptr->gmtoff member to correct the time */
+	secs = secs + tm_ptr->tm_gmtoff;
+#else
 	secs = (unsigned int)cur_time - (secs2 - secs);
 
 	if(tm_ptr->tm_isdst) {
 		/* adjust for daylight savings time */
 		secs += 3600;
 	}
+#endif
 
 	/* add in secs to make date based on Apple Jan 1, 1904 instead of */
 	/*   Unix's Jan 1, 1970 */

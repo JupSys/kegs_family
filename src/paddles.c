@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_paddles_c[] = "@(#)$KmKId: paddles.c,v 1.13 2004-10-16 02:46:27-04 kentd Exp $";
+const char rcsid_paddles_c[] = "@(#)$KmKId: paddles.c,v 1.14 2004-10-19 14:52:36-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -23,7 +23,7 @@ int	g_joystick_scale_factor_y = 0x100;
 int	g_joystick_trim_amount_x = 0;
 int	g_joystick_trim_amount_y = 0;
 
-int	g_joystick_type = 0;	/* 0 = Joystick mouse */
+int	g_joystick_type = 0;	/* 0 = Keypad Joystick */
 int	g_joystick_native_type1 = -1;
 int	g_joystick_native_type2 = -1;
 int	g_joystick_native_type = -1;
@@ -65,11 +65,11 @@ paddle_trigger(double dcycs)
 	paddle_fixup_joystick_type();
 
 	switch(g_joystick_type) {
-	case 0:		/* Mouse Joystick Mouse */
-		paddle_trigger_mouse(dcycs);
-		break;
-	case 1:		/* Keypad Joystick */
+	case 0:		/* Keypad Joystick */
 		paddle_trigger_keypad(dcycs);
+		break;
+	case 1:		/* Mouse Joystick */
+		paddle_trigger_mouse(dcycs);
 		break;
 	default:
 		joystick_update(dcycs);

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_joystick_driver_c[] = "@(#)$KmKId: joystick_driver.c,v 1.11 2004-10-17 17:08:14-04 kentd Exp $";
+const char rcsid_joystick_driver_c[] = "@(#)$KmKId: joystick_driver.c,v 1.12 2004-10-17 21:28:48-04 kentd Exp $";
 
 #include "defc.h"
 #include <sys/time.h>
@@ -95,7 +95,7 @@ joystick_update(double dcycs)
 	/* suck up to 20 events, then give up */
 	len = sizeof(struct js_event);
 	for(i = 0; i < 20; i++) {
-		ret = read(g_joystick_fd, &js, len);
+		ret = read(g_joystick_native_fd, &js, len);
 		if(ret != len) {
 			/* just get out */
 			break;

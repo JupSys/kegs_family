@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.114 2004-10-14 15:10:26-04 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.115 2004-10-18 00:18:11-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -907,10 +907,7 @@ write_iwm(int loc, int val, double dcycs)
 		return;
 	}
 
-	halt_printf("Got to end of write_iwm, loc:%02x, val: %02x\n", loc, val);
-
 	return;
-
 }
 
 

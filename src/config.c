@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.40 2004-10-17 12:53:50-04 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.43 2004-10-19 14:52:22-04 kentd Exp $";
 
 #include "defc.h"
 #include <stdarg.h>
@@ -42,6 +42,8 @@ extern int g_joystick_scale_factor_x;
 extern int g_joystick_scale_factor_y;
 extern int g_joystick_trim_amount_x;
 extern int g_joystick_trim_amount_y;
+extern int g_swap_paddles;
+extern int g_invert_paddles;
 
 extern int g_screen_index[];
 extern word32 g_full_refresh_needed;
@@ -118,7 +120,7 @@ Cfg_menu g_cfg_disk_menu[] = {
 
 Cfg_menu g_cfg_joystick_menu[] = {
 { "Joystick Configuration", g_cfg_joystick_menu, 0, 0, CFGTYPE_MENU },
-{ "Joystick Emulation,0,Mouse Joystick,1,Keypad Joystick,2,Native Joystick 1,"
+{ "Joystick Emulation,0,Keypad Joystick,1,Mouse Joystick,2,Native Joystick 1,"
 	"3,Native Joystick 2", KNMP(g_joystick_type), CFGTYPE_INT },
 { "Joystick Scale X,0x100,Standard,0x119,+10%,0x133,+20%,"
 	"0x150,+30%,0xb0,-30%,0xcd,-20%,0xe7,-10%",
@@ -128,6 +130,10 @@ Cfg_menu g_cfg_joystick_menu[] = {
 		KNMP(g_joystick_scale_factor_y), CFGTYPE_INT },
 { "Joystick Trim X", KNMP(g_joystick_trim_amount_x), CFGTYPE_INT },
 { "Joystick Trim Y", KNMP(g_joystick_trim_amount_y), CFGTYPE_INT },
+{ "Swap Joystick X and Y,0,Normal operation,1,Paddle 1 and Paddle 0 swapped",
+		KNMP(g_swap_paddles), CFGTYPE_INT },
+{ "Invert Joystick,0,Normal operation,1,Left becomes right and up becomes down",
+		KNMP(g_invert_paddles), CFGTYPE_INT },
 { "", 0, 0, 0, 0 },
 { "Back to Main Config", g_cfg_main_menu, 0, 0, CFGTYPE_MENU },
 { 0, 0, 0, 0, 0 },
@@ -156,7 +162,7 @@ Cfg_menu g_cfg_main_menu[] = {
 		KNMP(g_video_extra_check_inputs), CFGTYPE_INT },
 { "Code Red Halts,0,Do not stop on bad accesses,1,Enter debugger on bad "
 		"accesses", KNMP(g_user_halt_bad), CFGTYPE_INT },
-{ "Enable Text Page 2 shadow,0,Disabled on ROM 01 (matches real hardware),"
+{ "Enable Text Page 2 Shadow,0,Disabled on ROM 01 (matches real hardware),"
 	"1,Enabled on ROM 01 and 03",
 		KNMP(g_user_page2_shadow), CFGTYPE_INT },
 { "Dump text screen to file", (void *)cfg_text_screen_dump, 0, 0, CFGTYPE_FUNC},
@@ -1700,7 +1706,7 @@ cfg_parse_menu(Cfg_menu *menu_ptr, int menu_pos, int highlight_pos, int change)
 		} else if (type == CFGTYPE_DISK) {
 			str = &(g_cfg_opts_strs[0][0]),
 			cfg_get_disk_name(str, CFG_OPT_MAXSTR, type_ext, 1);
-			str = cfg_shorten_filename(str, 70);
+			str = cfg_shorten_filename(str, 68);
 		} else {
 			str = "";
 		}
@@ -2140,7 +2146,7 @@ cfg_file_draw()
 	for(y = 0; y < 21; y++) {
 		cfg_htab_vtab(0, y);
 		cfg_printf("\tZ\t");
-		for(x = 1; x < 72; x++) {
+		for(x = 1; x < 79; x++) {
 			cfg_htab_vtab(x, y);
 			cfg_putchar(' ');
 		}
@@ -2162,8 +2168,8 @@ cfg_file_draw()
 			cfg_shorten_filename(&g_cfg_cwd_str[0], 50));
 
 	cfg_htab_vtab(2, 2);
-	cfg_printf("config.kegs path: %-50s",
-			cfg_shorten_filename(&g_config_kegs_name[0], 50));
+	cfg_printf("config.kegs path: %-56s",
+			cfg_shorten_filename(&g_config_kegs_name[0], 56));
 
 	cfg_htab_vtab(2, 3);
 
@@ -2172,7 +2178,7 @@ cfg_file_draw()
 		str = "\b \b";
 	}
 	cfg_printf("Path: %s%s",
-			cfg_shorten_filename(&g_cfg_file_curpath[0], 64), str);
+			cfg_shorten_filename(&g_cfg_file_curpath[0], 68), str);
 
 	cfg_htab_vtab(0, 4);
 	cfg_printf(" \t");

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.244 2004-10-16 02:47:04-04 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.246 2004-10-19 17:39:27-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -130,15 +130,19 @@ fixup_brks()
 	word32	page;
 	word32	tmp, tmp2;
 	Pg_info	val;
+	int	is_wr_only;
 	int	i, num;
 
 	num = g_num_breakpoints;
 	for(i = 0; i < num; i++) {
 		page = (g_breakpts[i] >> 8) & 0xffff;
-		val = GET_PAGE_INFO_RD(page);
-		tmp = PTR2WORD(val) & 0xff;
-		tmp2 = tmp | BANK_IO_TMP | BANK_BREAK;
-		SET_PAGE_INFO_RD(page, val - tmp + tmp2);
+		is_wr_only = (g_breakpts[i] >> 24) & 1;
+		if(!is_wr_only) {
+			val = GET_PAGE_INFO_RD(page);
+			tmp = PTR2WORD(val) & 0xff;
+			tmp2 = tmp | BANK_IO_TMP | BANK_BREAK;
+			SET_PAGE_INFO_RD(page, val - tmp + tmp2);
+		}
 		val = GET_PAGE_INFO_WR(page);
 		tmp = PTR2WORD(val) & 0xff;
 		tmp2 = tmp | BANK_IO_TMP | BANK_BREAK;
@@ -1800,7 +1804,12 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			}
 
 			if((val & 0x60) != 0) {
-				halt_printf("c036: %2x\n", val);
+				/* for ROM 03, 0x40 is the power-on status */
+				/*  and can be read/write */
+				if(((val & 0x60) != 0x40) ||
+							(g_rom_version < 3)) {
+					halt_printf("c036: %2x\n", val);
+				}
 			}
 			if(tmp & 0x10) {	/* shadow in all banks! */
 				if(g_num_shadow_all_banks++ == 0) {

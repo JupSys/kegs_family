@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.86
+KEGS: Kent's Emulated GS version 0.90
 http://kegs.sourceforge.net/
 
 What is this?
@@ -48,7 +48,8 @@ KEGS by default emulates a 8MB Apple IIgs, but you can change this from
 the Configuration Panel.
 
 KEGS is so accurate, even the built-in ROM selftests pass (you must be in
-2.8MHz speed mode to pass the self-tests).
+2.8MHz speed mode to pass the self-tests and you must set the Configuration
+Panel entry "Enable Text Page 2 shadow" to "Disabled on ROM 01" for ROM 01).
 
 Release info:
 ------------
@@ -353,7 +354,6 @@ X-Windows/Linux options
 -24:	KEGS will only look for a 24-bit X-Window display.
 -display {machine:0.0}: Same as setting the environment variable DISPLAY.
 	Sends X display to {machine:0.0}.
--joystick: Will use /dev/js0 as the joystick.
 -noshm:	KEGS will not try to used shared memory for the X graphics display.
 	This will make KEGS much slower on graphics-intensive tasks,
 	by as much as a factor of 10!  By default, -noshm causes an
@@ -390,8 +390,10 @@ The reset key is Pause/Break or F12.  You must hit it with Ctrl to get it to
 take effect (just like a real Apple IIgs).  Ctrl-Command-Reset
 forces a reboot.  Ctrl-Command-Option-Reset enters selftests.
 Selftests will pass if you force speed to 2.8MHz using the middle
-button.  Watch out for ctrl-shift-Break--it will likely kill your
-X Windows session.
+button or F6 (and also set Enable Text Page 2 shadow = Disabled for ROM 01).
+Watch out for ctrl-shift-Break--it will likely kill an X Windows session.
+Also note that the olvwm window manager interprets ctrl-F12 and will not
+pass it on to KEGS--you'll need to use Break for reset in that case.
 
 Control Panel:
 -------------
@@ -686,7 +688,9 @@ useful for some games.
 KEGS:  What works:
 -----------------
 
-Basically, just about every Apple II program works.
+Basically, just about every Apple II program works.  See the file
+README.a2.compatibility for directions on how to make certain games/programs
+work.
 
 KEGS is EXTREMELY compatible.  But, I haven't tested everything.  Let
 me know if you find a program which is not working correctly.

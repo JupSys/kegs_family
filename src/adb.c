@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.68 2004-10-16 02:45:31-04 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.69 2004-10-19 14:52:08-04 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -1783,7 +1783,7 @@ adb_physical_key_update(int a2code, int is_up)
 		if(ascii > 0x30 && ascii <= 0x39) {
 			g_keypad_key_is_down[ascii - 0x30] = !is_up;
 		}
-		if(g_joystick_type == 1) {
+		if(g_joystick_type == 0) {
 			/* If Joystick type is keypad, then do not let these */
 			/*  keypress pass on further, except for cmd/opt */
 			if(ascii == 0x30) {
