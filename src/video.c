@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.125 2004-03-23 17:25:50-05 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.126 2004-10-05 20:12:22-04 kentd Exp $";
 
 #include <time.h>
 
@@ -445,8 +445,6 @@ video_init()
 	video_reset();
 	display_screen();
 
-	vid_printf("Done with display_screen\n");
-
 	fflush(stdout);
 }
 
@@ -536,8 +534,7 @@ video_update()
 
 	if(did_video) {
 		g_new_a2_stat_cur_line = 0;
-		g_a2_new_all_stat[0] = (g_cur_a2_stat & (~ALL_STAT_PAGE2)) +
-									PAGE2;
+		g_a2_new_all_stat[0] = g_cur_a2_stat;
 		g_vid_update_last_line = 0;
 		video_update_through_line(0);
 	}
@@ -740,8 +737,7 @@ change_display_mode(double dcycs)
 	video_update_all_stat_through_line(tmp_line);
 
 	if(line < 200) {
-		g_a2_new_all_stat[line] =
-				(g_cur_a2_stat & (~ALL_STAT_PAGE2)) + PAGE2;
+		g_a2_new_all_stat[line] = g_cur_a2_stat;
 	}
 	/* otherwise, g_cur_a2_stat is covered at the end of vbl */
 }
@@ -2654,7 +2650,7 @@ video_update_through_line(int line)
 	int	i;
 
 #if 0
-	vid_printf("\nvideo_upd for line %d, lines: %06x\n\n", line,
+	vid_printf("\nvideo_upd for line %d, lines: %06x\n", line,
 				get_lines_since_vbl(g_cur_dcycs));
 #endif
 

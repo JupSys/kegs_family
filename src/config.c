@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.30 2003-11-21 16:38:53-05 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.32 2004-10-05 20:12:43-04 kentd Exp $";
 
 #include "defc.h"
 #include <stdarg.h>
@@ -433,7 +433,7 @@ config_parse_config_kegs_file()
 	/* In any case, copy the directory path to g_cfg_cwd_str */
 	(void)getcwd(&g_cfg_cwd_str[0], CFG_PATH_MAX);
 
-	fconf = fopen(g_config_kegs_name, "rt");
+	fconf = fopen(g_config_kegs_name, "r");
 	if(fconf == 0) {
 		printf("cannot open disk_conf!  Stopping!\n");
 		exit(3);
@@ -882,16 +882,6 @@ insert_disk(int slot, int drive, const char *name, int ejected, int force_size,
 		if(size == 0x800c00) {
 			//	Byte reversed 0x0c8000
 			size = 0x0c8000;
-		}
-		if(size == 0) {
-			/* From KEGS-OS-X: Gilles Tschopp: */
-			/*  deal with corrupted 2IMG files */
-			printf("Bernie corrupted size to 0...working around\n");
-
-			/* Just get the full size, and subtract 64, and */
-			/*  then round down to lower 0x1000 boundary */
-			size = cfg_get_fd_size(dsk->fd) - 64;
-			size = size & -0x1000;
 		}
 		dsk->image_start = unix_pos;
 		dsk->image_size = size;
@@ -2371,7 +2361,7 @@ config_control_panel()
 	int	key;
 	int	i, j;
 
-	// First, save key text info
+	// First, save important text screen state
 	g_save_cur_a2_stat = g_cur_a2_stat;
 	for(i = 0; i < 0x400; i++) {
 		g_save_text_screen_bytes[i] = g_slow_memory_ptr[0x400+i];
@@ -2386,6 +2376,7 @@ config_control_panel()
 	cfg_printf("In config_control_panel\n");
 
 	for(i = 0; i < 20; i++) {
+		// Toss any queued-up keypresses
 		if(adb_read_c000() & 0x80) {
 			(void)adb_access_c010();
 		}

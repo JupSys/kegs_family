@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.90 2003-11-18 17:35:30-05 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.91 2004-09-21 11:21:15-04 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -437,7 +437,7 @@ show_toolset_tables(word32 a2bank, word32 addr)
 
 	addr = (a2bank << 16) + (addr & 0xffff);
 
-	toolfile = fopen("tool_set_info", "wt");
+	toolfile = fopen("tool_set_info", "w");
 	if(toolfile == 0) {
 		fprintf(stderr, "fopen of tool_set_info failed: %d\n", errno);
 		exit(2);

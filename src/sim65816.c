@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.346 2004-03-23 17:26:10-05 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.349 2004-10-05 20:11:57-04 kentd Exp $";
 
 #include <math.h>
 
@@ -102,10 +102,11 @@ int	g_code_red = 0;
 int	g_code_yellow = 0;
 int	g_use_alib = 0;
 int	g_raw_serial = 1;
+int	g_iw2_emul = 0;
 int	g_serial_out_masking = 0;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.86";
+const char g_kegs_version_str[] = "0.87";
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
@@ -122,6 +123,7 @@ double	g_dadjcycs = 0.0;
 
 
 int	g_wait_pending = 0;
+int	g_stp_pending = 0;
 int	g_irq_pending = 0;
 
 int	g_num_irq = 0;
@@ -192,7 +194,7 @@ show_pc_log()
 	int	num;
 	int	i;
 
-	pcfile = fopen("pc_log_out", "wt");
+	pcfile = fopen("pc_log_out", "w");
 	if(pcfile == 0) {
 		fprintf(stderr,"fopen failed...errno: %d\n", errno);
 		exit(2);
@@ -596,6 +598,7 @@ do_reset()
 	engine.xreg &= 0xff;
 	engine.yreg &= 0xff;
 	g_wait_pending = 0;
+	g_stp_pending = 0;
 
 
 	video_reset();
@@ -672,7 +675,7 @@ memalloc_align(int size, int skip_amt)
 	word32	offset;
 
 	skip_amt = MAX(256, skip_amt);
-	bptr = malloc(size + skip_amt);
+	bptr = calloc(size + skip_amt, 1);
 
 	addr = PTR2WORD(bptr) & 0xff;
 
@@ -681,11 +684,7 @@ memalloc_align(int size, int skip_amt)
 
 	offset = ((addr + skip_amt - 1) & (~0xff)) - addr;
 
-	bptr += offset;
-
-	/* Gilles Tschopp recommended zeroing memory, this is a good idea */
-	memset(bptr, 0, size);
-	return bptr;
+	return (bptr + offset);
 }
 
 void
@@ -2174,6 +2173,9 @@ handle_action(word32 ret)
 	case RET_WDM:
 		do_wdm(ret & 0xff);
 		break;
+	case RET_STP:
+		do_stp();
+		break;
 	default:
 		halt_printf("Unknown special action: %08x!\n", ret);
 	}
@@ -2274,7 +2276,11 @@ do_wai()
 void
 do_stp()
 {
-	halt_printf("Hit do_stp at addr: %06x\n", engine.kpc);
+	if(!g_stp_pending) {
+		g_stp_pending = 1;
+		halt_printf("Hit STP instruction at: %06x, press RESET to "
+				"continue\n", engine.kpc);
+	}
 }
 
 void

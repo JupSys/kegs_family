@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.103 2003-10-17 15:07:47-04 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.106 2004-09-21 11:21:05-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -154,7 +154,7 @@ show_doc_log(void)
 	int	pos;
 	int	i;
 
-	docfile = fopen("doc_log_out", "wt");
+	docfile = fopen("doc_log_out", "w");
 	if(docfile == 0) {
 		printf("fopen failed, errno: %d\n", errno);
 		return;

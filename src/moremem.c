@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.233 2004-03-23 17:27:14-05 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.234 2004-10-05 20:13:07-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -171,7 +171,7 @@ fixup_bank0_2000_4000()
 	mem0rd = &(g_memory_ptr[0x2000]);
 	mem0wr = mem0rd;
 	if((g_cur_a2_stat & ALL_STAT_ST80) && (g_cur_a2_stat & ALL_STAT_HIRES)){
-		if(PAGE2) {
+		if(g_cur_a2_stat & ALL_STAT_PAGE2) {
 			mem0rd += 0x10000;
 			mem0wr += 0x10000;
 			if((shadow_reg & 0x12) == 0 || (shadow_reg & 0x8) == 0){
@@ -209,7 +209,7 @@ fixup_bank0_0400_0800()
 	mem0wr = mem0rd;
 	shadow = BANK_SHADOW;
 	if(g_cur_a2_stat & ALL_STAT_ST80) {
-		if(PAGE2) {
+		if(g_cur_a2_stat & ALL_STAT_PAGE2) {
 			shadow = BANK_SHADOW2;
 			mem0rd += 0x10000;
 			mem0wr += 0x10000;
@@ -390,7 +390,7 @@ fixup_st80col(double dcycs)
 		fixup_bank0_2000_4000();
 	}
 
-	if(PAGE2) {
+	if(cur_a2_stat & ALL_STAT_PAGE2) {
 		change_display_mode(dcycs);
 	}
 
@@ -652,6 +652,8 @@ set_statereg(double dcycs, int val)
 	}
 	if(xor & 0x40) {
 		/* page2 */
+		g_cur_a2_stat = (g_cur_a2_stat & ~ALL_STAT_PAGE2) |
+						(val & ALL_STAT_PAGE2);
 		fixup_page2(dcycs);
 	}
 
@@ -1107,7 +1109,7 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x1b: /* c01b: rdmix */
 			return IOR(g_cur_a2_stat & ALL_STAT_MIX_T_GR);
 		case 0x1c: /* c01c: rdpage2 */
-			return IOR(PAGE2);
+			return IOR(g_cur_a2_stat & ALL_STAT_PAGE2);
 		case 0x1d: /* c01d: rdhires */
 			return IOR(g_cur_a2_stat & ALL_STAT_HIRES);
 		case 0x1e: /* c01e: altcharset on? */

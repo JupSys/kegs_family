@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.91 2003-11-03 01:29:38-05 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.92 2004-10-05 20:12:56-04 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -175,7 +175,7 @@ STRUCT(Cfg_listhdr) {
 
 
 #define ALTZP	(statereg & 0x80)
-#define PAGE2	(statereg & 0x40)
+/* #define PAGE2 (statereg & 0x40) */
 #define RAMRD	(statereg & 0x20)
 #define RAMWRT	(statereg & 0x10)
 #define RDROM	(statereg & 0x08)

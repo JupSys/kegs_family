@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_paddles_c[] = "@(#)$KmKId: paddles.c,v 1.7 2004-03-23 17:28:06-05 kentd Exp $";
+const char rcsid_paddles_c[] = "@(#)$KmKId: paddles.c,v 1.9 2004-10-05 22:19:01-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -56,16 +56,17 @@ paddle_trigger_mouse(double dcycs)
 	val_x = 0;
 	/* mous_phys_x is 0->560, convert that to 0-255 cyc */
 	/* so, mult by 117 then divide by 256 */
-	if(g_mouse_fifo_x[0] > BASE_MARGIN_LEFT) {
-		val_x = (g_mouse_fifo_x[0] - BASE_MARGIN_LEFT) * 117;
+	if(g_mouse_fifo_x[0] > 0) {
+		val_x = g_mouse_fifo_x[0] * 117;
 		val_x = val_x >> 8;
 	}
 
-	/* mous_phys_y is 0->384, convert that to 0-255 cyc */
-	/* so, mult by 170 then divide by 256 (shift right by 8) */
+	/* mous_phys_y is 0->192, convert that to 0-255 cyc */
+	/* so, mult by 340 then divide by 256 (shift right by 8) */
 	val_y = 0;
-	if(g_mouse_fifo_y[0] > BASE_MARGIN_TOP) {
-		val_y = ((g_mouse_fifo_y[0] - BASE_MARGIN_TOP) * 170) >> 8;
+
+	if(g_mouse_fifo_y[0] > 0) {
+		val_y = (g_mouse_fifo_y[0] * 340) >> 8;
 	}
 
 	if(val_x > 280) {
