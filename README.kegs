@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.41
+KEGS: Kent's Emulated GS version 0.46
 http://www.crosswinds.net/san-jose/~kentd/kegs/
 
 What is this?
@@ -172,11 +172,12 @@ Images (disk_conf):
 You tell KEGS what disk images to use through the disk_conf file.
 You must set this up before running KEGS.
 
-KEGS can handle "raw", 2IMG, or partitioned images now.  The raw image
-format has no header of any type.  KEGS uses the Unix file permissions
-to encode the read/write status of the image.  2IMG encodes some
-information in a header in front of the image (so 800K disk images
-are a little bigger than 800K).  Partitions are described below.
+KEGS can handle "raw", 2IMG, 5.25" ".nib" images, or partitioned images
+now.  The raw image format has no header of any type.  KEGS uses the
+Unix file permissions to encode the read/write status of the image.
+2IMG encodes some information in a header in front of the image (so 800K
+disk images are a little bigger than 800K).  Partitions are described
+below.
 
 An image is the representation of an Apple //gs disk, but in a file on
 Unix.  For 3.5" disks, for example, a raw image would be exactly 800K bytes
@@ -325,6 +326,11 @@ to add them here in the future.
 Since a real Apple //gs can eject 3.5" disks, so can KEGS.  If the
 Apple //gs wants to eject the disk, KEGS will put a '#' in front of
 that disk image name in disk_conf, and eject the disk.
+
+Support for 5.25" nibblized images is read-only for now (since the
+format is kinda simplistic, it's tricky for KEGS to write to it).
+Just mount your image, like "disk.nib" in the disk_conf file like
+any .dsk or .po image.
 
 
 Debugging KEGS:
@@ -595,15 +601,16 @@ Unfortunately, formatting 5.25" disks under GS/OS does not work in
 fast_disk_emul mode--you must hit F7 to toggle to accurate IWM mode.
 
 KEGS supports low-level emulation of 5.25" and 3.5" drive hardware.  It
-is very accurate, supporting nibble-copiers, etc.  Note there is no
-"nibblized" disk image format that KEGS understands currently.  So, if
+is very accurate, supporting nibble-copiers, etc.  KEGS can read in
+the ".nib" nibblized disk format, but as read-only mode.  If
 the emulated image is no longer ProDOS or DOS 3.3 standard, KEGS will
 automatically treat the image as "Not-write-through-to-Unix" from then
 on.  It prints a message saying it has done so, so be careful.  However,
 the "disk" in emulation is fully useable as long as KEGS is running.  A
 standard reformatting will not cause an image to flip to not-write-
 through-to_unix, but running things like a "drive-speed" test will cause
-further changes not to propagate to the Unix file.
+further changes not to propagate to the Unix file.  You will need
+to "eject" the image and re-insert it before writes will take effect.
 
 In full accuracy mode, 5.25" drive accesses force KEGS to run at 1MHz,
 and 3.5" drive accesses force KEGS to run at 2.5MHz.
@@ -777,17 +784,11 @@ KEGS bugs:
 
 KEGS has a number of bugs/misfeatures.
 
-The Ensoniq emulation has a few subtle flaws.  I am working on debugging
-them.  In SynthLab, during songs KEGS sometimes plays "sour" notes.
-KEGS also can get bogged down with too many sound events in some
-programs.  Let me know if you find applications that are really bad--there
-may be something I can do to fix it.
+The Ensoniq emulation is much improved starting with v0.45.  There are
+still some issues, but please let me know of any apps which are particularly
+bad and I will try to debug them.
 
 SynthLab, SoundSmith, ModZap, and SoniqTracker work fine.
-
-Although KEGS should support copy-protected programs, it does not
-support a nibblized image format so it cannot load them.  Oh well.
-I'll fix this soon, too.
 
 KEGS's serial port emulation is very limited now, and only for
 adventurous souls.
@@ -805,9 +806,6 @@ across the bottom will just get random lines.  I'll fix it eventually.
 Sound breaks up if KEGS is unable to keep up--it should only be happening
 if you are trying to force KEGS to run at 2.5MHz, but cannot due to
 sound and video overhead.
-
-In Rastan, the music plays at a slow tempo UNLESS you are moving--then
-it plays the music just fine.
 
 x86 Linux may draw the border wrong with Shared Memory on--use -noshm
 on Linux to avoid this for now.
@@ -1038,7 +1036,7 @@ KEGS To-Do:
 
 Better serial port emulation (printing, comm)
 3200 color mode.
-Nibblized images.
+Better nibblized images.
 
 
 -------------------

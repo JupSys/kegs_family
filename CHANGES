@@ -1,4 +1,10 @@
 
+Changes in KEGS v0.46 since v0.45
+- Fix for undefined var in engine_c.c.  Oops.
+- Fix for old bug in engine_c.c causing KEGS to sometimes misinterpret
+   instructions which cross page boundaries.  Was causing Thexder not
+   to work, at least.
+
 Changes in KEGS v0.45 since v0.44
 - Fix for COP instruction in engine_c.c.  Pointed out by Kelvin Sherlock.
 - Major fixes to Ensoniq emulation, SynthLab sounds much better.

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.26 99/02/15 20:43:18 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.28 99/03/21 23:23:26 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -25,6 +25,7 @@ extern int g_wait_pending;
 extern int g_irq_pending;
 extern int g_testing;
 extern int g_num_brk;
+extern int g_num_cop;
 extern byte *g_slow_memory_ptr;
 extern byte *g_memory_ptr;
 extern byte *g_rom_fc_ff_ptr;
@@ -64,7 +65,8 @@ int bogus[] = {
 		tmp_pc_ptr = log_pc_ptr++;				\
 		tmp_pc_ptr->dbank_kbank_pc = (dbank << 24) +		\
 				(kbank << 16) + (pc & 0xffff);		\
-		tmp_pc_ptr->instr = (opcode << 24) + (arg & 0xffffff);	\
+		tmp_pc_ptr->instr = (opcode << 24) + arg_ptr[1] +	\
+			(arg_ptr[2] << 8) + (arg_ptr[3] << 16);		\
 		tmp_pc_ptr->psr_acc = ((psr & ~(0x82)) << 16) + acc +	\
 			(neg << 23) + ((!zero) << 17);			\
 		tmp_pc_ptr->xreg_yreg = (xreg << 16) + yreg;		\
@@ -745,7 +747,7 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 	ptr = (byte *)((stat & 0xffffff00) | ((addr) & 0xff));		\
 	arg_ptr = ptr;							\
 	opcode = *ptr;							\
-	if((stat & (1 << (31-BANK_IO_BIT))) || ((addr & 0xfc) > 0xfc)) {\
+	if((stat & (1 << (31-BANK_IO_BIT))) || ((addr & 0xff) > 0xfc)) {\
 		if(stat & BANK_BREAK) {					\
 			check_breakpoints(addr);			\
 		}							\

@@ -13,6 +13,7 @@ EXTRA_LIBS = -lXext -lX11 -lsocket -lnsl
 PROJROOT = .
 
 AS = cc
+PERL = perl
 
 XOPTS = -I/usr/X/include
 XLIBS = -L/usr/X/lib
@@ -32,13 +33,13 @@ $(NAME)$(SUFFIX): $(OBJECTS) compile_time.o specials
 	$(LD) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(XLIBS) $(EXTRA_LIBS) -lm
 
 8inst_c: instable.h
-	$(PROJROOT)/make_inst c 8 instable.h > 8inst_c
+	$(PERL) $(PROJROOT)/make_inst c 8 instable.h > 8inst_c
 
 16inst_c: instable.h
-	$(PROJROOT)/make_inst c 16 instable.h > 16inst_c
+	$(PERL) $(PROJROOT)/make_inst c 16 instable.h > 16inst_c
 
 size_c: size_tab.h
-	$(PROJROOT)/make_size c size_tab.h > size_c
+	$(PERL) $(PROJROOT)/make_size c size_tab.h > size_c
 
 
 engine_c.o: 8inst_c 16inst_c
