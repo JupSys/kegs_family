@@ -1,4 +1,15 @@
 
+Changes in KEGS v0.48 since v0.47
+- Even better ADB key repeat--key rollover works more like a real Apple //gs.
+- IWM fix: some "smarport" modes were being activated sometimes during
+   normal 3.5" accesses, resulting in some games not loading correctly.
+- Some fixes to serial port emulation to handle programs writing to
+   the serial port in MIDI mode when the chars will not be consumed.
+- Smartport fix to set zero-page locations $42-$47, needed by some poorly-
+   written game loaders
+- The "oscilloscope" effect in some sound-demos now shows the sounds
+   being played.
+
 Changes in KEGS v0.47 since v0.46
 - ADB fix #1: reading $c010 should give key-down status better
 - ADB fix #2: key repeat was stopping if modifier key pressed

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.11 99/01/23 19:07:18 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.12 99/04/11 22:49:14 kentd Exp $";
 
 #include "defc.h"
 
@@ -900,6 +900,12 @@ do_c700(word32 ret)
 	(void)do_read_c7(0, 0x800, 0);
 
 	set_memory_c(0x7f8, 7, 0);
+	set_memory_c(0x42, 0x01, 0);
+	set_memory_c(0x43, 0x70, 0);
+	set_memory_c(0x44, 0x0, 0);
+	set_memory_c(0x45, 0x8, 0);
+	set_memory_c(0x46, 0x0, 0);
+	set_memory_c(0x47, 0x0, 0);
 	engine.xreg = 0x70;
 	engine.pc = 0x801;
 }

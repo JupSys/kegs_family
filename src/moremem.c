@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.196 99/04/05 00:11:44 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.197 99/04/11 22:48:42 kentd Exp $";
 
 #include "defc.h"
 
@@ -1516,27 +1516,15 @@ io_read(word32 loc, Cyc *cyc_ptr)
 			if(new_wrdefram != wrdefram) {
 				fixup_wrdefram(new_wrdefram, 1);
 			}
-			switch(loc & 0xf) {
+			switch(loc & 0x3) {
 			case 0x1: /* 0xc081 */
 			case 0x2: /* 0xc082 */
-			case 0x5: /* 0xc085 */
-			case 0x6: /* 0xc086 */
-			case 0x9: /* 0xc089 */
-			case 0xa: /* 0xc08a */
-			case 0xd: /* 0xc08d */
-			case 0xe: /* 0xc08e */
 				/* Read rom, set lcbank2 */
 				set_statereg(dcycs, (statereg & ~(0x04)) |
 					(new_lcbank2 | 0x08));
 				break;
 			case 0x0: /* 0xc080 */
 			case 0x3: /* 0xc083 */
-			case 0x4: /* 0xc084 */
-			case 0x7: /* 0xc087 */
-			case 0x8: /* 0xc088 */
-			case 0xb: /* 0xc08b */
-			case 0xc: /* 0xc08c */
-			case 0xf: /* 0xc08f */
 				/* Read ram (clear RDROM), set lcbank2 */
 				set_statereg(dcycs, (statereg & ~(0x0c)) |
 					(new_lcbank2));
@@ -1548,14 +1536,15 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		case 0x94: case 0x95: case 0x96: case 0x97:
 		case 0x98: case 0x99: case 0x9a: case 0x9b:
 		case 0x9c: case 0x9d: case 0x9e: case 0x9f:
-			UNIMPL_READ;
-
+			/* UNIMPL_READ; */
+			return 0;
 		/* 0xc0a0 - 0xc0af */
 		case 0xa0: case 0xa1: case 0xa2: case 0xa3:
 		case 0xa4: case 0xa5: case 0xa6: case 0xa7:
 		case 0xa8: case 0xa9: case 0xaa: case 0xab:
 		case 0xac: case 0xad: case 0xae: case 0xaf:
-			UNIMPL_READ;
+			return 0;
+			/* UNIMPL_READ; */
 
 		/* 0xc0b0 - 0xc0bf */
 		case 0xb0:
@@ -1565,7 +1554,8 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		case 0xb4: case 0xb5: case 0xb6: case 0xb7:
 		case 0xb9: case 0xba: case 0xbb:
 		case 0xbc: case 0xbd: case 0xbe: case 0xbf:
-			UNIMPL_READ;
+			/* UNIMPL_READ; */
+			return 0;
 		/* c0b8: Second Sight card stuff: return 0 */
 		case 0xb8:
 			return 0;
@@ -1576,13 +1566,13 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		case 0xc4: case 0xc5: case 0xc6: case 0xc7:
 		case 0xc8: case 0xc9: case 0xca: case 0xcb:
 		case 0xcc: case 0xcd: case 0xce: case 0xcf:
-			UNIMPL_READ;
+			return 0;
 		/* 0xc0d0 - 0xc0df */
 		case 0xd0: case 0xd1: case 0xd2: case 0xd3:
 		case 0xd4: case 0xd5: case 0xd6: case 0xd7:
 		case 0xd8: case 0xd9: case 0xda: case 0xdb:
 		case 0xdc: case 0xdd: case 0xde: case 0xdf:
-			UNIMPL_READ;
+			return 0;
 		/* 0xc0e0 - 0xc0ef */
 		case 0xe0: case 0xe1: case 0xe2: case 0xe3:
 		case 0xe4: case 0xe5: case 0xe6: case 0xe7:
@@ -1596,7 +1586,7 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		case 0xf4: case 0xf5: case 0xf6: case 0xf7:
 		case 0xf8: case 0xf9: case 0xfa: case 0xfb:
 		case 0xfc: case 0xfd: case 0xfe: case 0xff:
-			UNIMPL_READ;
+			return 0;
 
 		default:
 			printf("loc: %04x bad\n", loc);

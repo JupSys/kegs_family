@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.80 99/04/05 00:11:14 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.81 99/04/13 00:14:43 kentd Exp $";
 
 #include "defc.h"
 
@@ -166,8 +166,8 @@ show_doc_log(void)
 			g_doc_log[pos].dsamps, g_doc_log[pos].dtmp2,
 			g_doc_log[pos].etc, g_doc_log[pos].osc, rptr->ctl,
 			rptr->freq);
-		printf("             ire:%d,%d,%d ptr:%08x inc:%08x "
-			"comp_ds:%f samp_left:%d\n",
+		printf("          ire:%d,%d,%d ptr:%08x inc:%08x "
+			"comp_ds:%.1f left:%d\n",
 			rptr->has_irq_pending, rptr->running, rptr->event,
 			rptr->cur_ptr, rptr->cur_inc, rptr->complete_dsamp,
 			rptr->samps_left);
@@ -210,6 +210,7 @@ sound_init()
 		rptr->waveptr = 0;
 		rptr->ctl = 1;
 		rptr->wavesize = 0;
+		rptr->last_samp_val = 0;
         }
 
 	if(!g_use_shmem) {
@@ -358,6 +359,7 @@ sound_update(double dcycs)
 	/* "play" sounds for this vbl */
 
 	dsamps = dcycs * g_dsamps_per_dcyc;
+	DOC_LOG("do_sound_play", -1, dsamps, 0);
 	sound_play(dsamps);
 }
 
@@ -826,8 +828,12 @@ sound_play(double dsamps)
 				if(samps_left <= 0) {
 					doc_sound_end(osc, 1, cur_dsamp,
 								dsamp_now);
+					val = 0;
 					j--;
+				} else {
+					val = doc_ram[cur_ptr >> SND_PTR_SHIFT];
 				}
+				rptr->last_samp_val = val;
 				continue;
 			}
 	
@@ -863,6 +869,8 @@ sound_play(double dsamps)
 				outptr += 2;
 			}
 	
+			rptr->last_samp_val = val;
+
 			if(val != 0) {
 				rptr->cur_ptr = cur_ptr;
 				rptr->samps_left = samps_left;
@@ -1402,6 +1410,7 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 		/* new halt == 0 = make sure sound is running */
 		if(old_halt != 0) {
 			/* start sound */
+			DOC_LOG("ctl_sound_play", osc, eff_dsamps, val);
 			sound_play(eff_dsamps);
 			g_doc_regs[osc].ctl = val;
 
@@ -1520,10 +1529,8 @@ doc_read_c03d(double dcycs)
 			doc_saved_val = rptr->vol;
 			break;
 		case 0x3:	/* data register */
-#if 0
-			printf("Reading doc_data_reg[%02x]!\n", osc);
-#endif
-			doc_saved_val = osc << 3;
+			/* HACK: make this call sound_play sometimes */
+			doc_saved_val = rptr->last_samp_val;
 			break;
 		case 0x4:	/* wave ptr register */
 			doc_saved_val = rptr->waveptr;
@@ -1652,6 +1659,7 @@ doc_write_c03d(int val, double dcycs)
 			}
 			if((ctl & 1) == 0) {
 				/* play through current status */
+				DOC_LOG("flo_sound_play", osc, dsamps, val);
 				sound_play(dsamps);
 			}
 			rptr->freq = (rptr->freq & 0xff00) + val;
@@ -1663,6 +1671,7 @@ doc_write_c03d(int val, double dcycs)
 			}
 			if((ctl & 1) == 0) {
 				/* play through current status */
+				DOC_LOG("fhi_sound_play", osc, dsamps, val);
 				sound_play(dsamps);
 			}
 			rptr->freq = (rptr->freq & 0xff) + (val << 8);
@@ -1674,7 +1683,13 @@ doc_write_c03d(int val, double dcycs)
 			}
 			if((ctl & 1) == 0) {
 				/* play through current status */
+				DOC_LOG("vol_sound_play", osc, dsamps, val);
 				sound_play(dsamps);
+#if 0
+				printf("vol_sound_play at %.1f osc:%d val:%d\n",
+					dsamps, osc, val);
+				set_halt(1);
+#endif
 			}
 			rptr->vol = val;
 			break;
@@ -1690,6 +1705,7 @@ doc_write_c03d(int val, double dcycs)
 			}
 			if((ctl & 1) == 0) {
 				/* play through current status */
+				DOC_LOG("wptr_sound_play", osc, dsamps, val);
 				sound_play(dsamps);
 			}
 			rptr->waveptr = val;
@@ -1710,6 +1726,7 @@ doc_write_c03d(int val, double dcycs)
 			}
 			if((ctl & 1) == 0) {
 				/* play through current status */
+				DOC_LOG("wsz_sound_play", osc, dsamps, val);
 				sound_play(dsamps);
 			}
 			rptr->wavesize = val;

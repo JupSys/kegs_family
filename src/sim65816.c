@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.275 99/04/05 00:12:14 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.277 99/04/11 22:46:14 kentd Exp $";
 
 #include <math.h>
 
@@ -215,8 +215,8 @@ show_pc_log()
 			xsize = 1;
 		}
 
-		fprintf(pcfile, "%04x.%04x: A:%04x X:%04x Y:%04x P:%03x "
-			"S:%04x D:%04x B:%02x ", i, num,
+		fprintf(pcfile, "%04x: A:%04x X:%04x Y:%04x P:%03x "
+			"S:%04x D:%04x B:%02x ", i,
 			acc, xreg, yreg, psr, stack, direct, dbank);
 
 		do_dis(pcfile, kbank, pc, accsize, xsize, 1, instr);
@@ -1556,7 +1556,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.47");
+		update_status_line(6, "KEGS v0.48");
 
 		g_status_refresh_needed = 1;
 

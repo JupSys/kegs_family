@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.89 99/03/22 22:52:21 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.90 99/04/11 22:48:56 kentd Exp $";
 
 #include "defc.h"
 
@@ -87,7 +87,6 @@ Iwm	iwm;
 
 int	g_apple35_sel = 0;
 int	head_35 = 0;
-int	iwm_halt_active = 0;
 int	g_iwm_motor_on = 0;
 
 int	g_check_nibblization = 0;
@@ -368,8 +367,6 @@ void
 iwm_touch_switches(int loc, double dcycs)
 {
 	Disk	*dsk;
-	int	phase_up;
-	int	phase_down;
 	int	phase;
 	int	on;
 	int	drive;
@@ -393,8 +390,6 @@ iwm_touch_switches(int loc, double dcycs)
 		/* phase adjustments.  See if motor is on */
 
 		iwm.iwm_phase[phase] = on;
-		phase_up = (phase - 1) & 3;
-		phase_down = (phase + 1) & 3;
 
 		if(iwm.motor_on) {
 			if(g_apple35_sel) {
@@ -405,24 +400,19 @@ iwm_touch_switches(int loc, double dcycs)
 				/* Move apple525 head */
 				iwm525_phase_change(drive, phase);
 			}
+		}
+		/* See if enable or reset is asserted */
+		if(iwm.iwm_phase[0] && iwm.iwm_phase[2]) {
+			iwm.reset = 1;
+			iwm_printf("IWM reset active\n");
 		} else {
-			/* See if enable or reset is asserted */
-			if(iwm.iwm_phase[0] && iwm.iwm_phase[2]) {
-				iwm.reset = 1;
-				iwm_printf("IWM reset active\n");
-			} else {
-				iwm.reset = 0;
-			}
-			if(iwm.iwm_phase[1] && iwm.iwm_phase[3]) {
-				iwm.enable2 = 1;
-				iwm_printf("IWM ENABLE2 active\n");
-			} else {
-				if(iwm.enable2) {
-					iwm_printf("Done smtport, halt_act\n");
-					iwm_halt_active = 1;
-				}
-				iwm.enable2 = 0;
-			}
+			iwm.reset = 0;
+		}
+		if(iwm.iwm_phase[1] && iwm.iwm_phase[3]) {
+			iwm.enable2 = 1;
+			iwm_printf("IWM ENABLE2 active\n");
+		} else {
+			iwm.enable2 = 0;
 		}
 	} else {
 		/* loc >= 8 */
@@ -602,6 +592,7 @@ iwm_read_status35(double dcycs)
 			(head_35 << 1) + iwm.iwm_phase[2];
 
 		iwm_printf("Iwm status read state: %02x\n", state);
+
 		switch(state) {
 		case 0x00:	/* step direction */
 			return iwm.step_direction35;

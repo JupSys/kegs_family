@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.25 99/04/05 00:10:54 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.26 99/04/09 00:37:02 kentd Exp $";
 
 #include "defc.h"
 
@@ -880,9 +880,20 @@ scc_add_to_writebuf(int port, word32 val, double dcycs)
 
 	scc_ptr = &(scc_stat[port]);
 
+	if(!scc_ptr->tx_buf_empty) {
+		/* toss character! */
+		return;
+	}
+
 	val = val & 0x7f;
 	out_wrptr = scc_ptr->out_wrptr;
 	out_rdptr = scc_ptr->out_rdptr;
+	if(scc_ptr->tx_dcycs < 1.0) {
+		if(out_wrptr != out_rdptr) {
+			/* do just one char, then get out */
+			return;
+		}
+	}
 	out_wrptr_next = (out_wrptr + 1) & (SCC_OUTBUF_SIZE - 1);
 	if(out_wrptr_next != out_rdptr) {
 		scc_ptr->out_buf[out_wrptr] = val;

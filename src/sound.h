@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.5 99/01/30 17:57:50 kentd Exp $";
+const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.6 99/04/12 22:45:58 kentd Exp $";
 #endif
 
 #include <sys/ipc.h>
@@ -23,4 +23,25 @@ const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.5 99/01/30 17:57:50 kentd
 #define SAMPLE_SIZE		2
 #define NUM_CHANNELS		2
 #define SAMPLE_CHAN_SIZE	(SAMPLE_SIZE * NUM_CHANNELS)
+
+STRUCT(Doc_reg) {
+	double	dsamp_ev;
+	double	dsamp_ev2;
+	double	complete_dsamp;
+	int	samps_left;
+	word32	cur_ptr;
+	word32	cur_inc;
+	word32	cur_start;
+	word32	cur_end;
+	int	size_bytes;
+	int	event;
+	int	running;
+	int	has_irq_pending;
+	word32	freq;
+	word32	vol;
+	word32	waveptr;
+	word32	ctl;
+	word32	wavesize;
+	word32	last_samp_val;
+};
 
