@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.91 98/11/15 15:47:55 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.92 99/01/31 22:14:08 kentd Exp $";
 
 #include <time.h>
 
@@ -2390,10 +2390,13 @@ refresh_screen()
 {
 	register word32 start_time, start_time2;
 	register word32 end_time, end_time2;
+	int	previous_superhires;
 	int	i;
 
 
 	GET_ITIMER(start_time);
+
+	previous_superhires = g_num_lines_superhires;
 	g_num_lines_superhires = 0;
 	g_num_lines_a2vid = 0;
 	g_superhires_palette_checked = 0;
@@ -2406,6 +2409,10 @@ refresh_screen()
 	if(g_palette_changed) {
 		update_physical_colormap();
 		g_palette_changed = 0;
+	}
+	if(previous_superhires && !g_num_lines_superhires) {
+		/* switched out from superhires--refresh */
+		g_border_sides_refresh_needed = 1;
 	}
 
 	/* deal with border */

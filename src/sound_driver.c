@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.1 98/08/23 22:50:20 kentd Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.2 99/01/30 17:57:40 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"
@@ -35,6 +35,7 @@ extern int g_use_alib;
 
 extern int g_audio_rate;
 
+int	g_preferred_rate = 48000;
 int	g_audio_socket = -1;
 int	g_bytes_written = 0;
 #ifdef HPUX
@@ -46,8 +47,8 @@ ATransID g_xid;
 
 word32 zero_buf[ZERO_BUF_SIZE];
 
-#define ZERO_PAUSE_SAFETY_SAMPS		(AUDIO_RATE/50)
-#define ZERO_PAUSE_NUM_SAMPS		(5*AUDIO_RATE)
+#define ZERO_PAUSE_SAFETY_SAMPS		(g_audio_rate >> 5)
+#define ZERO_PAUSE_NUM_SAMPS		(4*g_audio_rate)
 
 void child_sound_init_linux();
 void child_sound_init_hpdev();
@@ -99,7 +100,7 @@ reliable_zero_write(int amt)
 
 
 void
-child_sound_loop(int read_fd, word32 *shm_addr)
+child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
 {
 	word32	tmp;
 	long	status_return;
@@ -113,6 +114,8 @@ child_sound_loop(int read_fd, word32 *shm_addr)
 
 	doc_printf("Child pipe fd: %d\n", read_fd);
 
+	g_audio_rate = g_preferred_rate;
+
 #ifdef HPUX
 	if(g_use_alib) {
 		child_sound_init_alib();
@@ -124,6 +127,13 @@ child_sound_loop(int read_fd, word32 *shm_addr)
 	child_sound_init_linux();
 #endif
 
+	tmp = g_audio_rate;
+	ret = write(write_fd, &tmp, 4);
+	if(ret != 4) {
+		printf("Unable to send back audio rate to parent\n");
+		exit(1);
+	}
+	close(write_fd);
 
 	zeroes_buffered = 0;
 	zeroes_seen = 0;
@@ -287,7 +297,7 @@ child_sound_init_hpdev()
 		exit(1);
 	}
 
-	ret = ioctl(g_audio_socket, AUDIO_SET_SAMPLE_RATE, AUDIO_RATE);
+	ret = ioctl(g_audio_socket, AUDIO_SET_SAMPLE_RATE, g_audio_rate);
 	if(ret < 0) {
 		printf("ioctl AUDIO_SET_SAMPLE_RATE failed, ret:%d, errno:%d\n",
 			ret, errno);
@@ -361,7 +371,7 @@ child_sound_init_alib()
 
 	attr.attr.sampled_attr.data_format = ADFLin16;
 	attr.attr.sampled_attr.bits_per_sample = 8*SAMPLE_SIZE;
-	attr.attr.sampled_attr.sampling_rate = AUDIO_RATE;
+	attr.attr.sampled_attr.sampling_rate = g_audio_rate;
 	attr.attr.sampled_attr.channels = NUM_CHANNELS;
 	attr.attr.sampled_attr.interleave = 1;
 	attr.attr.sampled_attr.duration.type = ATTFullLength;
@@ -482,10 +492,16 @@ child_sound_init_linux()
 	rate = g_audio_rate;
 	ret = ioctl(g_audio_socket, SNDCTL_DSP_SPEED, &rate);
 	if(ret < 0) {
-		printf("ioctl AUDIO_SET_SAMPLE_RATE failed, ret:%d, errno:%d\n",
+		printf("ioctl SNDCTL_DSP_SPEED failed, ret:%d, errno:%d\n",
 			ret, errno);
 		exit(1);
 	}
+	if(ret < 8000) {
+		printf("Audio rate of %d which is < 8000 not supported!\n",ret);
+		exit(1);
+	}
+	
+	g_audio_rate = ret;
 
 	printf("Sound initialized\n");
 }

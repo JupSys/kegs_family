@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.62 99/01/19 23:08:09 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.63 99/01/23 19:07:07 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -60,6 +60,7 @@ typedef float Cyc;
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #ifdef HPUX
 # include <machine/inline.h>		/* for GET_ITIMER */
 #endif

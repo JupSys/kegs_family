@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.265 99/01/18 01:09:10 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.268 99/01/31 22:59:39 kentd Exp $";
 
 #include <math.h>
 
@@ -85,9 +85,11 @@ extern byte doc_ram[];
 
 extern int g_iwm_motor_on;
 extern int g_fast_disk_emul;
+extern int g_slow_525_emul_wr;
 extern int g_apple35_sel;
 
 extern int g_audio_enable;
+extern int g_preferred_rate;
 
 void U_STACK_TRACE();
 
@@ -726,6 +728,15 @@ main(int argc, char **argv)
 			printf("Using %d as audio enable val\n", tmp1);
 			g_audio_enable = tmp1;
 			i++;
+		} else if(!strcmp("-arate", argv[i])) {
+			if((i+1) >= argc) {
+				printf("Missing argument\n");
+				exit(1);
+			}
+			tmp1 = strtol(argv[i+1], 0, 0);
+			printf("Using %d as preferred audio rate\n", tmp1);
+			g_preferred_rate = tmp1;
+			i++;
 #ifndef __NeXT__
 		} else if(!strcmp("-display", argv[i])) {
 			if((i+1) >= argc) {
@@ -1098,10 +1109,11 @@ run_prog(word32 cycles)
 		apple35_sel = g_apple35_sel;
 		fast = speed_fast;
 
-		iwm_1 = motor_on && !apple35_sel && (g_slot_motor_detect & 0x8);
-		iwm_25 = (motor_on && apple35_sel);
-		if(fast && ((!iwm_1 && !iwm_25) || g_fast_disk_emul) &&
-							(limit_speed == 0)) {
+		iwm_1 = motor_on && !apple35_sel &&
+				(g_slot_motor_detect & 0x4) &&
+				(g_slow_525_emul_wr || ~g_fast_disk_emul);
+		iwm_25 = (motor_on && apple35_sel) && ~g_fast_disk_emul;
+		if(fast && (!iwm_1 && !iwm_25) && (limit_speed == 0)) {
 			/* unlimited speed */
 			fspeed_mult = g_projected_pmhz;
 			fplus_ptr = &g_recip_projected_pmhz_unl;
@@ -1524,7 +1536,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.41");
+		update_status_line(6, "KEGS v0.42");
 
 		g_status_refresh_needed = 1;
 

@@ -50,7 +50,7 @@ engine_c.o: 8inst_c 16inst_c
 	$(CC) $(CCOPTS) $(XOPTS) -c $(OPTS) -I. $*.c
 
 partls: partls.c
-	$(CC) $(CCOPTS) -o partls partls.c
+	$(CC) $(CCOPTS) $(OPTS) -o partls partls.c
 
 to_pro: prodos.h prodos_protos.h to_pro.c
 	$(CC) $(CCOPTS) -o to_pro to_pro.c

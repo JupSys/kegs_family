@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.10 99/01/18 01:01:18 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.11 99/01/23 19:07:18 kentd Exp $";
 
 #include "defc.h"
 
@@ -112,7 +112,7 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 		sig = GET_BE_WORD16(part_map_ptr->sig);
 		if(cur_blk == 0) {
 			map_blks = MIN(100,
-				GET_BE_WORD16(part_map_ptr->map_blk_cnt));
+				GET_BE_WORD32(part_map_ptr->map_blk_cnt));
 		}
 		if(sig != 0x504d) {
 			printf("Partition entry %d bad sig\n", cur_blk);

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.76 99/01/18 01:00:55 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.77 99/01/30 17:57:19 kentd Exp $";
 
 #include "defc.h"
 
@@ -69,11 +69,12 @@ word32 doc_reg_e0 = 0xff;
 void doc_write_ctl_reg(int osc, int val, double dcycs, int samps_to_do);
 
 
-const int	g_audio_rate = AUDIO_RATE;
-const double	g_daudio_rate = (AUDIO_RATE)*1.0;
-const double	g_dsamps_per_dcyc = ((AUDIO_RATE*1.0) / DCYCS_1_MHZ);
-const double	g_dcycs_per_samp = (DCYCS_1_MHZ / (AUDIO_RATE*1.0));
-const float	g_fsamps_per_dcyc = (float)((AUDIO_RATE*1.0) / DCYCS_1_MHZ);
+int	g_audio_rate = 0;
+double	g_daudio_rate = 0.0;
+double	g_drecip_audio_rate = 0.0;
+double	g_dsamps_per_dcyc = 0.0;
+double	g_dcycs_per_samp = 0.0;
+float	g_fsamps_per_dcyc = 0.0;
 
 int	g_doc_vol = 2;
 
@@ -87,6 +88,7 @@ int g_num_c030_fsamps = 0;
 #define DOC_SCAN_RATE	(DCYCS_28_MHZ/32.0)
 
 int	g_pipe_fd[2] = { -1, -1 };
+int	g_pipe2_fd[2] = { -1, -1 };
 word32	*g_sound_shm_addr = 0;
 int	g_sound_shm_pos = 0;
 
@@ -246,8 +248,14 @@ sound_init()
 
 	g_sound_shm_addr = (word32 *)shmaddr;
 
-	/* prepare pipe so child/parent can signal each other */
+	/* prepare pipe so parent can signal child each other */
+	/*  pipe[0] = read side, pipe[1] = write end */
 	ret = pipe(&g_pipe_fd[0]);
+	if(ret < 0) {
+		printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
+		exit(5);
+	}
+	ret = pipe(&g_pipe2_fd[0]);
 	if(ret < 0) {
 		printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
 		exit(5);
@@ -261,12 +269,13 @@ sound_init()
 		close(0);
 		/* Close other fds to make sure X window fd is closed */
 		for(i = 3; i < 100; i++) {
-			if(i != g_pipe_fd[0]) {
+			if((i != g_pipe_fd[0]) && (i != g_pipe2_fd[1])) {
 				close(i);
 			}
 		}
 		close(g_pipe_fd[1]);		/*make sure write pipe closed*/
-		child_sound_loop(g_pipe_fd[0], g_sound_shm_addr);
+		close(g_pipe2_fd[0]);		/*make sure read pipe closed*/
+		child_sound_loop(g_pipe_fd[0], g_pipe2_fd[1], g_sound_shm_addr);
 		exit(0);
 	case -1:
 		/* error */
@@ -274,13 +283,35 @@ sound_init()
 		exit(6);
 	default:
 		/* parent */
-		/* close read-side of pipe */
+		/* close read-side of pipe1, and the write side of pipe2 */
 		close(g_pipe_fd[0]);
+		close(g_pipe2_fd[1]);
 		doc_printf("Child is pid: %d\n", pid);
+		parent_sound_get_sample_rate(g_pipe2_fd[0]);
 	}
 
 }
 
+void
+parent_sound_get_sample_rate(int read_fd)
+{
+	word32	tmp;
+	int	ret;
+
+	ret = read(read_fd, &tmp, 4);
+	if(ret != 4) {
+		printf("parent dying, could not get sample rate from child\n");
+		exit(1);
+	}
+	close(read_fd);
+
+	g_audio_rate = tmp;
+	g_daudio_rate = (tmp)*1.0;
+	g_drecip_audio_rate = 1.0/(tmp);
+	g_dsamps_per_dcyc = ((tmp*1.0) / DCYCS_1_MHZ);
+	g_dcycs_per_samp = (DCYCS_1_MHZ / (tmp*1.0));
+	g_fsamps_per_dcyc = (float)((tmp*1.0) / DCYCS_1_MHZ);
+}
 
 void
 sound_reset(double dcycs)
@@ -956,15 +987,15 @@ sound_play(double dcycs)
 
 	GET_ITIMER(end_time3);
 
-	g_fvoices += ((float)(samps_played) / (float)(AUDIO_RATE));
+	g_fvoices += ((float)(samps_played) * (float)(g_drecip_audio_rate));
 
 	if(g_audio_enable != 0) {
-		if(g_queued_samps >= (AUDIO_RATE/30)) {
+		if(g_queued_samps >= (g_audio_rate/32)) {
 			send_sound(g_pipe_fd[1], 1, g_queued_samps);
 			g_queued_samps = 0;
 		}
 
-		if(g_queued_nonsamps >= (AUDIO_RATE/30)) {
+		if(g_queued_nonsamps >= (g_audio_rate/32)) {
 			send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
 			g_queued_nonsamps = 0;
 		}
@@ -1449,7 +1480,7 @@ doc_recalc_sound_parms(int osc, double dcycs)
 	shifted_size = size << SND_PTR_SHIFT;
 	cur_start = (rptr->waveptr << (8 + SND_PTR_SHIFT)) & (-shifted_size);
 
-	dtmp1 = (dfreq * (DOC_SCAN_RATE / (double)AUDIO_RATE));
+	dtmp1 = dfreq * (DOC_SCAN_RATE * g_drecip_audio_rate);
 	dacc = (double)(1 << (20 - (17 - sz + res)));
 	dacc_recip = (SND_PTR_SHIFT_DBL) / ((double)(1 << 20));
 	dtmp1 = dtmp1 * g_drecip_osc_en_plus_2 * dacc * dacc_recip;

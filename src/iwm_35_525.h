@@ -1,6 +1,6 @@
 
 #ifdef INCLUDE_IWM_RCSID_C
-const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.5 98/07/26 23:53:59 kentd Exp $";
+const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.6 99/01/31 22:15:48 kentd Exp $";
 #endif
 
 int
@@ -226,6 +226,22 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 	mask = 0x100;
 	iwm_printf("Iwm write: prev: %x,%d, new:%02x\n", prev_val, prev_bits,
 							val);
+
+	if(IWM_DISK_525) {
+		/* Activate slow write emulation mode */
+		g_dcycs_end_emul_wr = dcycs + 64.0;
+		if(!g_slow_525_emul_wr) {
+			set_halt(HALT_EVENT);
+			g_slow_525_emul_wr = 1;
+		}
+	} else {
+		/* disable slow writes on 3.5" drives */
+		if(g_slow_525_emul_wr) {
+			set_halt(HALT_EVENT);
+			printf("HACK3: g_slow_525_emul_wr set to 0\n");
+			g_slow_525_emul_wr = 0;
+		}
+	}
 
 	if(iwm.iwm_mode & 2) {
 		/* async mode = 3.5" default */

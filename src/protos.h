@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.114 98/07/25 22:44:04 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.116 99/02/01 23:01:39 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -153,6 +153,29 @@ void do_debug_load(void);
 int do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize, int op_provided, word32 instr);
 void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, char *string);
 
+/* engine_c.c */
+void check_breakpoints(word32 addr);
+word32 get_memory8_io_stub(word32 addr, word32 stat, float *fcycs_ptr, float fplus_x_m1);
+word32 get_memory16_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
+word32 get_memory24_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
+void set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr, float fplus_x_m1);
+void set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
+void set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
+word32 get_memory_c(word32 addr, int cycs);
+word32 get_memory16_c(word32 addr, int cycs);
+word32 get_memory24_c(word32 addr, int cycs);
+void set_memory_c(word32 addr, word32 val, int cycs);
+void set_memory16_c(word32 addr, word32 val, int cycs);
+void set_memory24_c(word32 addr, word32 val, int cycs);
+word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
+word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
+byte *memalloc_align(int size);
+void memory_ptrs_init(void);
+void set_halt_act(int val);
+void clr_halt_act(void);
+word32 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr);
+int enter_engine(Engine_reg *engine_ptr);
+
 /* scc.c */
 void scc_init(void);
 void scc_reset(void);
@@ -168,11 +191,12 @@ void scc_set_tx_int(int port);
 void scc_clr_tx_int(int port);
 void scc_add_to_readbuf(int port, word32 val);
 void scc_add_to_writebuf(int port, word32 val);
+word32 scc_read_data(int port, double dcycs);
+void scc_write_data(int port, word32 val, double dcycs);
+int scc_socket_init(int port);
 void scc_accept_socket(int port);
 void scc_try_fill_readbuf(int port);
 void scc_try_to_empty_writebuf(int port);
-word32 scc_read_data(int port, double dcycs);
-void scc_write_data(int port, word32 val, double dcycs);
 
 /* iwm.c */
 void iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525);
@@ -220,6 +244,7 @@ void insert_disk(Disk *dsk, char *name, int virtual_image, int size);
 void eject_named_disk(Disk *dsk, char *name);
 void eject_if_untouched(Disk *dsk);
 void eject_disk(Disk *dsk);
+void kegs_file_copy(char *orig_name, char *new_name);
 void eject_disk_by_num(int slot, int drive);
 
 /* moremem.c */
@@ -324,6 +349,7 @@ void do_c700(word32 ret);
 void doc_log_rout(char *msg, int osc, double dcycs, int etc);
 void show_doc_log(void);
 void sound_init(void);
+void parent_sound_get_sample_rate(int read_fd);
 void sound_reset(double dcycs);
 void sound_shutdown(void);
 void sound_update(double dcycs);
@@ -353,10 +379,10 @@ void doc_write_c03e(int val);
 void doc_write_c03f(int val);
 void doc_show_ensoniq_state(int osc);
 
-/* sound_hp.c */
+/* sound_driver.c */
 void reliable_buf_write(word32 *shm_addr, int pos, int size);
 void reliable_zero_write(int amt);
-void child_sound_loop(int read_fd, word32 *shm_addr);
+void child_sound_loop(int read_fd, int write_fd, word32 *shm_addr);
 void child_sound_init_hpdev(void);
 void child_sound_init_alib(void);
 
@@ -402,27 +428,4 @@ void read_a2_font(char *fontname);
 int skip_to_brace(FILE *font_file);
 int get_file_byte(FILE *font_file);
 int get_token(FILE *font_file);
-
-/* engine_c.c */
-void check_breakpoints(word32 addr);
-word32 get_memory8_io_stub(word32 addr, word32 stat, float *fcycs_ptr, float fplus_x_m1);
-word32 get_memory16_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
-word32 get_memory24_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
-void set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr, float fplus_x_m1);
-void set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
-void set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
-word32 get_memory_c(word32 addr, int cycs);
-word32 get_memory16_c(word32 addr, int cycs);
-word32 get_memory24_c(word32 addr, int cycs);
-void set_memory_c(word32 addr, word32 val, int cycs);
-void set_memory16_c(word32 addr, word32 val, int cycs);
-void set_memory24_c(word32 addr, word32 val, int cycs);
-word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
-word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
-byte *memalloc_align(int size);
-void memory_ptrs_init(void);
-void set_halt_act(int val);
-void clr_halt_act(void);
-word32 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr);
-int enter_engine(Engine_reg *engine_ptr);
 

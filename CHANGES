@@ -1,4 +1,18 @@
 
+Changes in KEGS v0.42 since v0.41
+- Include <errno.h> to fix Linux compile problem
+- Fix relative branch timing bug that was making IWM emulation flaky
+   (backward branches should count as 3 cycles if to the same page,
+    and 4 if to a different page in emulation mode.  Bug always counted
+    them as 4)
+- Gave up on fast 5.25" writes--KEGS always slows to 1MHz for 5.25"
+   writes since the timing and kludges just got too annoying.
+- add "-arate 22050" option to change audio sample rate on the command-line.
+   Slower audio rates can hit more audio bugs (I'm working on them).
+- fixed little-endian bug in smartport.c and partls.c
+- fixed side border redraw bug that would sometimes leave super-hires
+   images on the right-side border.
+
 Changes in KEGS v0.41 since v0.40
 - Fixed bug where fill-line mode would not always redraw the screen correctly
 - Changed some // comments to /* */ to help David Wilson's Solaris port

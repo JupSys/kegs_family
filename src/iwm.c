@@ -11,13 +11,14 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.82 99/01/18 01:01:14 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.83 99/01/31 22:15:20 kentd Exp $";
 
 #include "defc.h"
 
 extern int Verbose;
 extern int g_vbl_count;
 extern int speed_fast;
+extern word32 g_slot_motor_detect;
 
 
 #define NIB_LEN_525	0x1900		/* 51072 bits per track */
@@ -69,6 +70,8 @@ int	g_track_nibs_35[] = {
 
 
 int	g_fast_disk_emul = 1;
+int	g_slow_525_emul_wr = 0;
+double	g_dcycs_end_emul_wr = 0.0;
 int	g_fast_disk_unnib = 0;
 int	g_iwm_fake_fast = 0;
 
@@ -206,14 +209,15 @@ draw_iwm_status(int line, char *buf)
 	}
 
 	sprintf(buf, "s6d1:%2d%s   s6d2:%2d%s   s5d1:%2d/%d%s   "
-		"s5d2:%2d/%d%s   fast_disk_emul:%d",
+		"s5d2:%2d/%d%s fast_disk_emul:%d,%d c036:%02x",
 		iwm.drive525[0].cur_qtr_track >> 2, flag[0][0],
 		iwm.drive525[1].cur_qtr_track >> 2, flag[0][1],
 		iwm.drive35[0].cur_qtr_track >> 1,
 		iwm.drive35[0].cur_qtr_track & 1, flag[1][0],
 		iwm.drive35[1].cur_qtr_track >> 1,
 		iwm.drive35[1].cur_qtr_track & 1, flag[1][1],
-		g_fast_disk_emul);
+		g_fast_disk_emul, g_slow_525_emul_wr,
+		(speed_fast << 7) + g_slot_motor_detect);
 
 	update_status_line(line, buf);
 }
@@ -434,12 +438,13 @@ iwm_touch_switches(int loc, double dcycs)
 				}
 			}
 
-			if(g_iwm_motor_on) {
+			if(g_iwm_motor_on || g_slow_525_emul_wr) {
 				/* recalc current speed */
 				set_halt(HALT_EVENT);
 			}
 
 			g_iwm_motor_on = 0;
+			g_slow_525_emul_wr = 0;
 			break;
 		case 0x9:
 			iwm_printf("Turning IWM motor on!\n");
@@ -473,6 +478,11 @@ iwm_touch_switches(int loc, double dcycs)
 
 	if(!iwm.q7) {
 		iwm.previous_write_bits = -1;
+	}
+
+	if((dcycs > g_dcycs_end_emul_wr) && g_slow_525_emul_wr) {
+		set_halt(HALT_EVENT);
+		g_slow_525_emul_wr = 0;
 	}
 }
 
@@ -889,6 +899,7 @@ write_iwm(int loc, int val, double dcycs)
 	int	on;
 	int	state;
 	int	drive;
+	int	fast_writes;
 
 	loc = loc & 0xf;
 	on = loc & 1;
@@ -897,10 +908,12 @@ write_iwm(int loc, int val, double dcycs)
 
 	state = (iwm.q7 << 1) + iwm.q6;
 	drive = iwm.drive_select;
+	fast_writes = g_fast_disk_emul;
 	if(g_apple35_sel) {
 		dsk = &(iwm.drive35[drive]);
 	} else {
 		dsk = &(iwm.drive525[drive]);
+		fast_writes = !g_slow_525_emul_wr && fast_writes;
 	}
 
 	if(on) {
@@ -912,7 +925,7 @@ write_iwm(int loc, int val, double dcycs)
 					iwm_write_enable2(val, dcycs);
 				} else {
 					iwm_write_data(dsk, val,
-						g_fast_disk_emul, dcycs);
+						fast_writes, dcycs);
 				}
 			} else {
 				/* write mode register */
@@ -1109,6 +1122,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 	int	my_nib_cnt;
 	int	save_qtr_track;
 	int	save_nib_pos;
+	int	tmp_nib_pos;
 	int	status;
 	int	i;
 
@@ -1283,6 +1297,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		}
 	}
 
+	tmp_nib_pos = dsk->nib_pos;
 	iwm_move_to_track(dsk, save_qtr_track);
 	dsk->nib_pos = save_nib_pos;
 	g_fast_disk_unnib = 0;
@@ -1293,7 +1308,8 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 
 	printf("Nibblization not done, %02x sectors found on track %02x\n",
 		num_sectors_done, qtr_track>>2);
-	printf("my_nib_cnt: %04x, trk_len: %04x\n", my_nib_cnt, track_len);
+	printf("my_nib_cnt: %04x, nib_pos: %04x, trk_len: %04x\n", my_nib_cnt,
+		tmp_nib_pos, track_len);
 	for(i = 0; i < 16; i++) {
 		printf("sector_done[%d] = %d\n", i, sector_done[i]);
 	}

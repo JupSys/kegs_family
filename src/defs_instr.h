@@ -16,7 +16,7 @@
 	.data
 	.export rcsdif_defs_instr_h,data
 rcsdif_defs_instr_h
-	.stringz "@(#)$Header: defs_instr.h,v 1.49 99/01/18 00:17:51 kentd Exp $"
+	.stringz "@(#)$Header: defs_instr.h,v 1.50 99/01/31 22:16:06 kentd Exp $"
 	.code
 # endif
 
@@ -1444,19 +1444,20 @@ defs_instr_start_16	.word	0
 # define COND_BR1			\
 	ldb	1(scratch1),arg0
 
-/* be careful not to modify pc as first instr of COND_Br2 since it */
+/* be careful about modifying pc as first instr of COND_Br2 since it */
 /*  is in the delay slot of a branch! */
 # define COND_BR2			\
-	extru	pc,31,8,scratch4	! \
+	addi	2,pc,scratch3		! \
+	ldi	0x100,scratch4		! \
 	extrs	arg0,31,8,ret0		! \
-	add	arg0,scratch4,scratch4	! \
+	and	scratch4,psr,scratch4	! \
+	add	scratch3,ret0,pc	! \
 	CYCLES_PLUS_1			! \
-	depi	0,31,8,scratch4		! \
-	addi	2,pc,pc			! \
-	and,=	psr,scratch4,0		! \
+	xor	scratch3,pc,scratch3	! \
+	and,=	scratch4,scratch3,0	! \
 	CYCLES_PLUS_1			! \
 	b	dispatch		! \
-	add	ret0,pc,pc
+	nop
 
 
 # define COND_BR_UNTAKEN		\
@@ -1465,12 +1466,12 @@ defs_instr_start_16	.word	0
 #else /* C */
 # define BRANCH_DISP8(cond)					\
 	GET_1BYTE_ARG;						\
-	tmp1 = (arg + (pc & 0xff)) & 0x100;			\
 	pc += 2;						\
+	tmp1 = pc;						\
 	if(cond) {						\
 		pc = pc + arg - ((arg & 0x80) << 1);		\
 		CYCLES_PLUS_1;					\
-		if(tmp1 & psr) {				\
+		if((tmp1 ^ pc) & psr & 0x100) {			\
 			CYCLES_PLUS_1;				\
 		}						\
 	}

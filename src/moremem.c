@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.194 98/07/26 23:53:17 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.195 99/01/31 22:16:45 kentd Exp $";
 
 #include "defc.h"
 
@@ -1931,7 +1931,7 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 			g_slot_motor_detect = (val & 0xf);
 
 			power_on_clear = (val >> 6) & 1;
-			if((val & 0x7b) != 0) {
+			if((val & 0x70) != 0) {
 				printf("c036: %2x\n", val);
 				set_halt(1);
 			}
