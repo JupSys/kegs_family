@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.14 98/05/05 01:35:36 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.17 98/05/17 12:19:59 kentd Exp $";
 
 #include "defc.h"
 
@@ -32,44 +32,61 @@ scc_init()
 	int	i;
 	int	ret;
 	int	sockfd;
+	int	inc;
 
 	int	on;
 
+	inc = 0;
+
 	for(i = 0; i < 2; i++) {
-		sockfd = socket(AF_INET, SOCK_STREAM, 0);
-		if(sockfd < 0) {
-			printf("socket ret: %d, errno: %d\n", sockfd, errno);
-			exit(3);
+		while(1) {
+			sockfd = socket(AF_INET, SOCK_STREAM, 0);
+			if(sockfd < 0) {
+				printf("socket ret: %d, errno: %d\n", sockfd,
+									errno);
+				exit(3);
+			}
+			/* printf("socket ret: %d\n", sockfd); */
+
+			on = 1;
+			ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
+					(char *)&on, sizeof(on));
+			if(ret < 0) {
+				printf("setsockopt REUSEADDR ret: %d, err:%d\n",
+					ret, errno);
+				exit(3);
+			}
+
+			memset(&sa_in, 0, sizeof(sa_in));
+			sa_in.sin_family = AF_INET;
+			sa_in.sin_port = htons(6501 + i + inc);
+			sa_in.sin_addr.s_addr = htonl(INADDR_ANY);
+
+			ret = bind(sockfd, (struct sockaddr *)&sa_in,
+								sizeof(sa_in));
+
+			if(ret < 0) {
+				printf("bind ret: %d, errno: %d\n", ret, errno);
+				inc++;
+				close(sockfd);
+				printf("Trying next port: %d\n", 6501+i+inc);
+				if(inc >= 10) {
+					printf("Too many retries, quitting\n");
+					exit(3);
+				}
+			} else {
+				break;
+			}
 		}
-		/* printf("socket ret: %d\n", sockfd); */
 
-		on = 1;
-		ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&on,
-					sizeof(on));
-		if(ret < 0) {
-			printf("setsockopt REUSEADDR ret: %d, errno:%d\n",
-				ret, errno);
-			exit(3);
-		}
-
-		memset(&sa_in, 0, sizeof(sa_in));
-		sa_in.sin_family = AF_INET;
-		sa_in.sin_port = htons(6501 + i);
-		sa_in.sin_addr.s_addr = htonl(INADDR_ANY);
-
-		ret = bind(sockfd, (struct sockaddr *)&sa_in, sizeof(sa_in));
-
-		if(ret < 0) {
-			printf("bind ret: %d, errno: %d\n", ret, errno);
-			exit(3);
-		}
+		printf("SCC port %d is at telnet port %d\n", i, 6501+i+inc);
 
 		ret = listen(sockfd, 1);
 
 		on = 1;
 		ret = ioctl(sockfd, FIOSNBIO, (char *)&on);
 		if(ret == -1) {
-			printf("ioctl ret: %d, errno: %d\n", ret, errno);
+			printf("ioctl ret: %d, errno: %d\n", ret,errno);
 			exit(3);
 		}
 
@@ -165,14 +182,14 @@ show_scc_log(void)
 
 	pos = g_scc_log_pos;
 	dcycs = g_cur_dcycs;
-	printf("SCC log pos: %d, cur dcycs:%lf\n", pos, dcycs);
+	printf("SCC log pos: %d, cur dcycs:%f\n", pos, dcycs);
 	for(i = 0; i < LEN_SCC_LOG; i++) {
 		pos--;
 		if(pos < 0) {
 			pos = LEN_SCC_LOG - 1;
 		}
 		regnum = g_scc_log[pos].regnum;
-		printf("%d:%d: port:%d wr:%d reg: %d val:%02x at t:%lf\n",
+		printf("%d:%d: port:%d wr:%d reg: %d val:%02x at t:%f\n",
 			i, pos, (regnum >> 4) & 0xf, (regnum >> 8),
 			(regnum & 0xf),
 			g_scc_log[pos].val,
@@ -186,8 +203,6 @@ scc_read_reg(int port, double dcycs)
 	Scc	*scc_ptr;
 	word32	ret;
 	int	regnum;
-	int	wr9;
-	int	i;
 
 	scc_ptr = &(scc_stat[port]);
 	scc_ptr->mode = 0;
@@ -356,7 +371,7 @@ scc_write_reg(int port, word32 val, double dcycs)
 		return;
 	case 5:
 		/* wr5 */
-		if((val & 0xf5) != 0x60) {
+		if((val & 0x75) != 0x60) {
 			printf("Write c03%x to wr5 of %02x!\n", 8+port, val);
 			set_halt(1);
 		}
@@ -653,7 +668,6 @@ scc_try_to_empty_writebuf(int port)
 	int	rdptr;
 	int	wrptr;
 	int	rdwrfd;
-	int	i;
 	int	done;
 	int	ret;
 	int	len;
@@ -749,8 +763,6 @@ void
 scc_write_data(int port, word32 val, double dcycs)
 {
 	Scc	*scc_ptr;
-	int	pos;
-	int	out_wrptr;
 
 	scc_printf("SCC write %04x: %02x\n", 0xc03b-port, val);
 	scc_log(SCC_REGNUM(1,port,8), val, dcycs);

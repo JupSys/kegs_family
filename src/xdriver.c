@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.130 97/11/16 19:46:57 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.131 98/05/11 21:37:13 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -1125,7 +1125,6 @@ check_input_events()
 {
 	XEvent	ev;
 	int	len;
-	int	delta_x, delta_y;
 	int	motion;
 
 	g_num_check_input_calls--;

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.77 98/04/20 23:55:41 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.80 98/05/17 01:49:14 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -36,21 +36,31 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.77 98/04/20 23:55:41
 #define HALT_STEP	0xca0
 #define HALT_EVENT	0x600
 
+#define MAX_BREAK_POINTS	0x20
+
 #define MAX_BP_INDEX		0x100
 #define MAX_BP_PER_INDEX	3	/* 4 word32s total = 16 bytes */
 #define SIZE_BREAKPT_ENTRY_BITS	4	/* 16 bytes = 4 bits */
 
+/* Warning--next defines used by asm! */
+#define PAGE_INFO_PAD_SIZE	0x800
+#define PAGE_INFO_WR_OFFSET	0x10000+PAGE_INFO_PAD_SIZE
 
 #define BANK_IO_BIT		31
 #define BANK_SHADOW_BIT		30
 #define BANK_SHADOW2_BIT	29
+#define BANK_IO2_BIT		28
+#define BANK_BREAK_BIT		27
+#define BANK_BREAK		(1 << (31 - BANK_BREAK_BIT))
+#define BANK_IO2_TMP		(1 << (31 - BANK_IO2_BIT))
 #define BANK_IO_TMP		(1 << (31 - BANK_IO_BIT))
 #define BANK_SHADOW		(1 << (31 - BANK_SHADOW_BIT))
 #define BANK_SHADOW2		(1 << (31 - BANK_SHADOW2_BIT))
-#define SET_BANK_IO		(BANK_IO_TMP | (word32)&dummy_memory1[0])
+#define SET_BANK_IO		(BANK_IO_TMP | BANK_IO2_TMP |	\
+					(word32)&g_dummy_memory1_ptr[0])
 
 
-#define BANK_BAD_MEM		(0xff | (word32)&dummy_memory1[0])
+#define BANK_BAD_MEM		(0xff | (word32)&g_dummy_memory1_ptr[0])
 
 
 #define LEN_FIFO_BUF	160

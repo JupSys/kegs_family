@@ -2,7 +2,7 @@
 /* This file is included by video.c */
 
 #ifndef SUPERHIRES_INCLUDED
-const char rcsid_superhires_h[] = "@(#)$Header: superhires.h,v 1.3 97/09/07 15:08:49 kentd Exp $";
+const char rcsid_superhires_h[] = "@(#)$Header: superhires.h,v 1.4 98/05/13 23:23:38 kentd Exp $";
 # define SUPERHIRES_INCLUDED
 #endif
 
@@ -53,7 +53,7 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 		}
 
 
-		slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 		b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*4];
 		img_ptr = (word32 *)b_ptr;
 		img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);

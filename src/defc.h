@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.50 98/04/20 21:51:16 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.55 98/05/17 01:48:15 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -23,6 +23,7 @@ typedef unsigned char byte;
 typedef unsigned short word16;
 typedef unsigned int word32;
 
+void U_STACK_TRACE();
 
 /* 28MHz crystal, plus every 65th 1MHz cycle is stretched 140ns */
 #define CYCS_28_MHZ		(28636360)
@@ -83,13 +84,7 @@ STRUCT(Engine_reg) {
 };
 
 STRUCT(Page_info) {
-	word32 rd;
-	word32 wr;
-};
-
-STRUCT(Breakpoints) {
-	int	count;
-	word32	addrs[MAX_BP_PER_INDEX];
+	word32 rd_wr;
 };
 
 STRUCT(Doc_reg) {
@@ -141,16 +136,16 @@ STRUCT(Doc_reg) {
 extern int errno;
 
 #define GET_PAGE_INFO_RD(page) \
-	(page_info[page].rd)
+	(page_info_rd_wr[page].rd_wr)
 
 #define GET_PAGE_INFO_WR(page) \
-	(page_info[page].wr)
+	(page_info_rd_wr[0x10000 + PAGE_INFO_PAD_SIZE + (page)].rd_wr)
 
 #define SET_PAGE_INFO_RD(page,val) \
-	;page_info[page].rd = val;
+	;page_info_rd_wr[page].rd_wr = val;
 
 #define SET_PAGE_INFO_WR(page,val) \
-	;page_info[page].wr = val;
+	;page_info_rd_wr[0x10000 + PAGE_INFO_PAD_SIZE + (page)].rd_wr = val;
 
 #define VERBOSE_DISK	0x001
 #define VERBOSE_IRQ	0x002
@@ -187,7 +182,7 @@ extern int errno;
 #ifdef __GNUC__
 /* Assume GNU C doesn't know inline assembly */
 # define GET_ITIMER(dest)	\
-	dest = get_itimer_asm()
+	__asm__ volatile ("mfctl 16,%0" : "=r" (dest))
 #else
 /* Assume HP compiler with inline asm */
 # define GET_ITIMER(dest)		\

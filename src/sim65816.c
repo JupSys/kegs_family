@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.244 98/05/02 02:07:29 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.252 98/05/17 18:17:42 kentd Exp $";
 
 #include <math.h>
 
@@ -36,7 +36,6 @@ const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.244 98/05/02 02:07:
 #define EV_DOC_INT	4
 
 extern int stepping;
-extern Breakpoints breakpoints[];
 
 extern int statereg;
 extern int g_cur_a2_stat;
@@ -65,6 +64,7 @@ extern int c046_vbl_irq_pending;
 
 extern int halt_on_c023, halt_on_c041, halt_on_c047;
 
+extern int g_engine_c_mode;
 extern int defs_instr_start_8;
 extern int defs_instr_start_16;
 extern int defs_instr_end_8;
@@ -142,10 +142,14 @@ const int mem_size_expansion = MEM_SIZE_EXP;
 
 extern byte memory[MEM_SIZE];
 
-extern byte slow_memory[128*1024];
 extern word32 slow_mem_changed[];
 
-Page_info page_info[65536];
+byte *g_slow_memory_ptr = 0;
+byte *g_memory_ptr = 0;
+byte *g_dummy_memory1_ptr = 0;
+byte *g_rom_fc_ff_ptr = 0;
+
+Page_info page_info_rd_wr[2*65536 + PAGE_INFO_PAD_SIZE];
 
 int kbd_in_end = 0;
 byte kbd_in_buf[LEN_KBD_BUF];
@@ -365,6 +369,8 @@ get_memory_io(word32 loc, Cyc *cyc_ptr)
 	}
 
 	printf("get_memory_io for addr: %06x\n", loc);
+	printf("stat for addr: %06x = %08x\n", loc,
+				GET_PAGE_INFO_RD((loc >> 8) & 0xffff));
 	set_halt(g_halt_on_bad_read);
 
 	return 0;
@@ -421,14 +427,14 @@ set_memory(word32 loc, int val, int diff_cycles)
 	old_slow_val = val;
 
 	if(tmp & BANK_SHADOW) {
-		old_slow_val = slow_memory[new_addr];
+		old_slow_val = g_slow_memory_ptr[new_addr];
 	} else if(tmp & BANK_SHADOW2) {
 		new_addr += 0x10000;
-		old_slow_val = slow_memory[new_addr];
+		old_slow_val = g_slow_memory_ptr[new_addr];
 	}
 
 	if(old_slow_val != val) {
-		slow_memory[new_addr] = val;
+		g_slow_memory_ptr[new_addr] = val;
 		or_pos = (new_addr >> SHIFT_PER_CHANGE) & 0x1f;
 		or_val = DEP1(1, or_pos, 0);
 		if((new_addr >> CHANGE_SHIFT) >= SLOW_MEM_CH_SIZE) {
@@ -493,6 +499,7 @@ set_memory_io(word32 loc, int val, Cyc *cyc_ptr)
 }
 
 
+#if 0
 void
 check_breakpoints_c(word32 loc)
 {
@@ -511,6 +518,7 @@ check_breakpoints_c(word32 loc)
 		}
 	}
 }
+#endif
 
 
 void
@@ -710,6 +718,7 @@ main(int argc, char **argv)
 	}
 
 	check_engine_asm_defines();
+	memory_ptrs_init();
 
 	init_reg();
 	clear_halt();
@@ -719,22 +728,24 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
-	diff = &defs_instr_end_8 - &defs_instr_start_8;
-	if(diff != 1) {
-		printf("Diff between defs_instr_end_8 and start is %d\n",diff);
-		exit(1);
-	}
+	if(!g_engine_c_mode) {
+		diff = &defs_instr_end_8 - &defs_instr_start_8;
+		if(diff != 1) {
+			printf("defs_instr_end_8 - start is %d\n",diff);
+			exit(1);
+		}
 
-	diff = &defs_instr_end_16 - &defs_instr_start_16;
-	if(diff != 1) {
-		printf("Diff between defs_instr_end_16 and start is %d\n",diff);
-		exit(1);
-	}
+		diff = &defs_instr_end_16 - &defs_instr_start_16;
+		if(diff != 1) {
+			printf("defs_instr_end_16 - start is %d\n", diff);
+			exit(1);
+		}
 
-	diff = &op_routs_end - &op_routs_start;
-	if(diff != 1) {
-		printf("Diff between op_routs_end and start is %d\n", diff);
-		exit(1);
+		diff = &op_routs_end - &op_routs_start;
+		if(diff != 1) {
+			printf("op_routs_end - start is %d\n", diff);
+			exit(1);
+		}
 	}
 
 	initialize_events();
@@ -743,6 +754,7 @@ main(int argc, char **argv)
 
 	video_init();
 
+	sleep(1);
 	sound_init();
 
 	iwm_init();
@@ -1466,7 +1478,7 @@ vbl_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.33");
+		update_status_line(6, "KEGS v0.35");
 
 		g_status_refresh_needed = 1;
 
@@ -1710,7 +1722,7 @@ check_scan_line_int(double dcycs, int cur_video_line)
 			set_halt(1);
 			i = 0;
 		}
-		if(slow_memory[0x19d00+i] & 0x40) {
+		if(g_slow_memory_ptr[0x19d00+i] & 0x40) {
 			irq_printf("Adding scan_int for line %d\n", i);
 			delay = (g_dcycles_in_16ms/262.0) *
 				((double)(line - start));

@@ -1,5 +1,6 @@
 
-OBJECTS = adb.o clock.o dis.o engine_s.o scc.o iwm.o moremem.o sim65816.o smartport.o sound.o sound_hp.o video.o xdriver.o
+OBJECTS1 = adb.o clock.o dis.o scc.o iwm.o moremem.o sim65816.o smartport.o sound.o sound_hp.o video.o xdriver.o
+OBJECTS = $(OBJECTS1) engine_s.o
 CC = cc -Ae -C
 CCOPTS = -O +ESsfc +ESlit
 OPTS =  -DNDEBUG
@@ -19,10 +20,10 @@ XLIBS = -L/usr/lib/X11R5 -L/opt/audio/lib
 
 all: specials $(NAME)$(SUFFIX) partls to_pro
 
-specials: 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c Alib.h
+specials: 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c size_s Alib.h
 
 specials_clean:
-	rm -f 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c Alib.h
+	rm -f 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c size_s Alib.h
 
 
 $(NAME)$(SUFFIX): $(OBJECTS) compile_time.o specials
@@ -41,13 +42,16 @@ $(NAME)$(SUFFIX): $(OBJECTS) compile_time.o specials
 	$(PROJROOT)/make_inst c 16 instable.h > 16inst_c
 
 8size: size_tab.h
-	sed -e 's/_SYM/_8/' size_tab.h > 8size
+	$(PROJROOT)/make_size 8 size_tab.h > 8size
 
 16size: size_tab.h
-	sed -e 's/_SYM/_16/' size_tab.h > 16size
+	$(PROJROOT)/make_size 16 size_tab.h > 16size
 
 size_c: size_tab.h
 	$(PROJROOT)/make_size c size_tab.h > size_c
+
+size_s: size_tab.h
+	$(PROJROOT)/make_size s size_tab.h > size_s
 
 Alib.h:
 	$(PROJROOT)/make_alib

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.109 98/05/05 21:31:59 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.111 98/05/13 23:26:36 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -29,6 +29,8 @@ void dev_video_init(void);
 void update_colormap(int mode);
 void redraw_border(void);
 void check_input_events(void);
+void update_status_line(int line, const char *string);
+void redraw_status_lines(void);
 void x_refresh_ximage(void);
 
 
@@ -54,10 +56,10 @@ void do_gen_test(int got_num, int base_seed);
 
 /* engine.s */
 word32 get_itimer_asm(void);
-int get_memory_c(word32 addr, int cycs);
 
-int get_memory16_c(word32 addr, int cycs);
-int get_memory24_c(word32 addr, int cycs);
+word32 get_memory_c(word32 addr, int cycs);
+word32 get_memory16_c(word32 addr, int cycs);
+word32 get_memory24_c(word32 addr, int cycs);
 
 int get_memory_asm(word32 addr, int cycs);
 int get_memory16_asm(word32 addr, int cycs);
@@ -150,6 +152,9 @@ void do_debug_unix(void);
 void do_debug_load(void);
 int do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize, int op_provided, word32 instr);
 void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, char *string);
+
+/* engine_c.c */
+int enter_engine(Engine_reg *engine_ptr);
 
 /* scc.c */
 void scc_init(void);

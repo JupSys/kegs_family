@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.63 98/05/05 01:35:52 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.65 98/05/17 01:49:44 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -20,9 +20,9 @@ const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.63 98/05/05 01:35:52 kentd Ex
 
 #define LINE_SIZE 160
 
-extern byte memory[];
-extern byte slow_memory[];
-extern byte rom_fc_ff[];
+extern byte *g_memory_ptr;
+extern byte *g_slow_memory_ptr;
+extern byte *g_rom_fc_ff_ptr;
 extern int halt_sim;
 extern int enter_debug;
 extern int g_show_screen;
@@ -34,7 +34,8 @@ extern int g_rom_version;
 
 extern int g_testing_enabled;
 
-Breakpoints breakpoints[MAX_BP_INDEX];
+int	g_num_breakpoints = 0;
+word32	g_breakpts[MAX_BREAK_POINTS];
 
 extern int g_irq_pending;
 
@@ -403,19 +404,18 @@ do_gen_test(int got_num, int base_seed)
 void
 set_bp(word32 addr)
 {
-	int index;
-	int count;
+	int	count;
 
 	printf("About to set BP at %06x\n", addr);
-	index = addr & (MAX_BP_INDEX - 1);
-	count = breakpoints[index].count;
-	if(count >= MAX_BP_PER_INDEX) {
-		printf("Too many breakpoints set at this index!\n");
+	count = g_num_breakpoints;
+	if(count >= MAX_BREAK_POINTS) {
+		printf("Too many (0x%02x) breakpoints set!\n", count);
 		return;
 	}
 
-	breakpoints[index].addrs[count] = addr;
-	breakpoints[index].count = count + 1;
+	g_breakpts[count] = addr;
+	g_num_breakpoints = count + 1;
+	fixup_brks();
 }
 
 void
@@ -426,12 +426,8 @@ show_bp()
 	int j;
 
 	printf("Showing breakpoints set\n");
-	for(i = 0; i < MAX_BP_INDEX; i++) {
-		count = breakpoints[i].count;
-		for(j = 0; j < count; j++) {
-			printf("index: %02x: %06x\n", i,
-				breakpoints[i].addrs[j]);
-		}
+	for(i = 0; i < g_num_breakpoints; i++) {
+		printf("bp:%02x: %06x\n", i, g_breakpts[i]);
 	}
 }
 
@@ -444,12 +440,11 @@ delete_bp(word32 addr)
 	int	i;
 
 	printf("About to delete BP at %06x\n", addr);
-	index = addr & (MAX_BP_INDEX - 1);
-	count = breakpoints[index].count;
+	count = g_num_breakpoints;
 
 	hit = -1;
 	for(i = 0; i < count; i++) {
-		if(breakpoints[index].addrs[i] == addr) {
+		if(g_breakpts[i] == addr) {
 			hit = i;
 			break;
 		}
@@ -458,13 +453,12 @@ delete_bp(word32 addr)
 	if(hit < 0) {
 		printf("Breakpoint not found!\n");
 	} else {
-		printf("Deleting brkpoint at index %02x, pos: %d\n",
-			index, hit);
+		printf("Deleting brkpoint #0x%02x\n", hit);
 		for(i = hit+1; i < count; i++) {
-			breakpoints[index].addrs[i-1] =
-						breakpoints[index].addrs[i];
+			g_breakpts[i-1] = g_breakpts[i];
 		}
-		breakpoints[index].count = count - 1;
+		g_num_breakpoints = count - 1;
+		fixup_all_banks();
 	}
 
 	show_bp();
@@ -678,10 +672,10 @@ load_roms()
 	len = stat_buf.st_size;
 	if(len == 128*1024) {
 		g_rom_version = 1;
-		ret = read(fd, &rom_fc_ff[2*65536], len);
+		ret = read(fd, &g_rom_fc_ff_ptr[2*65536], len);
 	} else if(len == 256*1024) {
 		g_rom_version = 3;
-		ret = read(fd, &rom_fc_ff[0], len);
+		ret = read(fd, &g_rom_fc_ff_ptr[0], len);
 	} else {
 		fprintf(stderr, "ROM size %d not 128K or 256K\n", len);
 		my_exit(4);
@@ -698,20 +692,20 @@ load_roms()
 #if 0
 		/* 1: Patch ROM selftest to not do speed test */
 		printf("Patching out speed test failures from ROM 01\n");
-		rom_fc_ff[0x3785a] = 0x18;
+		g_rom_fc_ff_ptr[0x3785a] = 0x18;
 #endif
 
 #if 0
 		/* 2: Patch ROM selftest to not do ROM cksum */
-		rom_fc_ff[0x37a06] = 0x18;
-		rom_fc_ff[0x37a07] = 0x18;
+		g_rom_fc_ff_ptr[0x37a06] = 0x18;
+		g_rom_fc_ff_ptr[0x37a07] = 0x18;
 #endif
 
 #if 0
 		/* 3: Patch ROM selftests not to do tests 2,4 */
 		/* 0 = skip, 1 = do it, test 1 is bit 0 of LSByte */
-		rom_fc_ff[0x371e9] = 0xf5;
-		rom_fc_ff[0x371ea] = 0xff;
+		g_rom_fc_ff_ptr[0x371e9] = 0xf5;
+		g_rom_fc_ff_ptr[0x371ea] = 0xff;
 #endif
 	} else if(g_rom_version == 3) {
 		/* patch ROM 03 */
@@ -721,29 +715,29 @@ load_roms()
 		/*   which is the system speed reg...it's "safe" since */
 		/*   IWM status reg but 4 must be 0 (7MHz)..., otherwise */
 		/*   it might have turned on shadowing in all banks! */
-		rom_fc_ff[0x357c9] = 0x00;
+		g_rom_fc_ff_ptr[0x357c9] = 0x00;
 
 		/* patch ROM 03 selftest to not do ROM cksum */
-		rom_fc_ff[0x36cb0] = 0x18;
-		rom_fc_ff[0x36cb1] = 0x18;
+		g_rom_fc_ff_ptr[0x36cb0] = 0x18;
+		g_rom_fc_ff_ptr[0x36cb1] = 0x18;
 
 #if 0
 		/* patch ROM 03 to not to speed test */
 		/*  skip fast speed test */
-		rom_fc_ff[0x36ad7] = 0x18;
-		rom_fc_ff[0x36ad8] = 0x18;
+		g_rom_fc_ff_ptr[0x36ad7] = 0x18;
+		g_rom_fc_ff_ptr[0x36ad8] = 0x18;
 #endif
 
 #if 0
 		/*  skip slow speed test */
-		rom_fc_ff[0x36ae7] = 0x18;
-		rom_fc_ff[0x36ae8] = 0x6b;
+		g_rom_fc_ff_ptr[0x36ae7] = 0x18;
+		g_rom_fc_ff_ptr[0x36ae8] = 0x6b;
 #endif
 
 #if 0
 		/* 4: Patch ROM 03 selftests not to do tests 1-4 */
-		rom_fc_ff[0x364a9] = 0xf0;
-		rom_fc_ff[0x364aa] = 0xff;
+		g_rom_fc_ff_ptr[0x364a9] = 0xf0;
+		g_rom_fc_ff_ptr[0x364aa] = 0xff;
 #endif
 
 		/* ROM tests are in ff/6403-642x, where 6403 = addr of */
@@ -813,15 +807,15 @@ do_debug_unix()
 	}
 	if(load) {
 		if(a1bank >= 0xe0 && a1bank < 0xe2) {
-			ret = read(fd,&slow_memory[((a1bank & 1)<<16)+a1],len);
+			ret = read(fd,&g_slow_memory_ptr[((a1bank & 1)<<16)+a1],len);
 		} else {
-			ret = read(fd,&memory[(a1bank << 16) + a1],len);
+			ret = read(fd,&g_memory_ptr[(a1bank << 16) + a1],len);
 		}
 	} else {
 		if(a1bank >= 0xe0 && a1bank < 0xe2) {
-			ret = write(fd,&slow_memory[((a1bank & 1)<<16)+a1],len);
+			ret = write(fd,&g_slow_memory_ptr[((a1bank & 1)<<16)+a1],len);
 		} else {
-			ret = write(fd,&memory[(a1bank << 16) + a1],len);
+			ret = write(fd,&g_memory_ptr[(a1bank << 16) + a1],len);
 		}
 	}
 	printf("Read/write: addr %06x for %04x bytes, ret: %x bytes\n",

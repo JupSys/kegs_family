@@ -1,4 +1,15 @@
 
+Changes in KEGS v0.35 since v0.34
+
+- engine_c.c fully implemented--KEGS now has a version completely written
+   in C, and now portable to other Unix machines.
+- KEGS got another 5% faster with more tweaks to the asm dispatch loop.
+
+Changes in KEGS v0.34 since v0.33
+
+- KEGS is 10-15% faster due to finally implementing a planned recoding
+   of the dispatch loop.
+
 Changes in KEGS v0.33 since v0.32
 
 - Fixed bug in engine_s.s that prevented compiling on pre-10.20 systems.

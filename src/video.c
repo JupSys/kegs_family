@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.82 97/11/16 19:46:46 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.83 98/05/13 23:23:39 kentd Exp $";
 
 #include <time.h>
 
@@ -43,7 +43,7 @@ word32	g_full_refresh_needed = -1;
 word32 g_cycs_in_40col = 0;
 
 extern int screen_index[];
-extern byte slow_memory[128*1024];
+extern byte *g_slow_memory_ptr;
 
 extern int statereg;
 extern double g_cur_dcycs;
@@ -954,7 +954,7 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 
 		left = MIN(x1, left);
 		right = MAX(x1 + shift_per, right);
-		slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
 		img_ptr = (word32 *)b_ptr;
 		img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
@@ -1115,7 +1115,7 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 		left = MIN(x1, left);
 		right = MAX(x1 + shift_per, right);
 
-		slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
 		img_ptr = (word32 *)b_ptr;
 		img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
@@ -1291,7 +1291,7 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 		left = MIN(x1, left);
 		right = MAX(x1 + shift_per, right);
 
-		slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
 		img_ptr = (word32 *)b_ptr;
 
@@ -1398,7 +1398,7 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 		left = MIN(x1, left);
 		right = MAX(x1 + shift_per, right);
 
-		slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
 		img_ptr = (word32 *)b_ptr;
 
@@ -1530,7 +1530,7 @@ redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
 			left = MIN(x1, left);
 			right = MAX(x1 + shift_per, right);
 
-			slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
 			img_ptr = (word32 *)b_ptr;
 			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
@@ -1653,7 +1653,7 @@ redraw_changed_hires_color(int start_offset, int start_line, int reparse,
 			left = MIN(x1, left);
 			right = MAX(x1 + shift_per, right);
 
-			slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
 			img_ptr = (word32 *)b_ptr;
 			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
@@ -1791,7 +1791,7 @@ redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
 			left = MIN(x1, left);
 			right = MAX(x1 + shift_per, right);
 	
-			slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
 			img_ptr = (word32 *)b_ptr;
 			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
@@ -1908,7 +1908,7 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 			left = MIN(x1, left);
 			right = MAX(x1 + shift_per, right);
 	
-			slow_mem_ptr = &(slow_memory[mem_ptr + x1]);
+			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
 			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
 			img_ptr = (word32 *)b_ptr;
 			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
@@ -2011,7 +2011,7 @@ check_super_hires_palette_changes(int reparse)
 	}
 
 	for(i = 0; i < 0x10; i++) {
-		word_ptr = (word32 *)&(slow_memory[0x19e00 + i*0x20]);
+		word_ptr = (word32 *)&(g_slow_memory_ptr[0x19e00 + i*0x20]);
 		diffs = reparse;
 		for(j = 0; j < 8; j++) {
 			if(word_ptr[j] != g_saved_palettes[i][j]) {
@@ -2186,7 +2186,7 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 
 	/* handle palette counting */
 	for(y = 8*start_line; y < 8*(start_line + 1); y++) {
-		scan = slow_memory[0x19d00 + y];
+		scan = g_slow_memory_ptr[0x19d00 + y];
 		pal = scan & 0xf;
 		g_shr_palette_used[pal]++;
 	}
@@ -2217,7 +2217,7 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 	all_checks = 0;
 	for(line = 0; line < 8; line++) {
 		y = 8*start_line + line;
-		scan = slow_memory[0x19d00 + y];
+		scan = g_slow_memory_ptr[0x19d00 + y];
 		old_scan = superhires_scan_save[y];
 		superhires_scan_save[y] = scan;
 		this_check = check[line];

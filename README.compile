@@ -1,4 +1,7 @@
 
+HP "Assembly" build instructions:
+--------------------------------
+
 KEGS is easy to compile.  Just cd to the src directory and type "make".
 KEGS requires perl installed in /usr/local/bin/perl (or just edit the
 scripts to point to wherever you installed perl).  Perl version 4 or 5 is
@@ -7,6 +10,9 @@ fine.
 After the "make" has finished, it will create three executables:  kegs,
 partls, and to_pro.  Just move them to where you want to put executables.
 
+If you get an error like 'as not found', make sure /usr/ccs/bin is in
+your $PATH.
+
 I build KEGS using a complex build process, so the provided Makefile
 is not what I use to build KEGS, and so lacks the usual makefile niceties.
 Sorry.  It does get the job done, though.
@@ -14,3 +20,43 @@ Sorry.  It does get the job done, though.
 If you compile on pre-10.X versions of HP-UX, you may have to edit
 the engine_s.s file to delete the line ".level 1.1".  I'll see if I can
 make this more seamless in the future.
+
+HP "C" build instructions:
+-------------------------
+
+If you want to try the C version of KEGS (about a factor of two slower),
+you need to edit the Makefile line:
+
+OBJECTS = $(OBJECTS1) engine_s.o
+
+to
+
+OBJECTS = $(OBJECTS1) engine_c.o
+
+And then type make.
+
+To use gcc instead, just change the 'CC = ' and 'LD = ' lines in the
+Makefile.
+
+Non-HP "C" build instructions:
+-----------------------------
+
+I don't know--you tell me.  You will have two problems I know about
+already--in defc.h, delete the definition for GET_ITIMER--it uses
+inline assembly now.  It's only for debug, so just define GET_ITIMER
+to return 0.
+
+Second, in video.c, lots of code mucks with bytes using word32's
+(my 4-byte unsigned typedef), and it assumes a big-endian processor.
+This will mess up all of the graphics.  You should fix the text modes
+first.
+
+If you're porting to a big-endian Unix machine running X, just changing
+GET_ITIMER may do the trick.  Let me know if you try this.
+
+If you want to port to a non-X-Windows environment, you'll need to
+rewrite xdriver.c and sound_hp.c.  You'll probably have to make changes
+to scc.c (BSD sockets) and smartport.c (Unix file handling).
+clock.c assumes gettimeofday() is accurate and fast, and also uses
+select() for a microsecond sleep operation.
+

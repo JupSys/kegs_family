@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.125 98/01/13 22:33:59 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.133 98/05/17 18:16:02 kentd Exp $"
 
 	.code
 
@@ -30,7 +30,6 @@ rcsid_engine_s_s
 
 #if 0
 # define LOG_PC
-# define CHECK_BREAKPOINTS
 # define ACCURATE_SLOW_MEM
 # define DEBUG_TOOLBOX
 # define DEBUG_CYCLES
@@ -54,12 +53,15 @@ rcsid_engine_s_s
 #define STACK_SAVE_INSTR			-76
 #define STACK_SRC_BANK				-80
 #define STACK_INST_TAB_PTR_DONT_USE_THIS	-84
+#if 0
 #define STACK_BP_ARG0_SAVE			-88
 #define STACK_BP_ARG1_SAVE			-92
 #define STACK_BP_ARG2_SAVE			-96
 #define STACK_BP_ARG3_SAVE			-100
 #define STACK_BP_RP_SAVE			-104
 #define STACK_BP_SCRATCH4_SAVE			-108
+#endif
+
 #define STACK_GET_MEMORY_SAVE_LINK		-112
 #define STACK_SET_MEMORY_SAVE_LINK		-116
 
@@ -105,6 +107,11 @@ rcsid_engine_s_s
 #define STACK_SAVE_DISP_PIECES_LINK		-248
 #define STACK_SAVE_DISPATCH_SCRATCH1		-252
 
+#if 0
+#define STACK_BP_SCRATCH2_SAVE			-256
+#define STACK_BP_SCRATCH3_SAVE			-260
+#endif
+
 
 
 #define	CYCLES_PLUS_1		fadd,sgl fr_plus_1,fcycles,fcycles
@@ -115,8 +122,8 @@ rcsid_engine_s_s
 
 #define CYCLES_FINISH		fcpy,sgl fcycles_stop,fcycles
 
-#define FCYCLES_ROUND_1		fadd,sgl fcycles,fr_plus_x_m1,fcycles
-#define FCYCLES_ROUND_2		fcnvfxt,sgl,sgl fcycles,ftmp1
+#define FCYCLES_ROUND_1		fadd,sgl fcycles,fr_plus_x_m1,ftmp1
+#define FCYCLES_ROUND_2		fcnvfxt,sgl,sgl ftmp1,ftmp1
 #define FCYCLES_ROUND_3		fcnvxf,sgl,sgl ftmp1,fcycles
 
 
@@ -160,11 +167,36 @@ rcsid_engine_s_s
 
 	.import do_break,code
 	.import do_cop,code
-	.import	page_info,data
+	.import	page_info_rd_wr,data
 	.import	get_memory_calls,data
 	.import	slow_mem_changed,data
 	.import	g_cur_dcycs,data
 	.import	g_last_vbl_dcycs,data
+	.import	g_slow_memory_ptr,data
+	.import	g_memory_ptr,data
+	.import	g_dummy_memory1_ptr,data
+	.import	g_rom_fc_ff_ptr,data
+
+	.export	memory_ptrs_init,code
+memory_ptrs_init
+	LDC(slow_memory,arg0)
+	LDC(g_slow_memory_ptr,arg1)
+	stw	arg0,(arg1)
+
+	LDC(memory,arg0)
+	LDC(g_memory_ptr,arg1)
+	stw	arg0,(arg1)
+
+	LDC(dummy_memory1,arg0)
+	LDC(g_dummy_memory1_ptr,arg1)
+	stw	arg0,(arg1)
+
+	LDC(rom_fc_ff,arg0)
+	LDC(g_rom_fc_ff_ptr,arg1)
+	stw	arg0,(arg1)
+
+	bv	0(link)
+	nop
 
 	.export get_itimer_asm,code
 get_itimer_asm
@@ -188,10 +220,10 @@ enter_asm
 	fcpy,dbl 0,fr_dbl_2
 	ldo	r%g_last_vbl_dcycs(scratch3),scratch3
 	fldds	0(scratch2),ftmp1
-	ldil	l%page_info,page_info_ptr
+	ldil	l%page_info_rd_wr,page_info_ptr
 	fldds	0(scratch3),ftmp2
 	fcpy,dbl 0,fr_dbl_3
-	ldo	r%page_info(page_info_ptr),page_info_ptr
+	ldo	r%page_info_rd_wr(page_info_ptr),page_info_ptr
 	fsub,dbl ftmp1,ftmp2,ftmp1
 	bv	0(scratch1)
 	fcnvff,dbl,sgl	ftmp1,fcycles
@@ -250,16 +282,12 @@ get_memory24_c
 	.export get_memory_asm
 get_memory_asm
 ; arg0 = addr
-#ifdef CHECK_BREAKPOINTS
-	bl	check_breakpoints_asm,scratch4
-#endif
 	extru	arg0,23,16,arg3
 	CYCLES_PLUS_1
 
-	sh3add	arg3,page_info_ptr,scratch2
-	ldw	(scratch2),scratch2
+	ldwx,s	arg3(page_info_ptr),scratch2
 	copy	arg0,addr_latch
-	bb,<	scratch2,BANK_IO_BIT,get_memory_io_stub_asm
+	bb,<,n	scratch2,BANK_IO_BIT,get_memory_iocheck_stub_asm
 	dep	arg0,31,8,scratch2
 	bv	0(link)
 	ldb	(scratch2),ret0
@@ -270,15 +298,11 @@ get_memory_asm
 	.export	get_memory16_asm
 get_memory16_asm
 ; arg0 = addr
-#ifdef CHECK_BREAKPOINTS
-	bl	check_breakpoints_asm,scratch4
-#endif
+	ldi	0xff,scratch3
 	extru	arg0,23,16,arg3
 
-	ldi	0xff,scratch3
-	sh3add	arg3,page_info_ptr,scratch2
 	and	scratch3,arg0,scratch4
-	ldw	(scratch2),scratch2
+	ldwx,s	arg3(page_info_ptr),scratch2
 	copy	arg0,addr_latch
 	comb,=	scratch4,scratch3,get_memory16_pieces_stub_asm
 	and	scratch2,scratch3,scratch3
@@ -295,15 +319,11 @@ get_memory16_asm
 	.export	get_memory24_asm
 get_memory24_asm
 ; arg0 = addr
-#ifdef CHECK_BREAKPOINTS
-	bl	check_breakpoints_asm,scratch4
-#endif
+	ldi	0xfe,scratch3
 	extru	arg0,23,16,arg3
 
-	ldi	0xfe,scratch3
-	sh3add	arg3,page_info_ptr,scratch2
 	and	scratch3,arg0,scratch4
-	ldw	(scratch2),scratch2
+	ldwx,s	arg3(page_info_ptr),scratch2
 	copy	arg0,addr_latch
 	comb,=	scratch4,scratch3,get_memory24_pieces_stub_asm
 	extru	scratch2,31,8,scratch3
@@ -318,21 +338,32 @@ get_memory24_asm
 	dep	scratch2,15,8,ret0
 
 
-	.export get_memory_io_stub_asm,code
+	.align	0x20
+	.export get_memory_iocheck_stub_asm,code
+get_memory_iocheck_stub_asm
+	extru,=	scratch2,BANK_BREAK_BIT,1,0
+	bl	check_breakpoints_asm,scratch4
+	stw	link,STACK_GET_MEMORY_SAVE_LINK(sp)
+	bb,<	scratch2,BANK_IO2_BIT,get_memory_io_stub_asm
+	dep	arg0,31,8,scratch2
+	bv	0(link)
+	ldb	(scratch2),ret0
+
+	.export get_memory_io_stub_asm
 get_memory_io_stub_asm
-; add fr_plus_x_m1 to fcycles, then truncate to int
 	FCYCLES_ROUND_1
 	ldo	STACK_SAVE_CYCLES(sp),arg1
 	FCYCLES_ROUND_2
-	stw	link,STACK_GET_MEMORY_SAVE_LINK(sp)
-	FCYCLES_ROUND_3
-	bl	get_memory_io,link
 	fstws	fcycles,(arg1)
+	bl	get_memory_io,link
+	FCYCLES_ROUND_3
 
 	ldw	STACK_GET_MEMORY_SAVE_LINK(sp),link
 	ldo	STACK_SAVE_CYCLES(sp),arg1
 	bv	(link)
 	fldws	(arg1),fcycles
+
+
 
 	.export get_memory16_pieces_stub_asm,code
 get_memory16_pieces_stub_asm
@@ -426,30 +457,33 @@ set_memory24_c
 set_memory_asm
 ; arg0 = addr
 ; arg1 = val
-#ifdef CHECK_BREAKPOINTS
-	bl	check_breakpoints_asm,scratch4
-#endif
 	extru	arg0,23,16,arg3
-
 	CYCLES_PLUS_1
-	sh3add	arg3,page_info_ptr,scratch2
-	ldw	4(scratch2),scratch2
+	addil	l%PAGE_INFO_WR_OFFSET,arg3
+	ldwx,s	r1(page_info_ptr),scratch2
 	ldi	0xff,scratch3
 	and	scratch2,scratch3,scratch3
 	dep	arg0,31,8,scratch2
 	comib,<>,n 0,scratch3,set_memory_special_case
+set_memory_cont_asm
 	bv	0(link)
 	stb	arg1,(scratch2)
 
 
 	.export set_memory_special_case
 set_memory_special_case
-	ldil	l%slow_memory,scratch4
-	bb,<,n	scratch3,BANK_IO_BIT,set_memory_io_stub_asm
+	extru,=	scratch3,BANK_BREAK_BIT,1,0
+	bl	check_breakpoints_asm,scratch4
 	extru	arg1,31,8,arg1
+
+set_memory_special_case2
+	bb,<	scratch3,BANK_IO2_BIT,set_memory_io_stub_asm
+	ldil	l%slow_memory,scratch4
 	bb,<	scratch3,BANK_SHADOW_BIT,set_memory_shadow1_asm
 	extru	arg0,31,16,arg3
 	bb,<	scratch3,BANK_SHADOW2_BIT,set_memory_shadow2_asm
+	nop
+	bb,<	scratch3,BANK_BREAK_BIT,set_memory_cont_asm
 	nop
 	break
 
@@ -529,19 +563,17 @@ set_memory_io_stub_asm
 set_memory16_asm
 ; arg0 = addr
 ; arg1 = val
-#ifdef CHECK_BREAKPOINTS
-	bl	check_breakpoints_asm,scratch4
-#endif
 	extru	arg0,23,16,arg3
 
-	sh3add	arg3,page_info_ptr,scratch2
+	addil	l%PAGE_INFO_WR_OFFSET,arg3
 	extrs	arg0,31,8,scratch4
-	ldw	4(scratch2),scratch2
+	ldwx,s	r1(page_info_ptr),scratch2
 	ldi	0xff,scratch3
 	and	scratch3,scratch2,scratch3
 	dep	arg0,31,8,scratch2
 	comib,=,n -1,scratch4,set_memory16_pieces_stub_asm
 	comib,<>,n 0,scratch3,set_memory16_special_case
+set_memory16_cont_asm
 	stb	arg1,0(scratch2)
 	CYCLES_PLUS_2
 	extru	arg1,23,8,arg3
@@ -617,15 +649,21 @@ set_memory16_shadow2_asm
 
 	.align	8
 set_memory16_special_case
+	extru,=	scratch3,BANK_BREAK_BIT,1,0
+	bl	check_breakpoints_asm,scratch4
+	extru	arg1,31,16,arg1
+
+set_memory16_special_case2
+	bb,<	scratch3,BANK_IO2_BIT,set_memory16_pieces_stub_asm
 	ldil	l%slow_memory,scratch4
-	bb,<,n	scratch3,BANK_IO_BIT,set_memory16_pieces_stub_asm
 
 ; if not halfword aligned, go through pieces_stub_asm
-	extru	arg1,31,16,arg1
 	bb,<,n	arg0,31,set_memory16_pieces_stub_asm
 	bb,<	scratch3,BANK_SHADOW2_BIT,set_memory16_shadow2_asm
 	extru	arg0,31,16,arg3
 	bb,<	scratch3,BANK_SHADOW_BIT,set_memory16_shadow1_asm
+	nop
+	bb,<	scratch3,BANK_BREAK_BIT,set_memory16_cont_asm
 	nop
 	break
 
@@ -649,14 +687,11 @@ set_memory16_pieces_stub_asm
 set_memory24_asm
 ; arg0 = addr
 ; arg1 = val
-#ifdef CHECK_BREAKPOINTS
-	bl	check_breakpoints_asm,scratch4
-#endif
 	extru	arg0,23,16,arg3
 
-	sh3add	arg3,page_info_ptr,scratch2
+	addil	l%PAGE_INFO_WR_OFFSET,arg3
 	extrs	arg0,30,7,scratch4
-	ldw	4(scratch2),scratch2
+	ldwx,s	r1(page_info_ptr),scratch2
 	ldi	0xff,scratch3
 	and	scratch3,scratch2,scratch3
 	dep	arg0,31,8,scratch2
@@ -692,53 +727,42 @@ set_memory24_pieces_stub_asm
 
 
 
-#ifdef CHECK_BREAKPOINTS
-	.import breakpoints,data
+	.import g_num_breakpoints,data
+	.import g_breakpts,data
 
 	.align	8
 	.export check_breakpoints_asm,code
 check_breakpoints_asm
-; can't use arg0-arg3.
+; can't use arg0-arg3.  don't use scratch2,scratch3
 ; scratch4: return link
-	ldil	l%breakpoints,scratch3
-	zdep	arg0,31-SIZE_BREAKPT_ENTRY_BITS,8,scratch1
-	ldo	r%breakpoints(scratch3),scratch3
-	ldwx	scratch1(scratch3),scratch2
-	add	scratch1,scratch3,scratch3
-; scratch2 = count of entries here to compare with
-	ldw	4(scratch3),scratch1
-	comib,=,n 0,scratch2,check_breakpoints_done
-	addi	8,scratch3,scratch3
-; scratch1 = first addr
-	.export check_breakpoints_loop,code
-check_breakpoints_loop
-	comb,=,n scratch1,arg0,check_breakpoints_hit
-	addib,> -1,scratch2,check_breakpoints_loop
-	ldwm	4(scratch3),scratch1
-
-	.export check_breakpoints_done,code
-check_breakpoints_done
+;
+	ldil	l%g_num_breakpoints,scratch1
+	ldil	l%g_breakpts,ret0
+	ldw	r%g_num_breakpoints(scratch1),r1
+	ldo	r%g_breakpts(ret0),ret0
+	addi,>=	-1,r1,r1
 	bv,n	0(scratch4)
+	ldwx,s	r1(ret0),scratch1
+check_breakpoints_loop_asm
+	comb,=,n scratch1,arg0,check_breakpoints_hit
+	addib,>=,n -1,r1,check_breakpoints_loop_asm
+	ldwx,s	r1(ret0),scratch1
+
+	bv	0(scratch4)
+	nop
 
 	.export check_breakpoints_hit,code
 check_breakpoints_hit
-	stw	arg0,STACK_BP_ARG0_SAVE(sp)
-	stw	arg1,STACK_BP_ARG1_SAVE(sp)
-	stw	arg2,STACK_BP_ARG2_SAVE(sp)
-	stw	arg3,STACK_BP_ARG3_SAVE(sp)
-	stw	rp,STACK_BP_RP_SAVE(sp)
-	stw	scratch4,STACK_BP_SCRATCH4_SAVE(sp)
-	bl	set_halt_act,rp
-	ldi	1,arg0
-	ldw	STACK_BP_SCRATCH4_SAVE(sp),scratch4
-	ldw	STACK_BP_ARG0_SAVE(sp),arg0
-	ldw	STACK_BP_ARG1_SAVE(sp),arg1
-	ldw	STACK_BP_ARG2_SAVE(sp),arg2
-	ldw	STACK_BP_ARG3_SAVE(sp),arg3
-	bv	(scratch4)
-	ldw	STACK_BP_RP_SAVE(sp),rp
+	LDC(halt_sim,scratch1)
+	ldw	(scratch1),r1
+	depi	1,31,1,r1
+	bv	0(scratch4)
+	stw	r1,(scratch1)
+	nop
+	nop
+	nop
 
-#endif /* BREAKPOINTS */
+
 
 	.align	8
 	.export set_mem_yreg
@@ -1038,9 +1062,7 @@ update_system_state
 	and	psr,scratch1,scratch1
 	extru,=	psr,23,1,0
 	depi	1,23,24,stack
-	ldil	l%size_tab,scratch2
 	dep	arg0,29,2,scratch1
-	ldo	r%size_tab(scratch2),scratch2
 	blr	scratch1,0
 	addit,>= -0x3d,scratch1,0
 ; 0000: no change
@@ -1048,10 +1070,9 @@ update_system_state
 	nop ! nop ! nop
 	nop ! nop ! nop ! nop
 ; 0001: x from 1->0
-	ldi	2,scratch1
 	b	update_sys9
-	stw	scratch1,5*4(scratch2)
-	nop
+	ldi	2,scratch1
+	nop ! nop
 	nop ! nop ! nop ! nop
 ; 0010: m from 1->0
 	b	resize_acc_to16
@@ -1059,30 +1080,26 @@ update_system_state
 	nop ! nop
 	nop ! nop ! nop ! nop
 ; 0011: m,x from 1->0
-	ldi	2,scratch1
-	ldi	0,ret0
 	b	resize_acc_to16
-	stw	scratch1,5*4(scratch2)
+	ldi	0,ret0
+	nop ! nop
 	nop ! nop ! nop ! nop
 ; 0100: x from 0->1
-	ldi	1,scratch1
 	depi	0,23,24,yreg
-	stw	scratch1,5*4(scratch2)
 	b	update_sys9
 	depi	0,23,24,xreg
-	nop ! nop ! nop
+	nop
+	nop ! nop ! nop ! nop
 ; 0101: no change
 	b	update_sys9
 	nop ! nop ! nop
 	nop ! nop ! nop ! nop
 ; 0110: x from 0->1, m from 1->0
-	ldi	1,scratch1
 	depi	0,23,24,yreg
 	ldi	0,ret0
-	stw	scratch1,5*4(scratch2)
 	b	resize_acc_to16
 	depi	0,23,24,xreg
-	nop ! nop
+	nop ! nop ! nop ! nop
 ; 0111: m from 1->0
 	b	resize_acc_to16
 	ldi	0,ret0
@@ -1094,42 +1111,35 @@ update_system_state
 	nop ! nop
 	nop ! nop ! nop ! nop
 ; 1001: m from 0->1, x from 1->0
-	ldi	2,scratch1
-	ldi	0,ret0
 	b	resize_acc_to8
-	stw	scratch1,5*4(scratch2)
+	ldi	0,ret0
+	nop ! nop
 	nop ! nop ! nop ! nop
 ; 1010: no change
 	b	update_sys9
 	nop ! nop ! nop
 	nop ! nop ! nop ! nop
 ; 1011: x from 1->0
-	ldi	2,scratch1
 	b	update_sys9
-	stw	scratch1,5*4(scratch2)
-	nop
+	nop ! nop ! nop
 	nop ! nop ! nop ! nop
 ; 1100: m,x from 0->1
-	ldi	1,scratch1
 	depi	0,23,24,yreg
 	ldi	0,ret0
-	stw	scratch1,5*4(scratch2)
 	b	resize_acc_to8
 	depi	0,23,24,xreg
-	nop ! nop
+	nop ! nop ! nop ! nop
 ; 1101: m from 0->1
 	b	resize_acc_to8
 	ldi	0,ret0
 	nop ! nop
 	nop ! nop ! nop ! nop
 ; 1110: x from 0->1
-	ldi	1,scratch1
 	depi	0,23,24,yreg
 	ldi	0,ret0
-	stw	scratch1,5*4(scratch2)
 	b	update_sys9
 	depi	0,23,24,xreg
-	nop ! nop
+	nop ! nop ! nop ! nop
 ; 1111: no change
 	b	update_sys9
 	nop ! nop ! nop
@@ -1208,33 +1218,24 @@ enter_engine
 	ldo	r%table8(ret0),ret0
 	ldw	ENGINE_REG_STACK(arg0),stack
 	ldo	r%table16(inst_tab_ptr),inst_tab_ptr
-	ldw	ENGINE_REG_DBANK(arg0),dbank
-	ldw	ENGINE_REG_DIRECT(arg0),direct
-	ldil	l%size_tab,scratch4
 	ldw	ENGINE_REG_PSR(arg0),psr
-	ldo	r%size_tab(scratch4),scratch4
-	ldw	ENGINE_REG_PC(arg0),pc
-	ldi	2,scratch3
+	ldi	0,zero
+	ldw	ENGINE_REG_DBANK(arg0),dbank
+	ldil	l%page_info_rd_wr,page_info_ptr
+	ldw	ENGINE_REG_DIRECT(arg0),direct
 	extru,=	psr,26,1,0		;nullify if acc size = 0 == 16bit
 	copy	ret0,inst_tab_ptr
+	ldw	ENGINE_REG_PC(arg0),pc
 
 #ifdef DEBUG_CYCLES
 	stw	cycles,STACK_SAVE_INIT_CYCLES(sp)
 #endif
 
-	ldi	0,zero
-	extru	psr,27,1,scratch1
-	ldil	l%page_info,page_info_ptr
+	ldo	r%page_info_rd_wr(page_info_ptr),page_info_ptr
 	ldw	ENGINE_REG_KBANK(arg0),kbank
-	ldo	r%page_info(page_info_ptr),page_info_ptr
 	extru,<> psr,30,1,0
 	ldi	1,zero
-	extru	psr,26,1,scratch2
-	sub	scratch3,scratch1,scratch1
-	sub	scratch3,scratch2,scratch2
-	stw	scratch1,5*4(scratch4)		;size of x
 	extru	psr,24,1,neg
-	stw	scratch2,4*4(scratch4)		;size of m/acc
 	dep	kbank,15,16,pc
 	stw	arg0,STACK_SAVE_ARG0(sp)
 	b	dispatch2
@@ -1244,28 +1245,15 @@ enter_engine
 resize_acc_to8
 	ldil	l%table8,inst_tab_ptr
 	extru	psr,27,1,scratch1		;size of x
-	ldo	r%table8(inst_tab_ptr),inst_tab_ptr
-	ldil	l%size_tab,scratch4
-	ldi	2,scratch3
-	ldo	r%size_tab(scratch4),scratch4
-	ldi	1,scratch2
-	sub	scratch3,scratch1,scratch1
-	stw	scratch2,4*4(scratch4)		;size of m/acc
 	b	update_sys9
-	stw	scratch1,5*4(scratch4)		;size of x
+	ldo	r%table8(inst_tab_ptr),inst_tab_ptr
 
 	.export resize_acc_to16,code
 resize_acc_to16
 	ldil	l%table16,inst_tab_ptr
 	extru	psr,27,1,scratch1
-	ldo	r%table16(inst_tab_ptr),inst_tab_ptr
-	ldil	l%size_tab,scratch4
-	ldi	2,scratch3
-	ldo	r%size_tab(scratch4),scratch4
-	sub	scratch3,scratch1,scratch1
-	stw	scratch3,4*4(scratch4)		;size of m/acc
 	b	update_sys9
-	stw	scratch1,5*4(scratch4)		;size of x
+	ldo	r%table16(inst_tab_ptr),inst_tab_ptr
 
 
 
@@ -1305,7 +1293,9 @@ refresh_engine_struct
 	bv	0(link)
 	stw	kbank,ENGINE_REG_KBANK(arg0)
 
+	.export check_irqs_pending,code
 update_sys9
+check_irqs_pending
 ; if any g_irq_pending, return RET_IRQ
 	ldil	l%g_irq_pending,scratch1
 	ldw	r%g_irq_pending(scratch1),scratch2
@@ -1340,11 +1330,6 @@ dispatch
 	nop
 #endif
 
-#ifdef CHECK_BREAKPOINTS
-	extru	pc,31,16,arg0
-	bl	check_breakpoints_asm,scratch4
-	dep	kbank,15,8,arg0
-#endif
 
 	fldws	0(halt_sim_ptr),fscr1
 
@@ -1381,28 +1366,26 @@ no_debug_toolbox
 	dep	kbank,15,16,pc
 
 	fcmp,>=,sgl fcycles,fcycles_stop		;C=0 if can cont
-	extru	pc,23,16,scratch2
+	extru	pc,23,16,arg2
 
-	sh3add	scratch2,0,scratch2
-	fcmp,!=,sgl fscr1,0				;C=0 if can cont
+	ldwx,s	arg2(page_info_ptr),scratch2
+	ldi	0xfd,scratch3
 
 	extru	pc,31,8,scratch4
-	ldwx	scratch2(page_info_ptr),scratch1
+	fcmp,!=,sgl fscr1,0				;C=0 if can cont
+
+	ldbx	scratch4(scratch2),instr
+	comclr,>= scratch4,scratch3,0	;stop for pieces if near end of page
 
 	ftest,acc2			;null next if can cont
-	b,n	dispatch_done_clr_ret0			;done if must stop
 
-	ldbx	scratch4(scratch1),instr
-
-	extrs	pc,29,6,scratch3
-	bb,<	scratch1,BANK_IO_BIT,dispatch_instr_io
-
+	ldi	-1,scratch2
 	ldwx,s	instr(inst_tab_ptr),link
 
-	add	scratch4,scratch1,scratch1
-	comib,=,n -1,scratch3,dispatch_instr_pieces
+	add	scratch4,scratch2,scratch1
+	bb,<,n	scratch2,BANK_IO_BIT,dispatch_instr_io
 
-	depi	0,31,3,link
+	; depi	0,31,3,link
 
 #ifndef LOG_PC
 	bv	0(link)
@@ -1459,6 +1442,16 @@ log_pc_asm
 
 	.export dispatch_instr_io,code
 dispatch_instr_io
+; check if we're here because of timeout or halt required
+	fcmp,>=,sgl fcycles,fcycles_stop
+	ldwx,s	arg2(page_info_ptr),scratch2
+	fcmp,!=,sgl fscr1,0
+
+	ftest,acc2				;do next instr if must stop
+	b,n	dispatch_done_clr_ret0
+
+	bb,>=,n	scratch2,BANK_IO_BIT,dispatch_instr_pieces
+
 	ldil	l%0xc700,scratch1
 	ldo	r%0xc700(scratch1),scratch1
 	addi	0x0a,scratch1,scratch2
@@ -1480,13 +1473,11 @@ dispatch_instr_pieces
 	dep	kbank,15,8,arg0
 ; ret is instr
 	ldwx,s	ret0(inst_tab_ptr),link
+	ldil	l%sizes_tab,scratch4
 	copy	ret0,instr
+	ldo	r%sizes_tab(scratch4),scratch4
 	addi	1,pc,arg0
-	ldil	l%size_tab,scratch4
-	extru	link,31,3,scratch1
-	ldo	r%size_tab(scratch4),scratch4
-	dep	0,31,3,link
-	ldwx,s	scratch1(scratch4),scratch2
+	ldbx	instr(scratch4),scratch2
 #ifdef LOG_PC
 ; save "real" link so call_log_pc can restore it
 
@@ -1497,10 +1488,11 @@ dispatch_instr_pieces
 	stw	link,STACK_SAVE_DISP_PIECES_LINK(sp)
 
 	ldi	0x1bea,ret0
-	sh2add	scratch2,0,scratch2
-	ldo	STACK_SAVE_TMP_INST-1(sp),scratch1
-	blr	scratch2,0
+	ldo	STACK_SAVE_TMP_INST(sp),scratch1
+	sh3add	scratch2,0,scratch2
 	dep	kbank,15,16,arg0
+	blr	scratch2,0
+	addit,>= -48,scratch2,0
 
 /* must correct cycle count so all instrs are called with cycls += 2 */
 /*  since get_mem will auto-inc cycles by the number of bytes, we */
@@ -1512,36 +1504,67 @@ dispatch_instr_pieces
 	nop
 	nop
 	nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop
 ; 1
 	bl	get_mem_long_8,link
 	nop
 	ldw	STACK_SAVE_DISP_PIECES_LINK(sp),link
-	ldo	STACK_SAVE_TMP_INST-1(sp),scratch1
-	dep	ret0,7,8,scratch2
+	dep	ret0,15,8,ret0
+	ldo	STACK_SAVE_TMP_INST(sp),scratch1
 	bv	0(link)
-	stw	scratch2,1(scratch1)
-	nop
+	stw	ret0,0(scratch1)
+	nop ! nop
+	nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop
 ; 2
 	bl	get_mem_long_16,link
 	CYCLES_MINUS_1
+	ldo	STACK_SAVE_TMP_INST(sp),scratch1
 	ldw	STACK_SAVE_DISP_PIECES_LINK(sp),link
-	dep	ret0,23,16,scratch2
-	ldo	STACK_SAVE_TMP_INST-1(sp),scratch1
-	dep	ret0,7,8,scratch2
+	dep	ret0,15,8,ret0
 	bv	0(link)
-	stw	scratch2,STACK_SAVE_TMP_INST(sp)
+	stw	ret0,0(scratch1)
+	nop
+	nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop
 ; 3
 	bl	get_mem_long_24,link
 	CYCLES_MINUS_2
+	shd	ret0,ret0,16,scratch2
 	ldw	STACK_SAVE_DISP_PIECES_LINK(sp),link
-	shd	ret0,ret0,8,scratch2
-	ldo	STACK_SAVE_TMP_INST-1(sp),scratch1
-	dep	scratch2,15,8,scratch2
+	extru	ret0,23,8,ret0
+	ldo	STACK_SAVE_TMP_INST(sp),scratch1
+	dep	ret0,23,8,scratch2
 	bv	0(link)
-	stw	scratch2,STACK_SAVE_TMP_INST(sp)
-; 4?
-	nop
-	nop
+	stw	scratch2,0(scratch1)
+	nop ! nop ! nop
+	nop ! nop ! nop ! nop
+; 4 variable acc size
+	extru,<> psr,26,1,0
+	bl,n	get_mem_long_16,link
+	bl,n	get_mem_long_8,link
+	CYCLES_MINUS_1
+	ldw	STACK_SAVE_DISP_PIECES_LINK(sp),link
+	ldo	STACK_SAVE_TMP_INST(sp),scratch1
+	dep	ret0,15,8,ret0
+	bv	0(link)
+	stw	ret0,0(scratch1)
+	nop ! nop ! nop
+	nop ! nop ! nop ! nop
+; 5 variable x size
+	extru,<> psr,27,1,0
+	bl,n	get_mem_long_16,link
+	bl,n	get_mem_long_8,link
+	CYCLES_MINUS_1
+	ldw	STACK_SAVE_DISP_PIECES_LINK(sp),link
+	ldo	STACK_SAVE_TMP_INST(sp),scratch1
+	dep	ret0,15,8,ret0
+	bv	0(link)
+	stw	ret0,0(scratch1)
+	nop ! nop ! nop
+	nop ! nop ! nop ! nop
+; 6 = evil
 	break
 
 
@@ -1574,16 +1597,6 @@ change_kbank
 
 	.export check_size_consist
 check_size_consist
-	LDC(size_tab,scratch1)
-	ldw	4*4(scratch1),scratch2
-	ldw	5*4(scratch1),scratch1
-	extru	psr,27,1,scratch3
-	subi	2,scratch3,scratch3
-	comb,<>	scratch3,scratch1,x_size_failure
-	nop
-	extru	psr,26,1,scratch3
-	subi	2,scratch3,scratch3
-	comb,<>	scratch3,scratch2,acc_size_failure
 	ldil	l%table16,scratch1
 	ldil	l%table8,scratch2
 	ldo	r%table16(scratch1),scratch1
@@ -1612,22 +1625,6 @@ acc_tab_fail0
 	copy	scratch2,arg2
 	bl	size_fail,link
 	ldi	0x101,arg0
-	b	dispatch_done
-	ldi	0,ret0
-	.export acc_size_failure
-acc_size_failure
-	copy	scratch3,arg1
-	copy	scratch2,arg2
-	bl	size_fail,link
-	ldi	0x102,arg0
-	b	dispatch_done
-	ldi	0,ret0
-	.export x_size_failure
-x_size_failure
-	copy	scratch3,arg1
-	copy	scratch1,arg2
-	bl	size_fail,link
-	ldi	0x103,arg0
 	b	dispatch_done
 	ldi	0,ret0
 
@@ -2423,17 +2420,14 @@ table8
 table16
 #include "16size"
 
-	.export size_tab,data
-size_tab
-	.word	0
-	.word	1
-	.word	2
-	.word	3
+	.export	sizes_tab,data
+sizes_tab
+#include "size_s"
 
-	.word	1
-	.word	1
-	.word	2
-	.word	2
+
+	.export g_engine_c_mode,data
+g_engine_c_mode
+	.word	0
 
 	.bss
 
@@ -2447,4 +2441,5 @@ dummy_memory1	.block	3*1024
 rom_fc_ff	.block	256*1024
 dummy_memory2	.block	3*1024
 memory		.block	MEM_SIZE
+dummy_memory3	.block	1024
 

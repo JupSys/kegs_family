@@ -11,19 +11,22 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.184 98/04/22 00:53:19 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.189 98/05/17 01:50:19 kentd Exp $";
 
 #include "defc.h"
 
 extern long timezone;
 extern int daylight;
 
-extern byte memory[];
-extern byte slow_memory[];
-extern byte dummy_memory1[];
-extern byte rom_fc_ff[];
+extern byte *g_memory_ptr;
+extern byte *g_dummy_memory1_ptr;
+extern byte *g_slow_memory_ptr;
+extern byte *g_rom_fc_ff_ptr;
 
 extern word32 slow_mem_changed[];
+
+extern int g_num_breakpoints;
+extern word32 g_breakpts[];
 
 extern int halt_sim;
 extern int stepping;
@@ -32,7 +35,7 @@ extern double g_drecip_cycles_in_16ms;
 extern double g_last_vbl_dcycs;
 extern int speed_changed;
 
-extern Page_info page_info[65536];
+extern Page_info page_info_rd_wr[];
 
 extern int scr_mode;
 
@@ -133,6 +136,22 @@ int	c046_system_irq_status = 0;
 	set_halt(1);	\
 	return;
 
+void
+fixup_brks()
+{
+	word32	page;
+	word32	val;
+	int	i, num;
+
+	num = g_num_breakpoints;
+	for(i = 0; i < num; i++) {
+		page = (g_breakpts[i] >> 8) & 0xffff;
+		val = GET_PAGE_INFO_RD(page);
+		SET_PAGE_INFO_RD(page, val | BANK_IO_TMP | BANK_BREAK);
+		val = GET_PAGE_INFO_WR(page);
+		SET_PAGE_INFO_WR(page, val | BANK_IO_TMP | BANK_BREAK);
+	}
+}
 
 void
 fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
@@ -438,7 +457,7 @@ fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	int	indx;
 	int	j;
 
-	rom10000 = (word32)&(rom_fc_ff[0x30000]);
+	rom10000 = (word32)&(g_rom_fc_ff_ptr[0x30000]);
 	add = 0;
 
 	if((shadow_reg & 0x40) && start_page < 0x200) {
@@ -512,7 +531,7 @@ fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	add_rd = 0;
 
 	if(!wrdefram && (start_page < 0x200)) {
-		mem0wr |= BANK_IO_TMP;
+		mem0wr |= (BANK_IO_TMP | BANK_IO2_TMP);
 	}
 
 	if(start_page < 0x100) {
@@ -547,7 +566,7 @@ fixup_any_bank_e000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 {
 	word32	rom10000;
 
-	rom10000 = (word32)&(rom_fc_ff[0x30000]);
+	rom10000 = (word32)&(g_rom_fc_ff_ptr[0x30000]);
 
 	if((shadow_reg & 0x40) && start_page < 0x200) {
 		/* LC shadowing off! */
@@ -559,7 +578,7 @@ fixup_any_bank_e000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	} else {
 		/* decide on ROM or RAM */
 		if(!wrdefram && start_page < 0x200) {
-			mem0wr |= BANK_IO_TMP;
+			mem0wr |= (BANK_IO_TMP | BANK_IO2_TMP);
 		}
 
 		if((start_page < 0x100) && ALTZP) {
@@ -709,7 +728,7 @@ fixup_bank0()
 	word32	mem0;
 	int	i;
 
-	mem0 = (word32)&(memory[0]);
+	mem0 = (word32)&(g_memory_ptr[0]);
 	for(i = 0; i < 8; i++) {
 		mask = bank0_adjust_mask[i];
 		if(mask == 0) {
@@ -727,7 +746,7 @@ fixup_bank1()
 	word32	mask;
 	int	i;
 
-	mem1 = (word32)&(memory[0x10000]);
+	mem1 = (word32)&(g_memory_ptr[0x10000]);
 	for(i = 0; i < 8; i++) {
 		mask = bank1_adjust_mask[i];
 		if(mask == 0) {
@@ -745,7 +764,7 @@ fixup_banke0()
 	word32	mem0;
 	int	i;
 
-	mem0 = (word32)&(slow_memory[0]);
+	mem0 = (word32)&(g_slow_memory_ptr[0]);
 	for(i = 0; i < 8; i++) {
 		mask = banke0_adjust_mask[i];
 		if(mask == 0) {
@@ -763,7 +782,7 @@ fixup_banke1()
 	word32	mem1;
 	int	i;
 
-	mem1 = (word32)&(slow_memory[0x10000]);
+	mem1 = (word32)&(g_slow_memory_ptr[0x10000]);
 	for(i = 0; i < 8; i++) {
 		mask = banke1_adjust_mask[i];
 		if(mask == 0) {
@@ -787,6 +806,7 @@ fixup_intcx(int call_fixups)
 		fixup_bank1();
 		fixup_banke0();
 		fixup_banke1();
+		fixup_brks();
 	}
 }
 
@@ -807,6 +827,7 @@ fixup_st80col(double dcycs, int call_fixups)
 
 	if(call_fixups) {
 		fixup_bank0();
+		fixup_brks();
 	}
 }
 
@@ -818,6 +839,7 @@ fixup_hires_on(int call_fixups)
 		bank0_adjust_mask[1] = -1;
 		if(call_fixups) {
 			fixup_bank0();
+			fixup_brks();
 		}
 	}
 }
@@ -835,6 +857,7 @@ fixup_page2(double dcycs, int call_fixups)
 		}
 		if(call_fixups) {
 			fixup_bank0();
+			fixup_brks();
 		}
 	} else {
 		change_display_mode(dcycs);
@@ -855,6 +878,7 @@ fixup_wrdefram(int new_wrdefram, int call_fixups)
 	if(call_fixups) {
 		fixup_bank0();
 		fixup_bank1();
+		fixup_brks();
 	}
 }
 
@@ -932,6 +956,7 @@ set_statereg(double dcycs, int val)
 		fixup_banke0();
 		fixup_banke1();
 	}
+	fixup_brks();
 }
 
 
@@ -947,6 +972,7 @@ setup_bank0()
 	}
 
 	fixup_bank0();
+	fixup_brks();
 }
 
 void
@@ -961,6 +987,7 @@ setup_bank1()
 	}
 
 	fixup_bank1();
+	fixup_brks();
 }
 
 void
@@ -975,6 +1002,7 @@ setup_banke0()
 	}
 
 	fixup_banke0();
+	fixup_brks();
 }
 
 void
@@ -989,6 +1017,7 @@ setup_banke1()
 	}
 
 	fixup_banke1();
+	fixup_brks();
 }
 
 void
@@ -1002,8 +1031,8 @@ setup_pageinfo()
 
 	/* bank 2 through last bank */
 	for(i = 0x0200; i < (MEM_SIZE/256); i++) {
-		SET_PAGE_INFO_RD(i, (word32)&memory[i*256]);
-		SET_PAGE_INFO_WR(i, (word32)&memory[i*256]);
+		SET_PAGE_INFO_RD(i, (word32)&g_memory_ptr[i*256]);
+		SET_PAGE_INFO_WR(i, (word32)&g_memory_ptr[i*256]);
 	}
 	for(i = (MEM_SIZE/256); i < 0xfc00; i++) {
 		SET_PAGE_INFO_RD(i, BANK_BAD_MEM);
@@ -1015,11 +1044,18 @@ setup_pageinfo()
 
 	for(i = 0xfc00; i <= 0xffff; i++) {
 		new_addr = (i - 0xfc00)*256;
-		SET_PAGE_INFO_RD(i, (word32)(&rom_fc_ff[new_addr]));
-		SET_PAGE_INFO_WR(i, (word32)(&rom_fc_ff[new_addr])|BANK_IO_TMP);
+		SET_PAGE_INFO_RD(i, (word32)(&g_rom_fc_ff_ptr[new_addr]));
+		SET_PAGE_INFO_WR(i, (word32)(&g_rom_fc_ff_ptr[new_addr]) |
+						(BANK_IO_TMP | BANK_IO2_TMP));
 	}
+	fixup_brks();
 }
 
+void
+fixup_all_banks()
+{
+	setup_pageinfo();
+}
 
 void
 update_shadow_reg(int val)
@@ -1030,11 +1066,14 @@ update_shadow_reg(int val)
 		return;
 	}
 
-
+#if 0
+	/* eddy@cs.ucdavis.edu has a demo which write bit 7, but just */
+	/*  ignore it */
 	if((val & 0x80) != 0) {
 		printf("shadow_reg: %02x is illegal!\n", val);
 		set_halt(1);
 	}
+#endif
 
 	xor = shadow_reg ^ val;
 
@@ -1050,6 +1089,7 @@ update_shadow_reg(int val)
 
 	set_halt(halt_on_shadow_reg);
 
+	fixup_brks();
 }
 
 void
@@ -1067,6 +1107,11 @@ show_bankptrs(int bnk)
 	int i;
 	word32 rd, wr;
 	byte *ptr_rd, *ptr_wr;
+
+	printf("g_memory_ptr: %08x, dummy_mem: %08x, slow_mem_ptr: %08x\n",
+		(word32)g_memory_ptr, (word32)g_dummy_memory1_ptr,
+		(word32)g_slow_memory_ptr);
+	printf("g_rom_fc_ff_ptr: %08x\n", (word32)g_rom_fc_ff_ptr);
 
 	printf("Showing bank_info array for %02x\n", bnk);
 	for(i = 0; i < 256; i++) {
@@ -1086,13 +1131,17 @@ void
 show_addr(byte *ptr)
 {
 
-	if(ptr >= memory && ptr < &memory[MEM_SIZE]) {
-		printf("%08x--memory[%06x]", (word32)ptr, ptr - memory);
-	} else if(ptr >= rom_fc_ff && ptr < &rom_fc_ff[256*1024]) {
-		printf("%08x--rom_fc_ff[%06x]", (word32)ptr, ptr - rom_fc_ff);
-	} else if(ptr >= slow_memory && ptr < &slow_memory[128*1024]) {
+	if(ptr >= g_memory_ptr && ptr < &g_memory_ptr[MEM_SIZE]) {
+		printf("%08x--memory[%06x]", (word32)ptr, ptr - g_memory_ptr);
+	} else if(ptr >= g_rom_fc_ff_ptr && ptr < &g_rom_fc_ff_ptr[256*1024]) {
+		printf("%08x--rom_fc_ff[%06x]", (word32)ptr,
+							ptr - g_rom_fc_ff_ptr);
+	} else if(ptr >= g_slow_memory_ptr && ptr < &g_slow_memory_ptr[128*1024]) {
 		printf("%08x--slow_memory[%06x]", (word32)ptr,
-							ptr - slow_memory);
+						ptr - g_slow_memory_ptr);
+	} else if(ptr >=g_dummy_memory1_ptr && ptr < &g_dummy_memory1_ptr[256]){
+		printf("%08x--dummy_memory[%06x]", (word32)ptr,
+						ptr - g_dummy_memory1_ptr);
 	} else {
 		printf("%08x--unknown", (word32)ptr);
 	}
@@ -1548,24 +1597,24 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		/* c100 - c6ff */
 		slot = ((loc >> 8) & 7);
 		if(INTCX || (int_crom[slot] == 0)) {
-			return(rom_fc_ff[0x3c000 + (loc & 0xfff)]);
+			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
 		return (dummy++) & 0xff;
 		UNIMPL_READ;
 	case 7:
 		/* c700 */
 		if(INTCX || (int_crom[7] == 0)) {
-			return(rom_fc_ff[0x3c000 + (loc & 0xfff)]);
+			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
-		return rom_fc_ff[0x3c500 + (loc & 0xff)];
+		return g_rom_fc_ff_ptr[0x3c500 + (loc & 0xff)];
 	case 8: case 9: case 0xa: case 0xb: case 0xc: case 0xd: case 0xe:
 		if(INTCX || (int_crom[3] == 0)) {
-			return(rom_fc_ff[0x3c000 + (loc & 0xfff)]);
+			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
 		UNIMPL_READ;
 	case 0xf:
 		if(INTCX || (int_crom[3] == 0)) {
-			return(rom_fc_ff[0x3c000 + (loc & 0xfff)]);
+			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
 		UNIMPL_READ;
 	}
@@ -2211,7 +2260,7 @@ get_slow_mem(word32 loc, int duff_cycles)
 		}
 	}
 
-	val = slow_memory[loc];
+	val = g_slow_memory_ptr[loc];
 
 	printf("get_slow_mem: %06x = %02x\n", loc, val);
 	set_halt(1);
@@ -2237,7 +2286,7 @@ set_slow_mem(word32 loc, int val, int duff_cycles)
 		}
 	}
 
-	if(slow_memory[loc] != val) {
+	if(g_slow_memory_ptr[loc] != val) {
 		or_pos = (loc >> SHIFT_PER_CHANGE) & 0x1f;
 		or_val = DEP1(1, or_pos, 0);
 		if((loc >> CHANGE_SHIFT) >= SLOW_MEM_CH_SIZE || loc < 0) {
@@ -2248,7 +2297,7 @@ set_slow_mem(word32 loc, int val, int duff_cycles)
 	}
 
 /* doesn't shadow text/hires graphics properly! */
-	slow_memory[loc] = val;
+	g_slow_memory_ptr[loc] = val;
 
 	return val;
 }
