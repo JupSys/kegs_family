@@ -1,4 +1,31 @@
 
+Changes in KEGS v0.70 since v0.60 (11/18/02)
+- New buttons: Middle button is enter-debugger, and right button changes speed
+- New function key mapping (see README.kegs)
+- Mac OS X port
+- Win32 port
+- Centralized much of what had been "xdriver.c" code into video.c, to move
+	true platform-specific stuff into the various *driver.c codes.
+	Kimage struct tracks video display buffers in a dev-independent way.
+	From video.c, the calls to the platform code start with "x_" mostly.
+	Code in video.c cleaned up somewhat.
+	Borders are now always in native buffer format, while text/hires/
+	and superhires are in 8-bit buffers and translated to native later.
+- Mac and Windows sound are all done in one process--no child sound process.
+- Revamped key press handling and mouse clicks--all is now handled in
+	adb.c for a consistent user interface.  Now KEGS implements the
+	same function keys on all platforms.  See README.kegs for fn key maps.
+- I copied the debugger help from Frederic Devernay's KEGS-SDL port.
+- Fixed an old IWM bug causing bad nibblization due to using uninit vars.
+- Gilles Tschopp workaround to use corrupted 2IMG files (from KEGS-OSX).
+- Gilles Tschopp provided code to zero //gs memory at startup (from KEGS-OSX)
+- Simple code to try to use Mac Diskcopy format disks
+- Ignore writes to 0xc0a8
+- Search in $HOME and the launch directory (for mac) for kegs_conf/ROM
+- Remove font65.sim file by integrating it into kegsfont.h.
+- "-bw" option forces black and white hires mode.
+
+
 Changes in KEGS v0.60 since v0.59 (10/03/00)
 - The 16-bit colors were still wrong due to another coding error.  It would
 	be much easier to get this right if I had a 16-bit color display...
