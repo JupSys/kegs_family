@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.86 99/09/06 18:06:18 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.87 99/10/17 23:22:51 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -93,13 +93,15 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.86 99/09/06 18:06:18
 #define ENGINE_REG_DIRECT	0x24
 #define ENGINE_REG_PSR		0x28
 
-#define LOG_PC_DBANK_KPC	0x00
-#define LOG_PC_INSTR		0x04
-#define LOG_PC_PSR_ACC		0x08
-#define LOG_PC_XREG_YREG	0x0c
-#define LOG_PC_STACK_DIRECT	0x10
+#define LOG_PC_DCYCS		0x00
+#define LOG_PC_DBANK_KPC	0x08
+#define LOG_PC_INSTR		0x0c
+#define LOG_PC_PSR_ACC		0x10
+#define LOG_PC_XREG_YREG	0x14
+#define LOG_PC_STACK_DIRECT	0x18
+#define LOG_PC_PAD		0x1c
 
-#define LOG_PC_SIZE		0x14
+#define LOG_PC_SIZE		0x20
 
 
 #define FPLUS_PLUS_1		0x00

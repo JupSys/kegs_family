@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.207 99/09/18 11:35:41 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.209 99/10/19 00:37:52 kentd Exp $";
 
 #include "defc.h"
 
@@ -1344,6 +1344,7 @@ io_read(word32 loc, double *cyc_ptr)
 			return 0;
 		case 0x42: /* 0xc042 */
 		case 0x43: /* 0xc043 */
+			return 0;
 		case 0x44: /* 0xc044 */
 		case 0x48: /* 0xc048 */
 		case 0x49: /* 0xc049 */
@@ -1912,8 +1913,11 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			g_slot_motor_detect = (val & 0xf);
 
 			power_on_clear = (val >> 6) & 1;
-			if((val & 0x70) != 0) {
+			if((val & 0x60) != 0) {
 				halt_printf("c036: %2x\n", val);
+			}
+			if((val & 0x10) != 0) {
+				printf("c036: %2x\n", val);
 			}
 			return;
 		case 0x37: /* 0xc037 */
@@ -1988,9 +1992,10 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x48: /* c048 */
 			/* diversitune writes this--ignore it */
 			return;
-		case 0x40: /* c040 */
 		case 0x42: /* c042 */
 		case 0x43: /* c043 */
+			return;
+		case 0x40: /* c040 */
 		case 0x44: /* c044 */
 		case 0x45: /* c045 */
 		case 0x49: /* c049 */

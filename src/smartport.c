@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.21 99/09/06 20:50:50 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.22 99/10/13 00:32:17 kentd Exp $";
 
 #include "defc.h"
 
@@ -880,11 +880,10 @@ do_format_c7(int unit_num)
 	total = image_size;
 
 	while(sum < total) {
-		max = MIN(0x2000, total-sum);
+		max = MIN(0x1000, total-sum);
 		len = write(fd, &local_buf[0], max);
 		if(len != max) {
-			halt_printf("write returned %08x bytes, errno: %d\n",
-				len, errno);
+			halt_printf("write ret %08x, errno:%d\n", len, errno);
 			smartport_error();
 			return 0x27;
 		}

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.36 99/09/06 20:47:54 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.37 99/10/17 23:24:03 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -71,6 +71,7 @@ int bogus[] = {
 			(neg << 23) + ((!zero) << 17);			\
 		tmp_pc_ptr->xreg_yreg = (xreg << 16) + yreg;		\
 		tmp_pc_ptr->stack_direct = (stack << 16) + direct;	\
+		tmp_pc_ptr->dcycs = fcycles + g_last_vbl_dcycs - fplus_2; \
 		if(log_pc_ptr >= log_pc_end_ptr) {			\
 			log_pc_ptr = log_pc_start_ptr;			\
 		}

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.73 99/09/06 20:48:53 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.74 99/10/17 23:23:18 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -78,11 +78,13 @@ void U_STACK_TRACE();
 #endif
 
 STRUCT(Pc_log) {
+	double	dcycs;
 	word32	dbank_kpc;
 	word32	instr;
 	word32	psr_acc;
 	word32	xreg_yreg;
 	word32	stack_direct;
+	word32	pad;
 };
 
 STRUCT(Event) {

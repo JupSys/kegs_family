@@ -15,7 +15,7 @@
 	.data
 	.export rcsdif_defs_h,data
 rcsdif_defs_h
-	.stringz "@(#)$Header: defs.h,v 1.19 99/09/13 21:39:42 kentd Exp $"
+	.stringz "@(#)$Header: defs.h,v 1.20 99/10/17 23:23:02 kentd Exp $"
 	.code
 #endif
 
@@ -56,11 +56,11 @@ fr_plus_2	.reg	%fr14
 fr_plus_3	.reg	%fr15
 fr_plus_x_m1	.reg	%fr16
 fcycles_stop	.reg	%fr17
+fcycles_last_dcycs .reg	%fr18
 
 ftmp1		.reg	%fr4
 ftmp2		.reg	%fr5
 fscr1		.reg	%fr6
 
 #define LDC(val,reg) ldil L%val,reg ! ldo R%val(reg),reg
-
 

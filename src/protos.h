@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.131 99/09/06 20:49:32 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.132 99/10/13 00:32:09 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -306,7 +306,7 @@ void take_irq(int is_it_brk);
 void show_dtime_array(void);
 void update_60hz(double dcycs, double dtime_now);
 void do_vbl_int(void);
-void do_scan_int(void);
+void do_scan_int(double dcycs, int line);
 void check_scan_line_int(double dcycs, int cur_video_line);
 void check_for_new_scan_int(double dcycs);
 void init_reg(void);

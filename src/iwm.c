@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.93 99/09/06 20:49:09 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.94 99/10/19 00:12:58 kentd Exp $";
 
 #include "defc.h"
 
@@ -19,7 +19,6 @@ extern int Verbose;
 extern int g_vbl_count;
 extern int speed_fast;
 extern word32 g_slot_motor_detect;
-
 
 #define NIB_LEN_525	0x1900		/* 51072 bits per track */
 #define NIBS_FROM_ADDR_TO_DATA		20
@@ -306,6 +305,7 @@ iwm_vbl_update()
 	struct stat stat_buf;
 	Disk	*dsk;
 	time_t	mtime;
+	int	motor_on;
 	int	ret;
 	int	i;
 
@@ -323,7 +323,12 @@ iwm_vbl_update()
 		return;
 	}
 
-	if(iwm.motor_on == 0 || iwm.motor_off) {
+	motor_on = iwm.motor_on;
+	if(g_apple35_sel) {
+		motor_on = iwm.motor_on35;
+	}
+
+	if(motor_on == 0 || iwm.motor_off) {
 		/* Disk not spinning, see if any dirty tracks to flush */
 		/*  out to Unix */
 		for(i = 0; i < 2; i++) {
@@ -620,10 +625,6 @@ iwm_read_status35(double dcycs)
 			iwm_printf("read disk in place, num_tracks: %d\n",
 				dsk->num_tracks);
 			tmp = (dsk->num_tracks <= 0);
-			if(dsk->just_ejected) {
-				tmp = 1;
-				dsk->just_ejected--;
-			}
 			return tmp;
 			break;
 		case 0x03:	/* upper head activate */
@@ -2377,6 +2378,7 @@ maybe_parse_disk_conf_file()
 	int	i;
 
 	reparse_delay = g_reparse_delay;
+
 	if(reparse_delay < 0) {
 		return;
 	}
@@ -2840,9 +2842,14 @@ eject_if_untouched(Disk *dsk)
 void
 eject_disk(Disk *dsk)
 {
+	int	motor_on;
 	int	i;
 
-	if(iwm.motor_on) {
+	motor_on = iwm.motor_on;
+	if(g_apple35_sel) {
+		motor_on = iwm.motor_on35;
+	}
+	if(motor_on) {
 		halt_printf("Try eject dsk:%s, but motor_on!\n", dsk->name_ptr);
 	}
 
@@ -2971,4 +2978,5 @@ eject_disk_by_num(int slot, int drive)
 
 	/* and make sure it gets reparsed */
 	g_reparse_delay = 0;
+	g_iwm_vbl_count = 0;
 }

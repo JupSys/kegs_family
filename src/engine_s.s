@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.145 99/09/13 22:11:56 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.146 99/10/17 23:23:44 kentd Exp $"
 
 	.code
 
@@ -213,6 +213,7 @@ enter_asm
 	fstds,ma fr_plus_x_m1,8(scratch2)
 	fstds,ma fcycles_stop,8(scratch2)
 	fcpy,dbl 0,fr_plus_2
+	fstds,ma fcycles_last_dcycs,8(scratch2)
 	ldil	l%g_cur_dcycs,scratch2
 
 	ldil	l%g_last_vbl_dcycs,scratch3
@@ -222,11 +223,11 @@ enter_asm
 	ldo	r%g_last_vbl_dcycs(scratch3),scratch3
 	fldds	0(scratch2),ftmp1
 	ldil	l%page_info_rd_wr,page_info_ptr
-	fldds	0(scratch3),ftmp2
+	fldds	0(scratch3),fcycles_last_dcycs
 	fcpy,dbl 0,fcycles_stop
 	ldo	r%page_info_rd_wr(page_info_ptr),page_info_ptr
 	bv	0(scratch1)
-	fsub,dbl ftmp1,ftmp2,fcycles
+	fsub,dbl ftmp1,fcycles_last_dcycs,fcycles
 
 
 	.export leave_asm,data
@@ -240,6 +241,7 @@ leave_asm
 	fldds,ma 8(scratch2),fr_plus_3
 	fldds,ma 8(scratch2),fr_plus_x_m1
 	fldds,ma 8(scratch2),fcycles_stop
+	fldds,ma 8(scratch2),fcycles_last_dcycs
 
 	bv	(link)
 	ldwm	-STACK_ENGINE_SIZE(sp),page_info_ptr
@@ -1215,7 +1217,7 @@ get_xreg_from_mem16
 enter_engine
 ; load up regs with struct vals
 	.proc
-	.callinfo frame=STACK_ENGINE_SIZE,caller,save_rp,entry_gr=18,entry_fr=21
+	.callinfo frame=STACK_ENGINE_SIZE,caller,save_rp,entry_gr=18,entry_fr=19
 	.enter
 
 	ldw	ENGINE_FPLUS_PTR(arg0),scratch1		;fplus ptr
@@ -1227,8 +1229,11 @@ enter_engine
 	fldds	FPLUS_PLUS_1(scratch1),fr_plus_1
 	ldo	FPLUS_PLUS_3(scratch1),ret0
 	fldds	FPLUS_PLUS_2(scratch1),fr_plus_2
+	ldil	l%g_last_vbl_dcycs,ret1
 	fldds	FPLUS_PLUS_3-FPLUS_PLUS_3(ret0),fr_plus_3
+	ldo	r%g_last_vbl_dcycs(ret1),ret1
 	fldds	FPLUS_PLUS_X_M1-FPLUS_PLUS_3(ret0),fr_plus_x_m1
+	fldds	0(ret1),fcycles_last_dcycs
 	ldil	l%table8,ret0
 	ldw	ENGINE_REG_XREG(arg0),xreg
 	ldil	l%table16,inst_tab_ptr
@@ -1425,42 +1430,42 @@ no_debug_toolbox
 log_pc_asm
 ; save regs into log_pc_ptr, wrap around to log_pc_start_ptr if
 ;  log_pc_ptr gets > log_pc_end_ptr
-	stw	scratch1,STACK_SAVE_DISPATCH_SCRATCH1(sp)
 	ldb	1(scratch1),scratch3
 	dep	neg,24,1,psr				;set neg
-	ldb	2(scratch1),ret0
+	ldb	2(scratch1),scratch2
 	ldil	l%log_pc_ptr,scratch4
-	ldb	3(scratch1),scratch2
-	dep	ret0,23,8,scratch3
+	ldb	3(scratch1),ret0
+	fsub,dbl fcycles_last_dcycs,fr_plus_2,ftmp1
+	dep	scratch2,23,8,scratch3
 	ldo	r%log_pc_ptr(scratch4),scratch4
 	dep	instr,7,8,scratch3
-	dep	scratch2,15,8,scratch3
 	ldw	0(scratch4),scratch2
+	dep	ret0,15,8,scratch3
+	copy	kpc,ret1
 	depi	0,30,1,psr				;zero
-	copy	kpc,scratch1
 	comiclr,<> 0,zero,0
 	depi	1,30,1,psr				;set zero
-	dep	dbank,7,8,scratch1
 	stw	scratch3,LOG_PC_INSTR(scratch2)
+	dep	dbank,7,8,ret1
 	copy	acc,scratch3
 	dep	psr,15,16,scratch3
-	stw	scratch1,LOG_PC_DBANK_KPC(scratch2)
-	copy	yreg,scratch1
+	fadd,dbl fcycles,ftmp1,ftmp1
+	stw	ret1,LOG_PC_DBANK_KPC(scratch2)
+	copy	yreg,ret1
 	stw	scratch3,LOG_PC_PSR_ACC(scratch2)
+	dep	xreg,15,16,ret1
 	copy	direct,scratch3
-	dep	xreg,15,16,scratch1
-	stw	scratch1,LOG_PC_XREG_YREG(scratch2)
+	fstds	ftmp1,LOG_PC_DCYCS(scratch2)
+	ldw	rs%log_pc_end_ptr-log_pc_ptr(scratch4),ret0
 	dep	stack,15,16,scratch3
-	ldw	rs%log_pc_end_ptr-log_pc_ptr(scratch4),scratch1
+	stw	ret1,LOG_PC_XREG_YREG(scratch2)
+	addi	LOG_PC_SIZE,scratch2,r31
 	stw	scratch3,LOG_PC_STACK_DIRECT(scratch2)
-
-	addi	LOG_PC_SIZE,scratch2,scratch2
-	comclr,< scratch2,scratch1,0
+	comclr,< r31,ret0,0
 ; reload log_pc with log_pc_start_ptr
-	ldw	rs%log_pc_start_ptr-log_pc_ptr(scratch4),scratch2
-	ldw	STACK_SAVE_DISPATCH_SCRATCH1(sp),scratch1
+	ldw	rs%log_pc_start_ptr-log_pc_ptr(scratch4),r31
 	bv	0(link)
-	stw	scratch2,0(scratch4)
+	stw	r31,0(scratch4)
 #endif
 
 

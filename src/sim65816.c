@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.294 99/09/13 22:12:36 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.296 99/10/17 23:22:39 kentd Exp $";
 
 #include <math.h>
 
@@ -161,16 +161,18 @@ Pc_log	*log_pc_end_ptr = &(pc_log_array[PC_LOG_LEN]);
 void
 show_pc_log()
 {
-	int	num;
-	int	i;
-	int	accsize, xsize;
+	FILE *pcfile;
+	double	dcycs;
+	double	start_dcycs;
 	word32	instr;
 	word32	psr;
 	word32	acc, xreg, yreg;
 	word32	stack, direct;
 	word32	dbank;
 	word32	kpc;
-	FILE *pcfile;
+	int	accsize, xsize;
+	int	num;
+	int	i;
 
 	pcfile = fopen("pc_log_out", "wt");
 	if(pcfile == 0) {
@@ -180,6 +182,8 @@ show_pc_log()
 	fprintf(pcfile, "current pc_log_ptr: %08x, start: %08x, end: %08x\n",
 		(word32)log_pc_ptr, (word32)log_pc_start_ptr,
 		(word32)log_pc_end_ptr);
+
+	start_dcycs = log_pc_ptr->dcycs;
 
 	for(i = 0; i < PC_LOG_LEN; i++) {
 		dbank = (log_pc_ptr->dbank_kpc >> 24) & 0xff;
@@ -191,6 +195,7 @@ show_pc_log()
 		yreg = log_pc_ptr->xreg_yreg & 0xffff;;
 		stack = (log_pc_ptr->stack_direct >> 16) & 0xffff;;
 		direct = log_pc_ptr->stack_direct & 0xffff;;
+		dcycs = log_pc_ptr->dcycs;
 
 		num = log_pc_ptr - log_pc_start_ptr;
 
@@ -204,8 +209,9 @@ show_pc_log()
 		}
 
 		fprintf(pcfile, "%04x: A:%04x X:%04x Y:%04x P:%03x "
-			"S:%04x D:%04x B:%02x ", i,
-			acc, xreg, yreg, psr, stack, direct, dbank);
+			"S:%04x D:%04x B:%02x %9.2f ", i,
+			acc, xreg, yreg, psr, stack, direct, dbank,
+			(dcycs-start_dcycs));
 
 		do_dis(pcfile, kpc, accsize, xsize, 1, instr);
 		log_pc_ptr++;
@@ -889,6 +895,7 @@ add_event_entry(double dcycs, int type)
 {
 	Event	*this_event;
 	Event	*ptr, *prev_ptr;
+	int	tmp_type;
 	int	done;
 
 	this_event = g_event_free.next;
@@ -900,9 +907,10 @@ add_event_entry(double dcycs, int type)
 	g_event_free.next = this_event->next;
 
 	this_event->type = type;
-	
+
+	tmp_type = type & 0xff;
 	if((dcycs < 0.0) || (dcycs > (g_cur_dcycs + 50*1000*1000.0)) ||
-			((dcycs < g_cur_dcycs) && (type != EV_SCAN_INT))) {
+			((dcycs < g_cur_dcycs) && (tmp_type != EV_SCAN_INT))) {
 		halt_printf("add_event: dcycs: %f, type:%05x, cur_dcycs: %f!\n",
 			dcycs, type, g_cur_dcycs);
 		dcycs = g_cur_dcycs + 1000.0;
@@ -1244,7 +1252,7 @@ run_prog()
 			case EV_SCAN_INT:
 				g_engine_scan_int++;
 				irq_printf("type: scan int\n");
-				do_scan_int();
+				do_scan_int(dcycs, type >> 8);
 				break;
 			case EV_DOC_INT:
 				g_engine_doc_int++;
@@ -1573,7 +1581,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.54");
+		update_status_line(6, "KEGS v0.55");
 
 		g_status_refresh_needed = 1;
 
@@ -1740,14 +1748,17 @@ do_vbl_int()
 
 
 void
-do_scan_int()
+do_scan_int(double dcycs, int line)
 {
 	g_scan_int_events = 0;
 
 	if(c023_scan_int) {
-		halt_printf("took scan int, but c023_scan_int: %d\n",
-							c023_scan_int);
-	} else {
+		halt_printf("c023_scan_int and another on line %03x\n", line);
+	}
+
+	/* make sure scan int is still enabled for this line */
+	if(g_slow_memory_ptr[0x19d00 + line] & 0x40) {
+		/* valid interrupt, do it */
 		c023_scan_int = 1;
 		c023_vgc_int = 1;
 		if(c023_scan_en && !c023_scan_int_irq_pending) {
@@ -1757,6 +1768,10 @@ do_scan_int()
 				g_irq_pending);
 		}
 		HALT_ON(HALT_ON_SCAN_INT, "In do_scan_int\n");
+	} else {
+		/* scan int bit cleared on scan line control byte */
+		/* look for next line, if any */
+		check_scan_line_int(dcycs, line+1);
 	}
 }
 
@@ -1797,7 +1812,8 @@ check_scan_line_int(double dcycs, int cur_video_line)
 		if(g_slow_memory_ptr[0x19d00+i] & 0x40) {
 			irq_printf("Adding scan_int for line %d\n", i);
 			delay = (DCYCS_IN_16MS/262.0) * ((double)line);
-			add_event_entry(g_last_vbl_dcycs + delay, EV_SCAN_INT);
+			add_event_entry(g_last_vbl_dcycs + delay, EV_SCAN_INT +
+					(line << 8));
 			g_scan_int_events = 1;
 			check_for_one_event_type(EV_SCAN_INT);
 			break;

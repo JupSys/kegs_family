@@ -1,4 +1,14 @@
 
+Changes in KEGS v0.55 since v0.54 (10/19/99)
+- In LOG_PC debug aid, add cycles to the trace
+- Fix MEGADEMO bug where 3.5" disks weren't properly ejected.  Needed to
+	look at iwm.motor_on35 not iwm.motor_on.
+- Temp fix for MEGADEMO to not halt if shadow-in-all-banks is on in $c036.
+- Another MEGADEMO fix to not take a scan-line int if the SCB was cleared
+	right before the raster got to this line.
+- Fix bug in smartport.c that was causing core dumps if you tried to init
+	a disk is s7dx.
+
 Changes in KEGS v0.54 since v0.53 (10/10/99)
 - Add support for Out Of This World's direct reading of ADB RAM loc 0xb to
 	get key status.  This lets shift/control work in OOTW.
