@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.44 2002-11-19 22:17:03-08 kadickey Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.47 2003-10-20 21:08:00-04 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -47,7 +47,7 @@ extern Pc_log *log_pc_start_ptr;
 extern Pc_log *log_pc_end_ptr;
 
 int size_tab[] = {
-#include "size_c"
+#include "size_c.h"
 };
 
 int bogus[] = {
@@ -712,7 +712,14 @@ get_itimer()
 
 	return ret;
 #else
+# if defined(__POWERPC__) && defined(__GNUC__)
+	register word32 ret;
+
+	asm volatile ("mftb %0" : "=r"(ret));
+	return ret;
+# else
 	return 0;
+# endif
 #endif
 }
 
@@ -881,6 +888,7 @@ enter_engine(Engine_reg *engine_ptr)
 	fplus_x_m1 = fplus_ptr->plus_x_minus_1;
 
 	g_ret1 = 0;
+	g_ret2 = 0;
 
 recalc_accsize:
 	if(psr & 0x20) {
@@ -905,7 +913,7 @@ recalc_accsize:
 #include "defs_instr.h"
 				* 2;
 				break;
-#include "8inst_c"
+#include "8inst_c.h"
 				break;
 			}
 		}
@@ -924,7 +932,7 @@ recalc_accsize:
 #include "defs_instr.h"
 				* 2;
 				break;
-#include "16inst_c"
+#include "16inst_c.h"
 				break;
 			}
 		}
@@ -946,7 +954,7 @@ finish:
 
 	engine_ptr->psr = psr;
 
-	return (g_ret1 << 28);
+	return (g_ret1 << 28) + g_ret2;
 }
 
 

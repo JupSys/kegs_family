@@ -1,8 +1,9 @@
-# $Id: release_makefile_base,v 1.9 2002/11/19 08:23:55 kadickey Exp $
+# $Id: release_makefile_base,v 1.12 2003/11/03 06:05:53 kentd Exp $
 
-OBJECTS1 = adb.o clock.o dis.o engine_c.o scc.o iwm.o joystick_driver.o \
-	moremem.o paddles.o sim65816.o smartport.o sound.o sound_driver.o \
-	video.o
+OBJECTS1 = adb.o clock.o config.o dis.o engine_c.o scc.o iwm.o \
+	joystick_driver.o moremem.o paddles.o sim65816.o smartport.o \
+	sound.o sound_driver.o video.o scc_socket_driver.o scc_windriver.o \
+	scc_macdriver.o
 
 include vars
 
@@ -50,34 +51,17 @@ kegswin.exe: $(OBJECTS) compile_time.o
 	mv $(NAME)$(SUFFIX) ..
 
 
-8inst_s: instable.h
-	$(PERL) make_inst s 8 instable.h > 8inst_s
+8inst_c.h: instable.h
+	$(PERL) make_inst c 8 instable.h > 8inst_c.h
 
-16inst_s: instable.h
-	$(PERL) make_inst s 16 instable.h > 16inst_s
+16inst_c.h: instable.h
+	$(PERL) make_inst c 16 instable.h > 16inst_c.h
 
-8inst_c: instable.h
-	$(PERL) make_inst c 8 instable.h > 8inst_c
-
-16inst_c: instable.h
-	$(PERL) make_inst c 16 instable.h > 16inst_c
-
-8size: size_tab.h
-	$(PERL) make_size 8 size_tab.h > 8size
-
-16size: size_tab.h
-	$(PERL) make_size 16 size_tab.h > 16size
-
-size_c: size_tab.h
-	$(PERL) make_size c size_tab.h > size_c
-
-size_s: size_tab.h
-	$(PERL) make_size s size_tab.h > size_s
+size_c.h: size_tab.h
+	$(PERL) make_size c size_tab.h > size_c.h
 
 
-engine_s.o: 8inst_s 8size 16inst_s 16size
-
-engine_c.o: 8inst_c 16inst_c
+engine_c.o: 8inst_c.h 16inst_c.h size_c.h
 
 .s.o:
 	$(AS) -c $(OPTS) -I. $*.s
@@ -86,10 +70,10 @@ engine_c.o: 8inst_c 16inst_c
 	$(CC) $(CCOPTS) $(XOPTS) -c $(OPTS) -I. $*.c
 
 partls: partls.c
-	cc $(CCOPTS) -o partls partls.c
+	cc $(CCOPTS) $(XOPTS) $(OPTS) -o partls partls.c
 
 to_pro: prodos.h prodos_protos.h to_pro.c
-	cc $(CCOPTS) -o to_pro to_pro.c
+	cc $(CCOPTS) $(XOPTS) $(OPTS) -o to_pro to_pro.c
 
 
 compile_time.o: $(OBJECTS)
@@ -97,11 +81,15 @@ compile_time.o: $(OBJECTS)
 
 # dependency stuff
 adb.o: adb.c adb.h defc.h defcomm.h iwm.h protos.h
+engine_c.o: engine_c.c defc.h defcomm.h iwm.h protos.h protos_engine_c.h size_c.h op_routs.h defs_instr.h 8inst_c.h 16inst_c.h
 clock.o: clock.c defc.h defcomm.h iwm.h protos.h
 compile_time.o: compile_time.c
+config.o: config.c defc.h defcomm.h iwm.h protos.h config.h
 dis.o: dis.c defc.h defcomm.h iwm.h protos.h disas.h
-engine_c.o: engine_c.c defc.h defcomm.h iwm.h protos.h protos_engine_c.h size_c op_routs.h defs_instr.h 8inst_c 16inst_c
-scc.o: scc.c defc.h defcomm.h iwm.h protos.h scc.h scc_driver.h
+scc.o: scc.c defc.h defcomm.h iwm.h protos.h scc.h
+scc_socket_driver.o: scc_socket_driver.c defc.h defcomm.h iwm.h protos.h scc.h
+scc_windriver.o: scc_windriver.c defc.h defcomm.h iwm.h protos.h scc.h
+scc_macdriver.o: scc_macdriver.c defc.h defcomm.h iwm.h protos.h scc.h
 iwm.o: iwm.c defc.h defcomm.h iwm.h protos.h iwm_35_525.h
 joystick_driver.o: joystick_driver.c defc.h defcomm.h iwm.h protos.h
 moremem.o: moremem.c defc.h defcomm.h iwm.h protos.h
@@ -110,8 +98,8 @@ sim65816.o: sim65816.c defc.h defcomm.h iwm.h protos.h
 smartport.o: smartport.c defc.h defcomm.h iwm.h protos.h
 sound.o: sound.c defc.h defcomm.h iwm.h protos.h sound.h
 sound_driver.o: sound_driver.c defc.h defcomm.h iwm.h protos.h sound.h
-video.o: video.c defc.h defcomm.h iwm.h protos.h superhires.h
-windriver.o: windriver.c defc.h defcomm.h iwm.h protos.h protos_windriver.h winresource.h
-win32snd_driver.o: win32snd_driver.c defc.h defcomm.h iwm.h protos.h sound.h
+video.o: video.c defc.h defcomm.h iwm.h protos.h superhires.h kegsfont.h
 macdriver.o: macdriver.c defc.h defcomm.h iwm.h protos.h protos_macdriver.h
 macsnd_driver.o: macsnd_driver.c defc.h defcomm.h iwm.h protos.h sound.h
+windriver.o: windriver.c defc.h defcomm.h iwm.h protos.h protos_windriver.h winresource.h
+win32snd_driver.o: win32snd_driver.c defc.h defcomm.h iwm.h protos.h sound.h

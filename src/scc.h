@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_scc_h[] = "@(#)$KmKId: scc.h,v 1.7 2002-11-19 00:10:38-08 kadickey Exp $";
+const char rcsid_scc_h[] = "@(#)$KmKId: scc.h,v 1.11 2003-11-03 01:49:29-05 kentd Exp $";
 #endif
 
 #ifdef _WIN32
@@ -19,6 +19,11 @@ const char rcsid_scc_h[] = "@(#)$KmKId: scc.h,v 1.7 2002-11-19 00:10:38-08 kadic
 # include <netinet/in.h>
 #endif
 
+#if defined(HPUX) || defined(__linux__) || defined(SOLARIS) || defined(MAC)
+# define SCC_SOCKETS
+#endif
+
+
 /* my scc port 0 == channel A, port 1 = channel B */
 
 #define	SCC_INBUF_SIZE		4096		/* must be a power of 2 */
@@ -26,11 +31,14 @@ const char rcsid_scc_h[] = "@(#)$KmKId: scc.h,v 1.7 2002-11-19 00:10:38-08 kadic
 
 STRUCT(Scc) {
 	int	port;
-	int	socket_state;
+	int	state;
 	int	accfd;
 	int	rdwrfd;
-	struct	sockaddr_in client_addr;
-	int	client_len;
+	void	*host_handle;
+	void	*host_handle2;
+	int	host_aux1;
+	int	read_called_this_vbl;
+	int	write_called_this_vbl;
 
 	int	mode;
 	int	reg_ptr;
@@ -63,5 +71,8 @@ STRUCT(Scc) {
 	int	br_event_pending;
 	int	rx_event_pending;
 	int	tx_event_pending;
+
+	int	char_size;
+	int	baud_rate;
 };
 

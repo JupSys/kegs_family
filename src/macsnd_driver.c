@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_macsnd_driver_c[] = "@(#)$KmKId: macsnd_driver.c,v 1.3 2002-11-19 00:09:59-08 kadickey Exp $";
+const char rcsid_macsnd_driver_c[] = "@(#)$KmKId: macsnd_driver.c,v 1.4 2003-10-17 15:57:40-04 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"
@@ -115,9 +115,9 @@ child_sound_init_mac()
 {
 	OSStatus	err;
 
-	printf("In mac child\n");
+	mac_printf("In mac child\n");
 	fflush(stdout);
-	printf("pid: %d\n", getpid());
+	mac_printf("pid: %d\n", getpid());
 	fflush(stdout);
 
 	//return;
@@ -125,7 +125,7 @@ child_sound_init_mac()
 	//g_snd_channel_ptr = 0;
 	err = SndNewChannel(&g_snd_channel_ptr, sampledSynth, initStereo,
 			NewSndCallBackUPP(mac_snd_callback));
-	printf("SndNewChannel ret: %d\n", (int)err);
+	mac_printf("SndNewChannel ret: %d\n", (int)err);
 	fflush(stdout);
 
 	memset(&g_snd_hdr, 0, sizeof(g_snd_hdr));
@@ -140,7 +140,7 @@ child_sound_init_mac()
 
 	set_audio_rate(g_audio_rate);
 
-	printf("End of child_sound_init_mac\n");
+	mac_printf("End of child_sound_init_mac\n");
 	fflush(stdout);
 }
 
@@ -149,6 +149,6 @@ macsnd_init(word32 *shmaddr)
 {
 	g_macsnd_rebuf_cur = &g_macsnd_rebuf[0];
 	g_macsnd_rebuf_ptr = &g_macsnd_rebuf[0];
-	printf("macsnd_init called\n");
+	mac_printf("macsnd_init called\n");
 	child_sound_loop(-1, -1, shmaddr);
 }

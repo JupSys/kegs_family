@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.174 2002-11-20 16:39:35-08 kadickey Exp $";
+const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.176 2003-10-29 12:32:41-05 kentd Exp $";
 
 # if !defined(__CYGWIN__) && !defined(__POWERPC__)
 /* No shared memory on Cygwin */
@@ -115,7 +115,7 @@ Pixmap	g_cursor_mask;
 XColor	g_xcolor_black = { 0, 0x0000, 0x0000, 0x0000, DoRed|DoGreen|DoBlue, 0 };
 XColor	g_xcolor_white = { 0, 0xffff, 0xffff, 0xffff, DoRed|DoGreen|DoBlue, 0 };
 
-int g_depth_attempt_list[] = { 8, 15, 24, 16 };
+int g_depth_attempt_list[] = { 16, 24, 15, 8 };
 
 
 #define X_EVENT_LIST_ALL_WIN						\
@@ -1040,7 +1040,7 @@ check_input_events()
 	if(motion && g_warp_pointer) {
 		XWarpPointer(g_display, None, g_a2_win, 0, 0, 0, 0,
 			X_A2_WINDOW_WIDTH/2, X_A2_WINDOW_HEIGHT/2);
-		update_mouse(-1,-1,-1,-1);
+		update_mouse(X_A2_WINDOW_WIDTH/2, X_A2_WINDOW_HEIGHT/2, 0, 0);
 	}
 
 	if(refresh_needed) {

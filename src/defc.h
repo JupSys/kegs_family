@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.84 2002-11-20 16:38:56-08 kadickey Exp $";
+const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.91 2003-11-03 01:29:38-05 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -60,6 +60,7 @@ void U_STACK_TRACE();
 #ifndef _WIN32
 # include <unistd.h>
 # include <sys/ioctl.h>
+# include <sys/wait.h>
 #endif
 
 #include <stdio.h>
@@ -138,6 +139,34 @@ STRUCT(Page_info) {
 	Pg_info rd_wr;
 };
 
+STRUCT(Cfg_menu) {
+	const char *str;
+	void	*ptr;
+	const char *name_str;
+	void	*defptr;
+	int	cfgtype;
+};
+
+STRUCT(Cfg_dirent) {
+	char	*name;
+	int	is_dir;
+	int	size;
+	int	image_start;
+	int	part_num;
+};
+
+STRUCT(Cfg_listhdr) {
+	Cfg_dirent	*direntptr;
+	int	max;
+	int	last;
+	int	invalid;
+
+	int	curent;
+	int	topent;
+
+	int	num_to_show;
+};
+
 #ifdef __LP64__
 # define PTR2WORD(a)	((unsigned long)(a))
 #else
@@ -191,6 +220,7 @@ STRUCT(Page_info) {
 #define VERBOSE_SCC	0x080
 #define VERBOSE_TEST	0x100
 #define VERBOSE_VIDEO	0x200
+#define VERBOSE_MAC	0x400
 
 #ifdef NO_VERB
 # define DO_VERBOSE	0
@@ -208,6 +238,7 @@ STRUCT(Page_info) {
 #define scc_printf	if(DO_VERBOSE && (Verbose & VERBOSE_SCC)) printf
 #define test_printf	if(DO_VERBOSE && (Verbose & VERBOSE_TEST)) printf
 #define vid_printf	if(DO_VERBOSE && (Verbose & VERBOSE_VIDEO)) printf
+#define mac_printf	if(DO_VERBOSE && (Verbose & VERBOSE_MAC)) printf
 
 
 #define HALT_ON_SCAN_INT	0x001

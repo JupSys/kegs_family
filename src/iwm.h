@@ -9,28 +9,38 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.9 2002-11-19 00:10:38-08 kadickey Exp $";
+const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.13 2003-07-08 23:29:48-04 kentd Exp $";
 #endif
 
 #define MAX_TRACKS	(2*80)
 #define MAX_C7_DISKS	32
 
+#define NIB_LEN_525		0x1900		/* 51072 bits per track */
+#define NIBS_FROM_ADDR_TO_DATA	20
+
+#define DSK_TYPE_PRODOS		0
+#define DSK_TYPE_DOS33		1
+#define DSK_TYPE_NIB		2
+
 typedef struct _Disk Disk;
 
 STRUCT(Track) {
+	Disk	*dsk;
+	byte	*nib_area;
 	int	track_dirty;
 	int	overflow_size;
 	int	track_len;
 	int	unix_pos;
 	int	unix_len;
-	Disk	*dsk;
-	byte	*nib_area;
-	int	pad1;
 };
 
 struct _Disk {
-	int	fd;
+	double	dcycs_last_read;
 	char	*name_ptr;
+	char	*partition_name;
+	int	partition_num;
+	int	fd;
+	int	force_size;
 	int	image_start;
 	int	image_size;
 	int	smartport;
@@ -43,7 +53,6 @@ struct _Disk {
 	int	write_through_to_unix;
 	int	disk_dirty;
 	int	just_ejected;
-	double	dcycs_last_read;
 	int	last_phase;
 	int	nib_pos;
 	int	num_tracks;

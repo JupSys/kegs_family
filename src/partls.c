@@ -2,8 +2,7 @@
 #include "defc.h"
 #include <fcntl.h>
 #include <unistd.h>
-
-extern int errno;
+#include <errno.h>
 
 
 #define BUF_SIZE	65536

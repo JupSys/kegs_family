@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sound_driver_c[] = "@(#)$KmKId: sound_driver.c,v 1.13 2002-11-19 09:10:55-08 kadickey Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$KmKId: sound_driver.c,v 1.14 2003-10-17 15:07:55-04 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"
@@ -472,7 +472,7 @@ child_sound_init_linux()
 
 	g_audio_socket = open("/dev/dsp", O_WRONLY, 0);
 	if(g_audio_socket < 0) {
-		printf("open /dev/audio failed, ret: %d, errno:%d\n",
+		printf("open /dev/dsp failed, ret: %d, errno:%d\n",
 			g_audio_socket, errno);
 		exit(1);
 	}

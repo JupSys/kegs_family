@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.25 2002-11-19 00:09:59-08 kadickey Exp $";
+const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.28 2003-10-17 15:10:12-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -23,127 +23,6 @@ int g_cycs_in_io_read = 0;
 extern Engine_reg engine;
 
 extern Iwm iwm;
-
-#define MAX_BLOCK_SIZE		0x4000
-
-word32	part_blk_buf[MAX_BLOCK_SIZE];
-
-int
-get_fd_size(int fd)
-{
-	struct stat stat_buf;
-	int	ret;
-
-	ret = fstat(fd, &stat_buf);
-	if(ret != 0) {
-		fprintf(stderr,"fstat returned %d on fd %d, errno: %d\n",
-			ret, fd, errno);
-		exit(2);
-	}
-	return stat_buf.st_size;
-
-}
-
-void
-read_partition_block(int fd, void *buf, int blk, int blk_size)
-{
-	int	ret;
-
-	ret = lseek(fd, blk * blk_size, SEEK_SET);
-	if(ret != blk * blk_size) {
-		printf("lseek: %08x, wanted: %08x, errno: %d\n", ret,
-			blk * blk_size, errno);
-		exit(1);
-	}
-
-	ret = read(fd, (char *)buf, blk_size);
-	if(ret != blk_size) {
-		printf("ret: %08x, wanted %08x, errno: %d\n", ret, blk_size,
-			errno);
-		exit(1);
-	}
-}
-
-
-int
-find_partition_by_name(int fd, char *name, Disk *dsk)
-{
-	Driver_desc *driver_desc_ptr;
-	Part_map *part_map_ptr;
-	int	block_size;
-	int	map_blks;
-	int	cur_blk;
-	int	match_number;
-	word32	start;
-	word32	len;
-	word32	data_off;
-	word32	data_len;
-	word32	sig;
-
-	block_size = 512;
-
-	match_number = -1;
-	if(*name >= '0' && *name <= '9') {
-		/* find partition by number! */
-		match_number = atoi(name);
-	}
-
-	read_partition_block(fd, part_blk_buf, 0, block_size);
-
-	driver_desc_ptr = (Driver_desc *)part_blk_buf;
-	sig = GET_BE_WORD16(driver_desc_ptr->sig);
-	block_size = GET_BE_WORD16(driver_desc_ptr->blk_size);
-	if(block_size == 0) {
-		block_size = 512;
-	}
-	if(sig != 0x4552 || block_size < 0x200 || block_size > MAX_BLOCK_SIZE) {
-		printf("Partition error: No driver descriptor map found\n");
-		return -1;
-	}
-
-	map_blks = 1;
-	cur_blk = 0;
-	while(cur_blk < map_blks) {
-		read_partition_block(fd, part_blk_buf, cur_blk + 1, block_size);
-		part_map_ptr = (Part_map *)part_blk_buf;
-		sig = GET_BE_WORD16(part_map_ptr->sig);
-		if(cur_blk == 0) {
-			map_blks = MIN(100,
-				GET_BE_WORD32(part_map_ptr->map_blk_cnt));
-		}
-		if(sig != 0x504d) {
-			printf("Partition entry %d bad sig\n", cur_blk);
-			return -1;
-		}
-
-		if((strncmp(name, part_map_ptr->part_name, 32) == 0) ||
-						(cur_blk == match_number)) {
-			/* found it, check for consistency */
-			start = GET_BE_WORD32(part_map_ptr->phys_part_start);
-			len = GET_BE_WORD32(part_map_ptr->part_blk_cnt);
-			data_off = GET_BE_WORD32(part_map_ptr->data_start);
-			data_len = GET_BE_WORD32(part_map_ptr->data_cnt);
-			if(data_off + data_len > len) {
-				printf("Poorly formed entry\n");
-				return -1;
-			}
-
-			if(data_len < 10 || start < 1) {
-				printf("Poorly formed entry3\n");
-				return -1;
-			}
-
-			dsk->image_start = (start + data_off) * block_size;
-			dsk->image_size = (data_len) * block_size;
-
-			return 0;
-		}
-
-		cur_blk++;
-	}
-
-	return -1;
-}
 
 #define LEN_SMPT_LOG	16
 STRUCT(Smpt_log) {
@@ -405,12 +284,9 @@ do_c70d(word32 arg0)
 			engine.kpc = (rts_addr + 3 + ext) & 0xffff;
 
 			disk_printf("Just finished unit %d, stat 3\n", unit);
-			if(unit == 0 || unit > (g_highest_smartport_unit+1)) {
+			if(unit == 0 || unit > MAX_C7_DISKS) {
 				engine.acc |= 0x28;
 				engine.psr |= 1;
-				if(unit == 0 || unit > MAX_C7_DISKS) {
-					halt_printf("unit:%02x, stat 3\n",unit);
-				}
 			}
 			return;
 		}
@@ -687,11 +563,13 @@ do_read_c7(int unit_num, word32 buf, int blk)
 	image_size = iwm.smartport[unit_num].image_size;
 	if(fd < 0) {
 		printf("c7_fd == %d!\n", fd);
+#if 0
 		if(blk != 2 && blk != 0) {
 			/* don't print error if only reading directory */
 			smartport_error();
 			halt_printf("Read unit:%02x blk:%04x\n", unit_num, blk);
 		}
+#endif
 		return 0x2f;
 	}
 
@@ -720,7 +598,7 @@ do_read_c7(int unit_num, word32 buf, int blk)
 
 	g_io_amt += 0x200;
 
-	if(buf >= 0xfe0000) {
+	if(buf >= 0xfc0000) {
 		disk_printf("reading into ROM, just returning\n");
 		return 0;
 	}

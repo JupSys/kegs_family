@@ -44,7 +44,7 @@ In order to compile,
 
 1) cd into the src/ directory
 2) rm vars
-3) ln -s vars_win vars
+3) ln -s vars_win32 vars
 3) ./make_win
 
 

@@ -10,7 +10,7 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$KmKId: instable.h,v 1.97 2002-11-19 22:17:03-08 kadickey Exp $"
+	.stringz "@(#)$KmKId: instable.h,v 1.98 2003-01-23 01:11:55-05 kentd Exp $"
 # endif
 #endif
 
@@ -760,10 +760,14 @@ inst41_SYM		/*  EOR (Dloc,X) */
 inst42_SYM		/*  WDM */
 #ifdef ASM
 	ldb	1(scratch1),ret0
+	CYCLES_PLUS_5
+	CYCLES_PLUS_2
+	INC_KPC_2
 	b	dispatch_done
 	depi	RET_WDM,3,4,ret0
 #else
 	GET_1BYTE_ARG;
+	INC_KPC_2;
 	CYCLES_PLUS_5;
 	CYCLES_PLUS_2;
 	FINISH(RET_WDM, arg & 0xff);

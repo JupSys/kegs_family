@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_clock_c[] = "@(#)$KmKId: clock.c,v 1.24 2002-11-19 00:12:23-08 kadickey Exp $";
+const char rcsid_clock_c[] = "@(#)$KmKId: clock.c,v 1.29 2003-10-17 15:07:35-04 kentd Exp $";
 
 #include "defc.h"
 #include <time.h>
@@ -22,6 +22,7 @@ const char rcsid_clock_c[] = "@(#)$KmKId: clock.c,v 1.24 2002-11-19 00:12:23-08 
 extern int Verbose;
 extern int g_vbl_count;
 extern int g_rom_version;
+extern int g_config_kegs_update_needed;
 
 #define CLK_IDLE		1
 #define CLK_TIME		2
@@ -36,8 +37,9 @@ int	g_clk_reg1 = 0;
 word32	c033_data = 0;
 word32	c034_val = 0;
 
-int	bram_fd = -1;
-byte	bram[256];
+byte	g_bram[2][256];
+byte	*g_bram_ptr = &(g_bram[0][0]);
+
 word32	g_clk_cur_time = 0xa0000000;
 int	g_clk_next_vbl_update = 0;
 
@@ -109,30 +111,48 @@ micro_sleep(double dtime)
 }
 
 void
-setup_bram()
+clk_bram_zero()
 {
-	char	bram_buf[256];
-	int	len;
-	int	i;
+	int	i, j;
 
-	sprintf(bram_buf, "bram.data.%d", g_rom_version);
-	bram_fd = open(bram_buf, O_RDWR | O_CREAT | O_BINARY, 0x1b6);
-	if(bram_fd < 0) {
-		printf("Couldn't open %s: %d, %d\n", bram_buf, bram_fd, errno);
-		exit(14);
+	/* zero out all bram */
+	for(i = 0; i < 2; i++) {
+		for(j = 0; j < 256; j++) {
+			g_bram[i][j] = 0;
+		}
 	}
+	g_bram_ptr = &(g_bram[0][0]);
+}
 
-	len = lseek(bram_fd, 0, SEEK_SET);
-	if(len != 0) {
-		printf("bram lseek returned %d, %d\n", len, errno);
-		exit(2);
+void
+clk_bram_set(int bram_num, int offset, int val)
+{
+	g_bram[bram_num][offset] = val;
+}
+
+void
+clk_setup_bram_version()
+{
+	if(g_rom_version < 3) {
+		g_bram_ptr = (&g_bram[0][0]);	// ROM 01
+	} else {
+		g_bram_ptr = (&g_bram[1][0]);	// ROM 03
 	}
+}
 
-	len = read(bram_fd, bram, 256);
-	if(len != 256) {
-		printf("Reading in bram failed, initing to all 0.  %d\n",len);
-		for(i = 0; i < 256; i++) {
-			bram[i] = 0;
+void
+clk_write_bram(FILE *fconf)
+{
+	int	i, j, k;
+
+	for(i = 0; i < 2; i++) {
+		fprintf(fconf, "\n");
+		for(j = 0; j < 256; j += 16) {
+			fprintf(fconf, "bram%d[%02x] =", 2*i + 1, j);
+			for(k = 0; k < 16; k++) {
+				fprintf(fconf, " %02x", g_bram[i][j+k]);
+			}
+			fprintf(fconf, "\n");
 		}
 	}
 }
@@ -140,6 +160,7 @@ setup_bram()
 void
 update_cur_time()
 {
+	struct tm *tm_ptr;
 	time_t	cur_time;
 	unsigned int secs, secs2;
 
@@ -149,9 +170,15 @@ update_cur_time()
 	/* this is probably not right for a few hours around daylight savings*/
 	/*  time transition */
 	secs2 = mktime(gmtime(&cur_time));
-	secs = mktime(localtime(&cur_time));
+	tm_ptr = localtime(&cur_time);
+	secs = mktime(tm_ptr);
 
 	secs = (unsigned int)cur_time - (secs2 - secs);
+
+	if(tm_ptr->tm_isdst) {
+		/* adjust for daylight savings time */
+		secs += 3600;
+	}
 
 	/* add in secs to make date based on Apple Jan 1, 1904 instead of */
 	/*   Unix's Jan 1, 1970 */
@@ -219,7 +246,6 @@ void
 do_clock_data()
 {
 	word32	mask;
-	int	len;
 	int	read;
 	int	op;
 
@@ -287,7 +313,7 @@ do_clock_data()
 		if(read) {
 			if(g_clk_read) {
 				/* Yup, read */
-				c033_data = bram[g_clk_reg1];
+				c033_data = g_bram_ptr[g_clk_reg1];
 				clk_printf("Reading BRAM loc %02x: %02x\n",
 					g_clk_reg1, c033_data);
 			} else {
@@ -300,20 +326,8 @@ do_clock_data()
 				/* Yup, write */
 				clk_printf("Writing BRAM loc %02x with %02x\n",
 					g_clk_reg1, c033_data);
-				bram[g_clk_reg1] = c033_data;
-				if(g_clk_reg1 == 0xff) {
-					len = lseek(bram_fd, 0, SEEK_SET);
-					if(len != 0) {
-						printf("bram_wr lseek: %d,%d\n",
-							len, errno);
-						exit(14);
-					}
-					len = write(bram_fd, bram, 256);
-					if(len != 256) {
-						halt_printf("bram wr fail! %d "
-							"%d\n", len, errno);
-					}
-				}
+				g_bram_ptr[g_clk_reg1] = c033_data;
+				g_config_kegs_update_needed = 1;
 			}
 		}
 		g_clk_mode = CLK_IDLE;

@@ -8,9 +8,12 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_macdriver_c[] = "@(#)$KmKId: macdriver.c,v 1.10 2002-11-19 00:09:59-08 kadickey Exp $";
+const char rcsid_macdriver_c[] = "@(#)$KmKId: macdriver.c,v 1.16 2003-10-20 22:45:54-04 kentd Exp $";
 
 // Quartz: CreateCGContextForPort vs QDBeginCGContext
+
+// Use CGDisplayMoveCursorToPoint(kCGDirectMainDisplay) to warp pointer
+// Use CGPointMake to get a point
 
 #include <Carbon/Carbon.h>
 
@@ -29,6 +32,8 @@ RgnHandle	g_event_rgnhandle = 0;
 int		g_ignore_next_click = 0;
 int		g_mainwin_active = 0;
 GDHandle	g_gdhandle = 0;
+int	g_mac_mouse_x = 0;
+int	g_mac_mouse_y = 0;
 
 FMFontFamily	g_status_font_family;
 
@@ -61,6 +66,7 @@ int g_screen_mdepth = 0;
 extern int g_send_sound_to_file;
 
 extern int g_quit_sim_now;
+extern int g_config_control_panel;
 
 int	g_auto_repeat_on = -1;
 int	g_x_shift_control_state = 0;
@@ -90,6 +96,7 @@ extern int g_screen_redraw_skip_amt;
 
 extern word32 g_a2_screen_buffer_changed;
 extern char *g_status_ptrs[MAX_STATUS_LINES];
+extern const char g_kegs_version_str[];
 
 #if 0
 char g_printf_buf[4096];
@@ -133,14 +140,18 @@ quit_event_handler(EventHandlerCallRef call_ref, EventRef event, void *ignore)
 }
 
 void
-show_alert(const char *str, int num)
+show_alert(const char *str1, const char *str2, const char *str3, int num)
 {
 	char		buf[256];
 	DialogRef	alert;
 	DialogItemIndex	out_item_hit;
 	CFStringRef	cfstrref;
 
-	sprintf(buf, "%s: %d", str, num);
+	if(num != 0) {
+		snprintf(buf, 250, "%s%s%s: %d", str1, str2, str3, num);
+	} else {
+		snprintf(buf, 250, "%s%s%s", str1, str2, str3);
+	}
 
 	cfstrref = CFStringCreateWithCString(NULL, buf,
 						kCFStringEncodingMacRoman);
@@ -157,18 +168,33 @@ my_cmd_handler( EventHandlerCallRef handlerRef, EventRef event, void *userdata)
 {
 	OSStatus	osresult;
 	HICommand	command;
+	word32		command_id;
 
 	osresult = eventNotHandledErr;
 
 	GetEventParameter(event, kEventParamDirectObject, typeHICommand, NULL,
 		sizeof(HICommand), NULL, &command);
 
-	switch(command.commandID) {
+	command_id = (word32)command.commandID;
+	switch(command_id) {
 	case 'Kbep':
 		SysBeep(10);
 		osresult = noErr;
 		break;
+	case 'abou':
+		show_alert("KEGSMAC v", g_kegs_version_str,
+			", Copyright 2003 Kent Dickey\n"
+			"Latest version at http://kegs.sourceforge.net/\n", 0);
+		osresult = noErr;
+		break;
+	case 'KCFG':
+		g_config_control_panel = !g_config_control_panel;
+		osresult = noErr;
+		break;
+	case 'quit':
+		break;
 	default:
+		printf("commandID %08x unknown\n", command_id);
 		SysBeep(90);
 		break;
 	}
@@ -305,11 +331,29 @@ mac_update_modifiers(word32 state)
 }
 
 void
+mac_warp_mouse()
+{
+	Rect		port_rect;
+	Point		win_origin_pt;
+	CGPoint		cgpoint;
+	CGDisplayErr	cg_err;
+
+	GetPortBounds(GetWindowPort(g_main_window), &port_rect);
+	SetPt(&win_origin_pt, port_rect.left, port_rect.top);
+	LocalToGlobal(&win_origin_pt);
+
+	cgpoint = CGPointMake( (float)(win_origin_pt.h + X_A2_WINDOW_WIDTH/2),
+			(float)(win_origin_pt.v + X_A2_WINDOW_HEIGHT/2));
+	cg_err = CGDisplayMoveCursorToPoint(kCGDirectMainDisplay, cgpoint);
+}
+
+void
 check_input_events()
 {
 	OSStatus	err;
 	EventTargetRef	target;
 	EventRef	event;
+	CGMouseDelta	delta_x, delta_y;
 	UInt32		event_class, event_kind;
 	byte		mac_keycode;
 	UInt32		keycode;
@@ -319,6 +363,7 @@ check_input_events()
 	int	button, button_state;
 	EventMouseButton	mouse_button;
 	int		handled;
+	int		mouse_events, mouse_delta;
 	int		is_up;
 	int		in_win;
 	int		ignore;
@@ -327,10 +372,23 @@ check_input_events()
 		exit(0);
 	}
 
+	SetPortWindowPort(g_main_window);
+
+	mouse_events = 0;
+	mouse_delta = 0;
 	target = GetEventDispatcherTarget();
-	err = ReceiveNextEvent(0, NULL, kEventDurationNoWait,
+	while(1) {
+		err = ReceiveNextEvent(0, NULL, kEventDurationNoWait,
 			true, &event);
-	if(err == noErr) {
+
+		if(err == eventLoopTimedOutErr) {
+			break;
+		}
+		if(err != noErr) {
+			printf("err: %d\n", (int)err);
+			break;
+		}
+
 		event_class = GetEventClass(event);
 		event_kind = GetEventKind(event);
 		handled = 0;
@@ -375,6 +433,7 @@ check_input_events()
 			break;
 		case kEventClassMouse:
 			handled = 2;
+			mouse_events++;
 			GetEventParameter(event, kEventParamMouseLocation,
 				typeQDPoint, NULL, sizeof(Point), NULL,
 				&mouse_point);
@@ -401,7 +460,8 @@ check_input_events()
 					&mouse_button);
 				button = mouse_button;
 				if(button > 1) {
-					button = 3 - button;
+					button = 4 - button;
+					button = 1 << button;
 				}
 				ignore = (button_state != 0) &&
 					(!in_win || g_ignore_next_click);
@@ -415,11 +475,29 @@ check_input_events()
 				}
 			}
 
-			//printf("Mouse at: %d,%d button:%d, button_st:%d\n",
-			//	mouse_point.h, mouse_point.v, button,
-			//	button_state);
-			update_mouse(mouse_point.h, mouse_point.v,
+			GlobalToLocal(&mouse_point);
+
+			if(g_warp_pointer) {
+				CGGetLastMouseDelta(&delta_x, &delta_y);
+				g_mac_mouse_x += (int)delta_x;
+				g_mac_mouse_y += (int)delta_y;
+				mac_warp_mouse();
+			} else {
+				g_mac_mouse_x = mouse_point.h;
+				g_mac_mouse_y = mouse_point.v;
+			}
+
+			//printf("Mouse %d at: %d,%d button:%d, button_st:%d\n",
+			//	mouse_events, g_mac_mouse_x, g_mac_mouse_y,
+			//	button, button_state);
+
+			update_mouse(g_mac_mouse_x, g_mac_mouse_y,
 				button_state, button);
+			if(g_warp_pointer) {
+				g_mac_mouse_x = X_A2_WINDOW_WIDTH/2;
+				g_mac_mouse_y = X_A2_WINDOW_HEIGHT/2;
+				update_mouse(g_mac_mouse_x, g_mac_mouse_y,0,0);
+			}
 			break;
 		case kEventClassApplication:
 			switch(event_kind) {
@@ -447,10 +525,6 @@ check_input_events()
 			(void)SendEventToEventTarget(event, target);
 		}
 		ReleaseEvent(event);
-	} else if(err == eventLoopTimedOutErr) {
-		return;
-	} else {
-		printf("err: %d\n", (int)err);
 	}
 
 	return;
@@ -501,6 +575,7 @@ temp_run_application_event_loop(void)
 int
 main(int argc, char* argv[])
 {
+	ProcessSerialNumber my_psn;
 	IBNibRef	nibRef;
 	EventHandlerUPP	handlerUPP;
 	EventTypeSpec	cmd_event[3];
@@ -576,8 +651,10 @@ main(int argc, char* argv[])
 		kWindowStandardDocumentAttributes |
 					kWindowStandardHandlerAttribute,
 		&win_rect, &g_main_window);
-	printf("CreateNewWindow ret: %d, g_main_window: %p\n", (int)err,
-			g_main_window);
+
+	//printf("CreateNewWindow ret: %d, g_main_window: %p\n", (int)err,
+	//		g_main_window);
+
 	err = SetWindowTitleWithCFString(g_main_window, CFSTR("KEGSMAC"));
 
 	// We don't need the nib reference anymore.
@@ -603,16 +680,14 @@ main(int argc, char* argv[])
 				&cmd_event[0], (void *)g_main_window, NULL);
 	require_noerr(err, CantCreateWindow);
 
-	printf("Test1\n");
-
 	// Get screen depth
 	g_gdhandle = GetGDevice();
 	g_screen_mdepth = (**((**g_gdhandle).gdPMap)).pixelSize;
 
 	g_screen_depth = g_screen_mdepth;
 
-	printf("g_screen_depth = %d, depth: %d, bytes: %d\n", g_screen_depth,
-			(**g_gdhandle).gdCCDepth, (**g_gdhandle).gdCCBytes);
+	//printf("g_screen_depth = %d, depth: %d, bytes: %d\n", g_screen_depth,
+	//		(**g_gdhandle).gdCCDepth, (**g_gdhandle).gdCCBytes);
 
 	if(g_screen_depth > 16) {
 		/* 32-bit display */
@@ -646,13 +721,19 @@ main(int argc, char* argv[])
 	BringToFront( g_main_window );
 	update_window();
 
+	// Make us pop to the front a different way
+	err = GetCurrentProcess(&my_psn);
+	if(err == noErr) {
+		(void)SetFrontProcess(&my_psn);
+	}
+
 	// Call the event loop
 	temp_run_application_event_loop();
 
 CantCreateWindow:
 CantSetMenuBar:
 CantGetNibRef:
-	show_alert("ending", err);
+	show_alert("ending", "", "error code", err);
 	return err;
 }
 
@@ -714,14 +795,14 @@ x_get_kimage(Kimage *kimage_ptr)
 		ptr = (byte *)GetPixBaseAddr(pixmap_handle);
 		row_bytes = ((*pixmap_handle)->rowBytes & 0x3fff);
 		kimage_ptr->width_act = row_bytes / (mdepth >> 3);
-		printf("Got depth: %d, bitmap_ptr: %p, width: %d\n", depth,
+		mac_printf("Got depth: %d, bitmap_ptr: %p, width: %d\n", depth,
 				ptr, kimage_ptr->width_act);
-		printf("pixmap->base: %08x, rowbytes: %08x, pixelType: %08x\n",
+		mac_printf("pixmap->base: %08x, rowbytes: %08x, pixType:%08x\n",
 			(int)(*pixmap_handle)->baseAddr,
 			(*pixmap_handle)->rowBytes,
 			(*pixmap_handle)->pixelType);
 		wptr = (word32 *)(*pixmap_handle);
-		printf("wptr: %p = %08x %08x %08x %08x %08x %08x %08x %08x\n",
+		mac_printf("wptr: %p=%08x %08x %08x %08x %08x %08x %08x %08x\n",
 			wptr,
 			wptr[0], wptr[1], wptr[2], wptr[3],
 			wptr[4], wptr[5], wptr[6], wptr[7]);
@@ -735,7 +816,7 @@ x_get_kimage(Kimage *kimage_ptr)
 		ptr = (byte *)malloc(size);
 
 		if(ptr == 0) {
-			printf("malloc for data failed, mdepth: %d\n", mdepth);
+			mac_printf("malloc for data fail, mdepth:%d\n", mdepth);
 			exit(2);
 		}
 
@@ -744,7 +825,7 @@ x_get_kimage(Kimage *kimage_ptr)
 		kimage_ptr->dev_handle = (void *)-1;
 	}
 
-	printf("kim: %p, dev:%p data: %p, size: %08x\n", kimage_ptr,
+	mac_printf("kim: %p, dev:%p data: %p, size: %08x\n", kimage_ptr,
 		kimage_ptr->dev_handle, kimage_ptr->data_ptr, size);
 
 }
@@ -857,4 +938,9 @@ x_auto_repeat_off(int must)
 void
 x_warp_pointer(int do_warp)
 {
+	if(do_warp) {
+		HideCursor();
+	} else {
+		ShowCursor();
+	}
 }

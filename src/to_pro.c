@@ -16,8 +16,8 @@
 
 #include "prodos.h"
 
+#include <errno.h>
 
-extern int errno;
 
 #define DEF_DISK_SIZE	(800*1024)
 #define MAX_FILE_NAMES	51

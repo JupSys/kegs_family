@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.98 2002-11-19 00:09:59-08 kadickey Exp $";
+const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.103 2003-10-17 15:07:47-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -27,8 +27,6 @@ extern int g_preferred_rate;
 
 
 extern double g_last_vbl_dcycs;
-
-extern int errno;
 
 void U_STACK_TRACE();
 
@@ -1124,6 +1122,7 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 	Doc_reg	*rptr, *orptr;
 	int	mode, omode;
 	int	other_osc;
+	int	one_shot_stop;
 	int	ctl;
 
 	/* handle osc stopping and maybe interrupting */
@@ -1181,8 +1180,12 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 		return;
 	} else if((mode == 3) || (omode == 3)) {
 		/* swap mode (even if we're one_shot and partner is swap)! */
+		/* unless we're one-shot and we hit a 0-byte--then */
+		/* Olivier Goguel says just stop */
 		rptr->ctl |= 1;
-		if(!orptr->running && (orptr->ctl & 0x1)) {
+		one_shot_stop = (mode == 1) && (!can_repeat);
+		if(!one_shot_stop && !orptr->running &&
+							(orptr->ctl & 0x1)) {
 			orptr->ctl = orptr->ctl & (~1);
 			start_sound(other_osc, eff_dsamps, dsamps);
 		}
@@ -1781,7 +1784,7 @@ doc_write_c03d(int val, double dcycs)
 
 		switch(type) {
 		case 0x0:	/* freq lo */
-			if((rptr->freq & 0xff) == val) {
+			if((rptr->freq & 0xff) == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1793,7 +1796,7 @@ doc_write_c03d(int val, double dcycs)
 			doc_recalc_sound_parms(osc, eff_dsamps, dsamps);
 			break;
 		case 0x1:	/* freq hi */
-			if((rptr->freq >> 8) == val) {
+			if((rptr->freq >> 8) == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1805,7 +1808,7 @@ doc_write_c03d(int val, double dcycs)
 			doc_recalc_sound_parms(osc, eff_dsamps, dsamps);
 			break;
 		case 0x2:	/* vol */
-			if(rptr->vol == val) {
+			if(rptr->vol == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1826,7 +1829,7 @@ doc_write_c03d(int val, double dcycs)
 #endif
 			break;
 		case 0x4:	/* wave ptr register */
-			if(rptr->waveptr == val) {
+			if(rptr->waveptr == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1841,13 +1844,13 @@ doc_write_c03d(int val, double dcycs)
 #if 0
 			printf("doc_write ctl osc %d, val: %02x\n", osc, val);
 #endif
-			if(rptr->ctl == val) {
+			if(rptr->ctl == (word32)val) {
 				break;
 			}
 			doc_write_ctl_reg(osc, val, dsamps);
 			break;
 		case 0x6:	/* wavesize register */
-			if(rptr->wavesize == val) {
+			if(rptr->wavesize == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1893,15 +1896,13 @@ doc_write_c03d(int val, double dcycs)
 				}
 
 				break;
-			case 0x02:	/* 0xe2 */
-				/* this should be illegale, but Turkey Shoot */
-				/*  writes to e2, for no apparent reason */
-				doc_printf("Writing doc 0xe2 with %02x\n", val);
-				/* set_halt(1); */
-				break;
 			default:
-				halt_printf("Wr %02x into bad doc_reg[%04x]\n",
-					val, doc_ptr);
+				/* this should be illegal, but Turkey Shoot */
+				/* and apparently TaskForce, OOTW, etc */
+				/*  writes to e2-ff, for no apparent reason */
+				doc_printf("Writing doc 0x%x with %02x\n",
+						doc_ptr, val);
+				break;
 			}
 			break;
 		default:

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.82 2002-11-19 00:09:59-08 kadickey Exp $";
+const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.85 2003-10-29 02:02:28-05 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -25,7 +25,6 @@ extern byte *g_rom_cards_ptr;
 extern word32 g_mem_size_base, g_mem_size_exp;
 extern int halt_sim;
 extern int enter_debug;
-extern int g_show_screen;
 extern int statereg;
 extern word32 stop_run_at;
 extern int stop_on_c03x;
@@ -98,51 +97,51 @@ get_num()
 void
 debugger_help()
 {
-	puts("KEGS Debugger help (courtesy Fredric Devernay");
-	puts("General command syntax: [bank]/[address][command]");
-	puts("e.g. 'e1/0010B' to set a breakpoint at the interrupt jump point");
-	puts("Enter all addresses using lower-case");
-	puts("As with the IIgs monitor, you can omit the bank number after");
-	puts("having set it: 'e1/0010B' followed by '14B' will set");
-	puts("breakpoints at e1/0010 and e1/0014");
-	puts("");
-	puts("g                       Go");
-	puts("[bank]/[addr]g          Go from [bank]/[address]");
-	puts("[bank]/[addr]g          Go from [bank]/[address]");
-	puts("s                       Step one instruction");
-	puts("[bank]/[addr]s          Step one instr at [bank]/[address]");
-	puts("[bank]/[addr]B          Set breakpoint at [bank]/[address].");
-	puts("B                       Show all breakpoints.");
-	puts("[bank]/[addr]D          Delete breakpoint at [bank]/[address].");
-	puts("[bank]/[addr1].[addr2]  View memory.");
-	puts("[bank]/[addr]L          Disassemble memory.");
+	printf("KEGS Debugger help (courtesy Fredric Devernay\n");
+	printf("General command syntax: [bank]/[address][command]\n");
+	printf("e.g. 'e1/0010B' to set a breakpoint at the interrupt jump pt\n");
+	printf("Enter all addresses using lower-case\n");
+	printf("As with the IIgs monitor, you can omit the bank number after\n");
+	printf("having set it: 'e1/0010B' followed by '14B' will set\n");
+	printf("breakpoints at e1/0010 and e1/0014\n");
+	printf("\n");
+	printf("g                       Go\n");
+	printf("[bank]/[addr]g          Go from [bank]/[address]\n");
+	printf("s                       Step one instruction\n");
+	printf("[bank]/[addr]s          Step one instr at [bank]/[address]\n");
+	printf("[bank]/[addr]B          Set breakpoint at [bank]/[address]\n");
+	printf("B                       Show all breakpoints\n");
+	printf("[bank]/[addr]D          Delete breakpoint at [bank]/[address]\n");
+	printf("[bank]/[addr1].[addr2]  View memory\n");
+	printf("[bank]/[addr]L          Disassemble memory\n");
 
-	puts("P                       Dump the trace to 'pc_log_out'.");
-	puts("Z                       Dump SCC state.");
-	puts("I                       Dump IWM state.");
-	puts("[drive].[track]I        Dump IWM state.");
-	puts("E                       Dump Ensoniq state.");
-	puts("[osc]E                  Dump oscillator [osc] state.");
-	puts("R                       Dump dtime array and events.");
-	puts("T                       Show toolbox log.");
-	puts("[bank]/[addr]T          Dump tools using ptr at [bank]/[addr]");
-	puts("                            as 'tool_set_info'.");
-	puts("[mode]V                 XOR verbose with [mode]. 1=DISK, 2=IRQ,");
-	puts("                        4=CLK, 8=SHADOW, 10=IWM, 20=DOC, 40=ADB");
-	puts("                        80=SCC, 100=TEST, 200=VIDEO.");
-	puts("[mode]H                 XOR halt_on with [mode]. 1=SCAN_INT,");
-	puts("                            2=IRQ, 4=SHADOW_REG, 8=C70D_WRITES.");
-	puts("r                       Reset.");
-	puts("[0/1]=m                 Changes m bit for l listings");
-	puts("[0/1]=x                 Changes x bit for l listings");
-	puts("[t]=z                   Stops at absolute cycle t (obsolete)");
-	puts("S                       show_bankptrs_bank0 & smartport_error");
-	puts("P                       show_pmhz");
-	puts("A                       show_a2_line_stuff show_adb_log");
-	puts("Ctrl-e                  Dump registers.");
-	puts("[bank]/[addr1].[addr2]us[file]  Save memory area to [file].");
-	puts("[bank]/[addr1].[addr2]ul[file]  Load memory area from [file].");
-	puts("q                       Exit Debugger (and KEGS).");
+	printf("P                       Dump the trace to 'pc_log_out'\n");
+	printf("Z                       Dump SCC state\n");
+	printf("I                       Dump IWM state\n");
+	printf("[drive].[track]I        Dump IWM state\n");
+	printf("E                       Dump Ensoniq state\n");
+	printf("[osc]E                  Dump oscillator [osc] state\n");
+	printf("R                       Dump dtime array and events\n");
+	printf("T                       Show toolbox log\n");
+	printf("[bank]/[addr]T          Dump tools using ptr [bank]/[addr]\n");
+	printf("                            as 'tool_set_info'\n");
+	printf("[mode]V                 XOR verbose with 1=DISK, 2=IRQ,\n");
+	printf("                         4=CLK,8=SHADOW,10=IWM,20=DOC,\n");
+	printf("                         40=ABD,80=SCC, 100=TEST, 200=VIDEO\n");
+	printf("[mode]H                 XOR halt_on with 1=SCAN_INT,\n");
+	printf("                         2=IRQ, 4=SHADOW_REG, 8=C70D_WRITES\n");
+	printf("r                       Reset\n");
+	printf("[0/1]=m                 Changes m bit for l listings\n");
+	printf("[0/1]=x                 Changes x bit for l listings\n");
+	printf("[t]=z                   Stops at absolute time t (obsolete)\n");
+	printf("S                       show_bankptr_bank0 & smartport errs\n");
+	printf("P                       show_pmhz\n");
+	printf("A                       show_a2_line_stuff show_adb_log\n");
+	printf("Ctrl-e                  Dump registers\n");
+	printf("[bank]/[addr1].[addr2]us[file]  Save mem area to [file]\n");
+	printf("[bank]/[addr1].[addr2]ul[file]  Load mem area from [file]\n");
+	printf("v			Show video information\n");
+	printf("q                       Exit Debugger (and KEGS)\n");
 }
 
 void
@@ -196,6 +195,9 @@ do_debug_intfc()
 			old_mode = mode;
 			mode = 0;
 			switch(ret_val) {
+			case 'h':
+				debugger_help();
+				break;
 			case 'R':
 				show_dtime_array();
 				show_all_events();
@@ -225,6 +227,9 @@ do_debug_intfc()
 				} else {
 					show_toolbox_log();
 				}
+				break;
+			case 'v':
+				video_show_debug_info();
 				break;
 			case 'V':
 				printf("g_irq_pending: %d\n", g_irq_pending);
@@ -537,7 +542,7 @@ do_blank()
 			}
 		}
 		list_kpc = engine.kpc;
-		refresh_screen();
+		/* video_update_through_line(262); */
 		break;
 	case ':':
 		set_memory_c(((a3bank << 16) + a3), a2, 0);
@@ -567,7 +572,6 @@ void
 do_go()
 {
 	clear_halt();
-	g_show_screen = 1;
 
 	run_prog();
 	show_regs();
@@ -581,9 +585,8 @@ do_step()
 
 	clear_halt();
 
-	g_show_screen = 0;
 	run_prog();
-	g_show_screen = 1;
+
 	show_regs();
 	size_mem_imm = 2;
 	if(engine.psr & 0x20) {
@@ -769,6 +772,10 @@ load_roms()
 		if(names_ptr == 0) {
 			continue;
 		}
+		if(*names_ptr == 0) {
+			continue;
+		}
+
 		setup_kegs_file(&name_buf[0], (int)sizeof(name_buf), 1,
 								names_ptr);
 

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.47 2002-11-19 00:09:59-08 kadickey Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.53 2003-10-29 02:02:05-05 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -23,6 +23,8 @@ extern int g_limit_speed;
 extern int g_swap_paddles;
 extern int g_invert_paddles;
 extern int g_a2vid_palette;
+extern int g_config_control_panel;
+extern word32 g_cfg_vbl_count;
 
 enum {
 	ADB_IDLE = 0,
@@ -468,8 +470,8 @@ adb_kbd_talk_reg0()
 void
 adb_set_config(word32 val0, word32 val1, word32 val2)
 {
-	word32	new_mouse;
-	word32	new_kbd;
+	int	new_mouse;
+	int	new_kbd;
 	int	tmp1;
 
 	new_mouse = val0 >> 4;
@@ -612,8 +614,8 @@ adb_read_c026()
 void
 adb_write_c026(int val)
 {
-	word32	dev;
 	word32	tmp;
+	int	dev;
 
 	adb_printf("Writing c026 with %02x\n", val);
 	adb_log(0x1c026, val);
@@ -778,9 +780,9 @@ adb_write_c026(int val)
 			}
 			break;
 		default:
-			printf("ADB ucontroller cmd %02x unknown!\n", val);
-			adb_error();
-			halt_on_all_c027 = 1;
+			halt_printf("ADB ucontroller cmd %02x unknown!\n", val);
+			/* The Gog's says ACS Demo 2 has a bug and writes to */
+			/*  c026 */
 			break;
 		}
 		break;
@@ -810,7 +812,7 @@ adb_write_c026(int val)
 void
 do_adb_cmd()
 {
-	word32	dev;
+	int	dev;
 	int	new_kbd;
 	int	addr;
 	int	val;
@@ -906,7 +908,7 @@ do_adb_cmd()
 					dev, g_adb_cmd_data[1]);
 				adb_error();
 			}
-			if(g_adb_cmd_data[0] != g_kbd_dev_addr) {
+			if(g_adb_cmd_data[0] != (word32)g_kbd_dev_addr) {
 				/* see if app is trying to change addr */
 				printf("KBD listen to dev %x reg 3: 0:%02x!\n",
 					dev, g_adb_cmd_data[0]);
@@ -915,7 +917,7 @@ do_adb_cmd()
 			g_kbd_reg3_16bit = ((g_adb_cmd_data[0] & 0xf) << 12) +
 				(g_kbd_reg3_16bit & 0x0fff);
 		} else if(dev == g_mouse_dev_addr) {
-			if(g_adb_cmd_data[0] != dev) {
+			if(g_adb_cmd_data[0] != (word32)dev) {
 				/* see if app is trying to change mouse addr */
 				printf("MOUS listen to dev %x reg3: 0:%02x!\n",
 					dev, g_adb_cmd_data[0]);
@@ -1073,10 +1075,6 @@ update_mouse(int x, int y, int button_states, int buttons_valid)
 {
 	int	button1_changed;
 
-	if(x < 0 && y < 0) {
-		return 0;
-	}
-
 	if((x == X_A2_WINDOW_WIDTH/2) && (y == X_A2_WINDOW_HEIGHT/2) &&
 							g_warp_pointer) {
 		/* Warping the point causes it to jump here...this is not */
@@ -1092,17 +1090,21 @@ update_mouse(int x, int y, int button_states, int buttons_valid)
 	g_mouse_delta_y += y - g_mouse_cur_y;
 	g_mouse_cur_x = x;
 	g_mouse_cur_y = y;
+	if(g_mouse_delta_x < -500) { g_mouse_delta_x = -500; }
+	if(g_mouse_delta_y < -500) { g_mouse_delta_y = -500; }
+	if(g_mouse_delta_x > 500) { g_mouse_delta_x = 500; }
+	if(g_mouse_delta_y > 500) { g_mouse_delta_y = 500; }
 
 	button1_changed = ((button_states & 1) != (g_mouse_buttons & 1)) &&
-						(buttons_valid & 1);
+							(buttons_valid & 1);
 
 	if((button_states & 4) && !(g_mouse_buttons & 4) &&
-						(buttons_valid & 4)) {
+							(buttons_valid & 4)) {
 		/* right button pressed */
 		adb_increment_speed();
 	}
 	if((button_states & 2) && !(g_mouse_buttons & 2) &&
-						(buttons_valid & 2)) {
+							(buttons_valid & 2)) {
 		/* middle button pressed */
 		halt_printf("Middle button pressed\n");
 	}
@@ -1220,6 +1222,7 @@ void
 adb_key_event(int a2code, int is_up)
 {
 	word32	special;
+	word32	vbl_count;
 	int	key;
 	int	hard_key;
 	int	pos;
@@ -1296,7 +1299,11 @@ adb_key_event(int a2code, int is_up)
 			g_a2code_down = a2code;
 
 			/* first key down, set up autorepeat */
-			g_adb_repeat_vbl = g_vbl_count + g_adb_repeat_delay;
+			vbl_count = g_vbl_count;
+			if(g_config_control_panel) {
+				vbl_count = g_cfg_vbl_count;
+			}
+			g_adb_repeat_vbl = vbl_count + g_adb_repeat_delay;
 			if(g_adb_repeat_delay == 0) {
 				g_key_down = 0;
 			}
@@ -1328,6 +1335,8 @@ adb_key_event(int a2code, int is_up)
 word32
 adb_read_c000()
 {
+	word32	vbl_count;
+
 	if( ((g_kbd_buf[0] & 0x80) == 0) && (g_key_down == 0)) {
 		/* nothing happening, just get out */
 		return g_kbd_buf[0];
@@ -1339,11 +1348,17 @@ adb_read_c000()
 			printf("Read %02x 3 times, tossing\n", g_kbd_buf[0]);
 			adb_access_c010();
 		}
-	} else if(g_key_down && g_vbl_count >= g_adb_repeat_vbl) {
-		/* repeat the g_key_down */
-		g_c025_val |= 0x8;
-		adb_key_event(g_a2code_down, 0);
-		g_adb_repeat_vbl = g_vbl_count + g_adb_repeat_rate;
+	} else {
+		vbl_count = g_vbl_count;
+		if(g_config_control_panel) {
+			vbl_count = g_cfg_vbl_count;
+		}
+		if(g_key_down && vbl_count >= g_adb_repeat_vbl) {
+			/* repeat the g_key_down */
+			g_c025_val |= 0x8;
+			adb_key_event(g_a2code_down, 0);
+			g_adb_repeat_vbl = vbl_count + g_adb_repeat_rate;
+		}
 	}
 
 	return g_kbd_buf[0];
@@ -1442,14 +1457,6 @@ adb_physical_key_update(int a2code, int is_up)
 		a2code = a2code - 0x40;
 	}
 
-	/* Only process reset requests here */
-	if(is_up == 0 && a2code == 0x7f && CTRL_DOWN) {
-		/* Reset pressed! */
-		printf("Reset pressed since CTRL_DOWN: %d\n", CTRL_DOWN);
-		do_reset();
-		return;
-	}
-
 	/* Now check for special keys (function keys, etc) */
 	tmp = a2_key_to_ascii[a2code][1];
 	special = 0;
@@ -1469,13 +1476,28 @@ adb_physical_key_update(int a2code, int is_up)
 			a2code = 0x35;
 			special = 0;
 			break;
+		case 0x0c: /* F12 - remap to reset */
+			a2code = 0x7f;
+			special = 0;
+			break;
 		default:
 			break;
 		}
 	}
 
+	/* Only process reset requests here */
+	if(is_up == 0 && a2code == 0x7f && CTRL_DOWN) {
+		/* Reset pressed! */
+		printf("Reset pressed since CTRL_DOWN: %d\n", CTRL_DOWN);
+		do_reset();
+		return;
+	}
+
 	if(special && !is_up) {
 		switch(special) {
+		case 0x04: /* F4 - Emulator config panel */
+			g_config_control_panel = !g_config_control_panel;
+			break;
 		case 0x06: /* F6 - emulator speed */
 			if(SHIFT_DOWN) {
 				halt_printf("Shift-F6 pressed\n");
@@ -1492,14 +1514,7 @@ adb_physical_key_update(int a2code, int is_up)
 			g_warp_pointer = !g_warp_pointer;
 			x_warp_pointer(g_warp_pointer);
 			break;
-		case 0x0a: /* F10 - change a2vid paletter */
-			change_a2vid_palette((g_a2vid_palette + 1) & 0xf);
-			break;
-		case 0x0b: /* F11 - full screen */
-			/* g_fullscreen = !g_fullscreen; */
-			/* x_full_screen(g_full_screen); */
-			break;
-		case 0x0c: /* F12 - swap paddles */
+		case 0x09: /* F9 - swap paddles */
 			if(SHIFT_DOWN) {
 				g_swap_paddles = !g_swap_paddles;
 				printf("Swap paddles is now: %d\n",
@@ -1509,6 +1524,13 @@ adb_physical_key_update(int a2code, int is_up)
 				printf("Invert paddles is now: %d\n",
 							g_invert_paddles);
 			}
+			break;
+		case 0x0a: /* F10 - change a2vid paletter */
+			change_a2vid_palette((g_a2vid_palette + 1) & 0xf);
+			break;
+		case 0x0b: /* F11 - full screen */
+			/* g_fullscreen = !g_fullscreen; */
+			/* x_full_screen(g_full_screen); */
 			break;
 		}
 

@@ -1,4 +1,11 @@
 
+Changes in KEGS v0.80 since v0.71 (10/31/03)
+- Configuration Panel means no more hand-editing configuration files
+- All emulator state is now saved in "config.kegs"
+- 3200 color pictures!  Video system much improved for display accuracy.
+- F8 Pointer grabbing works on Mac
+- ZipGs emulation
+
 Changes in KEGS v0.71 since v0.70 (11/20/02)
 - Improved double-hires colors a lot.  -dhr140 is no longer the default
 - Airheart relies on the PC going from 0xffff to 0x0000, so I undid the

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.111 2002-11-20 16:39:15-08 kadickey Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.117 2003-10-29 13:24:29-05 kentd Exp $";
 
 #include <time.h>
 
@@ -16,18 +16,15 @@ const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.111 2002-11-20 16:39:15-08
 
 extern int Verbose;
 
-int g_a2_line_stat[25];
-int g_a2_line_must_reparse[25];
-int g_a2_line_left_edge[25];
-int g_a2_line_right_edge[25];
-int g_a2_line_full_left_edge[25];
-int g_a2_line_full_right_edge[25];
-Kimage *g_a2_line_kimage[25];
+int g_a2_line_stat[200];
+int g_a2_line_left_edge[200];
+int g_a2_line_right_edge[200];
+Kimage *g_a2_line_kimage[200];
 
-int g_mode_text[2][25];
-int g_mode_hires[2][25];
-int g_mode_superhires[25];
-int g_mode_border[25];
+int g_mode_text[2][200];
+int g_mode_hires[2][200];
+int g_mode_superhires[200];
+int g_mode_border[200];
 
 byte g_cur_border_colors[270];
 byte g_new_special_border[64][64];
@@ -48,6 +45,7 @@ extern int statereg;
 extern double g_cur_dcycs;
 
 extern int g_border_color;
+extern int g_config_control_panel;
 
 typedef byte Change;
 
@@ -60,7 +58,7 @@ word32 g_font80_off1_bits[0x100][8][12/4];
 word32 g_font80_off2_bits[0x100][8][12/4];
 word32 g_font80_off3_bits[0x100][8][12/4];
 
-byte g_superhires_scan_save[256];
+word32 g_superhires_scan_save[256];
 
 Kimage g_kimage_text[2];
 Kimage g_kimage_hires[2];
@@ -73,7 +71,8 @@ Kimage g_mainwin_kimage;
 extern double g_last_vbl_dcycs;
 
 int	g_need_redraw = 1;
-int	g_palette_changed = 1;
+int	g_palette_change_summary = 0;
+word32	g_palette_change_cnt[16];
 int	g_border_sides_refresh_needed = 1;
 int	g_border_special_refresh_needed = 1;
 int	g_border_line24_refresh_needed = 1;
@@ -85,11 +84,10 @@ int	g_border_last_vbl_changes = 0;
 int	g_use_dhr140 = 0;
 int	g_use_bw_hires = 0;
 
-#define A2_MAX_ALL_STAT		34
-
-int	g_a2_new_all_stat[A2_MAX_ALL_STAT];
-int	g_a2_cur_all_stat[A2_MAX_ALL_STAT];
+int	g_a2_new_all_stat[200];
+int	g_a2_cur_all_stat[200];
 int	g_new_a2_stat_cur_line = 0;
+int	g_vid_update_last_line = 0;
 
 int	g_expanded_col_0[16];
 int	g_expanded_col_1[16];
@@ -305,14 +303,13 @@ video_init()
 	int	i, j;
 /* Initialize video system */
 
-	for(i = 0; i < 25; i++) {
+	for(i = 0; i < 200; i++) {
 		g_a2_line_kimage[i] = (void *)0;
 		g_a2_line_stat[i] = -1;
-		g_a2_line_must_reparse[i] = 1;
-		g_a2_line_left_edge[i] = -1;
-		g_a2_line_right_edge[i] = -1;
+		g_a2_line_left_edge[i] = 0;
+		g_a2_line_right_edge[i] = 0;
 	}
-	for(i = 0; i < A2_MAX_ALL_STAT; i++) {
+	for(i = 0; i < 200; i++) {
 		g_a2_new_all_stat[i] = 0;
 		g_a2_cur_all_stat[i] = 1;
 	}
@@ -442,16 +439,16 @@ show_a2_line_stuff()
 {
 	int	i;
 
-	for(i = 0; i < 25; i++) {
-		printf("line: %d: stat: %04x, ptr: %p, reparse: %d, "
+	for(i = 0; i < 200; i++) {
+		printf("line: %d: stat: %04x, ptr: %p, "
 			"left_edge:%d, right_edge:%d\n",
 			i, g_a2_line_stat[i], g_a2_line_kimage[i],
-			g_a2_line_must_reparse[i], g_a2_line_left_edge[i],
+			g_a2_line_left_edge[i],
 			g_a2_line_right_edge[i]);
 	}
 
 	printf("new_a2_stat_cur_line: %d\n", g_new_a2_stat_cur_line);
-	for(i = 0; i < A2_MAX_ALL_STAT; i++) {
+	for(i = 0; i < 200; i++) {
 		printf("cur_all[%d]: %03x new_all: %03x\n", i,
 			g_a2_cur_all_stat[i], g_a2_new_all_stat[i]);
 	}
@@ -463,6 +460,7 @@ int	g_flash_count = 0;
 void
 video_reset()
 {
+	int	i;
 
 	g_installed_full_superhires_colormap = (g_screen_depth != 8);
 	g_cur_a2_stat = ALL_STAT_TEXT | ALL_STAT_ANNUNC3 |
@@ -471,15 +469,17 @@ video_reset()
 		g_cur_a2_stat |= ALL_STAT_COLOR_C021;
 	}
 
-	update_a2_line_info();
+	g_palette_change_summary = 0;
+	for(i = 0; i < 16; i++) {
+		g_palette_change_cnt[i] = 0;
+	}
+
 	/* install_a2vid_colormap(); */
 	video_update_colormap();
-	g_palette_changed = 0;
 }
 
 int	g_screen_redraw_skip_count = 0;
 int	g_screen_redraw_skip_amt = -1;
-int	g_show_screen = 1;
 
 word32	g_cycs_in_check_input = 0;
 
@@ -488,8 +488,7 @@ video_update()
 {
 	register word32 start_time;
 	register word32 end_time;
-
-	update_a2_line_info();
+	int	did_video;
 
 	update_border_info();
 
@@ -499,12 +498,12 @@ video_update()
 
 	g_cycs_in_check_input += (end_time - start_time);
 
-	if(g_show_screen) {
-		g_screen_redraw_skip_count--;
-		if(g_screen_redraw_skip_count < 0) {
-			refresh_screen();
-			g_screen_redraw_skip_count = g_screen_redraw_skip_amt;
-		}
+	g_screen_redraw_skip_count--;
+	did_video = 0;
+	if(g_screen_redraw_skip_count < 0) {
+		did_video = 1;
+		video_update_event_line(262);
+		g_screen_redraw_skip_count = g_screen_redraw_skip_amt;
 	}
 
 	/* update flash */
@@ -515,43 +514,22 @@ video_update()
 		change_display_mode(g_cur_dcycs);
 	}
 
+
 	check_a2vid_palette();
+
+
+	if(did_video) {
+		g_new_a2_stat_cur_line = 0;
+		g_a2_new_all_stat[0] = (g_cur_a2_stat & (~ALL_STAT_PAGE2)) +
+									PAGE2;
+		g_vid_update_last_line = 0;
+		video_update_through_line(0);
+	}
 }
 
-void
-change_display_mode(double dcycs)
-{
-	int	new_a2_stat;
-	int	start_line;
-	int	prev_stat;
-	int	line;
-	int	i;
-
-	line = ((get_lines_since_vbl(dcycs) + 0xff) >> 8);
-	if(line < 0) {
-		line = 0;
-		halt_printf("Line < 0!\n");
-	}
-	line = line >> 3;
-	if(line > 24) {
-		line = 0;
-	}
-
-	new_a2_stat = (g_cur_a2_stat & (~ALL_STAT_PAGE2)) + PAGE2;
-
-	start_line = g_new_a2_stat_cur_line;
-	prev_stat = g_a2_new_all_stat[start_line];
-
-	for(i = start_line + 1; i < line; i++) {
-		g_a2_new_all_stat[i] = prev_stat;
-	}
-	g_a2_new_all_stat[line] = new_a2_stat;
-
-	g_new_a2_stat_cur_line = line;
-}
 
 int
-get_line_stat(int line, int new_all_stat)
+video_all_stat_to_line_stat(int line, int new_all_stat)
 {
 	int	page, color, dbl;
 	int	st80, hires, annunc3, mix_t_gr;
@@ -573,11 +551,11 @@ get_line_stat(int line, int new_all_stat)
 		mode = MODE_SUPER_HIRES;
 		page = 0; dbl = 0; color = 0;
 	} else {
-		if(line >= 24) {
+		if(line >= 192) {
 			mode = MODE_BORDER;
 			page = 0; dbl = 0; color = 0;
 		} else if((new_all_stat & ALL_STAT_TEXT) ||
-						(line >= 20 && mix_t_gr)) {
+						(line >= 160 && mix_t_gr)) {
 			mode = MODE_TEXT;
 			color = 0;
 			altchar = EXTRU(new_all_stat,
@@ -610,8 +588,8 @@ get_line_stat(int line, int new_all_stat)
 		(color << 1) + dbl);
 }
 
-void
-update_a2_ptrs(int line, int new_stat)
+int *
+video_update_kimage_ptr(int line, int new_stat)
 {
 	Kimage	*kimage_ptr;
 	int	*mode_ptr;
@@ -649,17 +627,11 @@ update_a2_ptrs(int line, int new_stat)
 		break;
 	default:
 		halt_printf("update_a2_ptrs: mode: %d unknown!\n", mode);
-		return;
+		return &(g_mode_superhires[0]);
 	}
 
 	g_a2_line_kimage[line] = kimage_ptr;
-	if(mode_ptr[line] != new_stat) {
-		g_a2_line_must_reparse[line] = 1;
-		mode_ptr[line] = new_stat;
-	}
-
-	g_full_refresh_needed |= (1 << line);
-	g_a2_screen_buffer_changed |= (1 << line);
+	return mode_ptr;
 }
 
 void
@@ -667,14 +639,13 @@ change_a2vid_palette(int new_palette)
 {
 	int	i;
 
-	for(i = 0; i < 25; i++) {
+	for(i = 0; i < 200; i++) {
 		g_mode_text[0][i] = -1;
 		g_mode_text[1][i] = -1;
 		g_mode_hires[0][i] = -1;
 		g_mode_hires[1][i] = -1;
 		g_mode_superhires[i] = -1;
 		g_mode_border[i] = -1;
-		g_a2_line_must_reparse[i] = 1;
 	}
 
 	printf("Changed a2vid_palette to %x\n", new_palette);
@@ -687,7 +658,7 @@ change_a2vid_palette(int new_palette)
 	g_border_sides_refresh_needed = 1;
 	g_border_special_refresh_needed = 1;
 	g_status_refresh_needed = 1;
-	g_palette_changed = 1;
+	g_palette_change_cnt[new_palette]++;
 	g_border_last_vbl_changes = 1;
 	for(i = 0; i < 262; i++) {
 		g_cur_border_colors[i] ^= 1;;
@@ -739,44 +710,45 @@ check_a2vid_palette()
 }
 
 void
-update_a2_line_info()
+change_display_mode(double dcycs)
 {
-	int	end_line;
-	int	cur_stat;
-	int	new_all_stat;
-	int	new_stat;
+	int	line, tmp_line;
+
+	line = ((get_lines_since_vbl(dcycs) + 0xff) >> 8);
+	if(line < 0) {
+		line = 0;
+		halt_printf("Line < 0!\n");
+	}
+	tmp_line = MIN(199, line);
+
+	video_update_all_stat_through_line(tmp_line);
+
+	if(line < 200) {
+		g_a2_new_all_stat[line] =
+				(g_cur_a2_stat & (~ALL_STAT_PAGE2)) + PAGE2;
+	}
+	/* otherwise, g_cur_a2_stat is covered at the end of vbl */
+}
+
+void
+video_update_all_stat_through_line(int line)
+{
+	int	start_line;
+	int	prev_stat;
+	int	max_line;
 	int	i;
 
-	/* called each VBL to find out what display changes happened */
+	start_line = g_new_a2_stat_cur_line;
+	prev_stat = g_a2_new_all_stat[start_line];
 
-	end_line = g_new_a2_stat_cur_line;
-	cur_stat = g_a2_new_all_stat[end_line];
+	max_line = MIN(199, line);
 
-#if 0
-	printf("g_cur_a2_stat:%03x, new_all_stat[%d]: %03x\n", g_cur_a2_stat,
-		end_line, cur_stat);
-#endif
-
-	for(i = end_line + 1; i < A2_MAX_ALL_STAT; i++) {
-		g_a2_new_all_stat[i] = cur_stat;
+	for(i = start_line + 1; i <= max_line; i++) {
+		g_a2_new_all_stat[i] = prev_stat;
 	}
-
-	for(i = 0; i < 25; i++) {
-		new_all_stat = g_a2_new_all_stat[i];
-		if(new_all_stat != g_a2_cur_all_stat[i]) {
-			g_a2_cur_all_stat[i] = new_all_stat;
-			new_stat = get_line_stat(i, new_all_stat);
-			if(new_stat != g_a2_line_stat[i]) {
-				g_a2_line_stat[i] = new_stat;
-				update_a2_ptrs(i, new_stat);
-			}
-		}
-	}
-
-
-	g_new_a2_stat_cur_line = 0;
-	g_a2_new_all_stat[0] = cur_stat;
+	g_new_a2_stat_cur_line = max_line;
 }
+
 
 #define MAX_BORDER_CHANGES	65536
 
@@ -946,7 +918,7 @@ update_border_line(int line_in, int color)
 }
 
 
-#define CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse)			\
+#define CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, do_clear)		\
 	ch_ptr = &(slow_mem_changed[mem_ptr >> CHANGE_SHIFT]);		\
 	ch_bitpos = 0;							\
 	bits_per_line = 40 >> SHIFT_PER_CHANGE;				\
@@ -954,7 +926,9 @@ update_border_line(int line_in, int color)
 	mask_per_line = (-(1 << (32 - bits_per_line)));			\
 	mask_per_line = mask_per_line >> ch_shift_amount;		\
 	ch_mask = *ch_ptr & mask_per_line;				\
-	*ch_ptr = *ch_ptr & (~ch_mask);					\
+	if(do_clear) {							\
+		*ch_ptr = *ch_ptr & (~ch_mask);				\
+	}								\
 	ch_mask = ch_mask << ch_shift_amount;				\
 									\
 	if(reparse) {							\
@@ -970,41 +944,49 @@ update_border_line(int line_in, int color)
 		}
 
 void
-redraw_changed_text_40(int start_offset, int start_line, int reparse,
-	byte *screen_data, int altcharset, int bg_val, int fg_val)
+redraw_changed_text_40(int start_offset, int start_line, int num_lines,
+	int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val,
+	int pixels_per_line)
 {
-	word32 mem_ptr;
-	byte	val0, val1;
-	byte	*b_ptr;
+	register word32 start_time, end_time;
 	word32	*img_ptr, *img_ptr2;
+	word32	*save_img_ptr, *save_img_ptr2;
+	word32	*ch_ptr;
 	const word32 *font_ptr1;
 	const word32 *font_ptr2;
+	byte	*slow_mem_ptr;
+	byte	*b_ptr;
+	word32	ch_mask;
+	word32	ch_tmp;
+	word32	line_mask;
+	word32	mask_per_line;
+	word32	mem_ptr;
 	word32	tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6;
 	word32	palette_add;
 	word32	diff_val;
 	word32	and_val;
 	word32	add_val;
 	word32	ff_val;
+	word32	val0, val1;
 	int	flash_state;
 	int	y;
 	int	x1, x2;
-	int	i;
-	word32	line_mask;
-	word32	*ch_ptr;
-	word32	mask_per_line;
 	int	ch_bitpos;
 	int	bits_per_line;
 	int	ch_shift_amount;
-	word32	ch_mask;
-	word32	ch_tmp;
-	byte	*slow_mem_ptr;
 	int	shift_per;
 	int	left, right;
-	register word32 start_time, end_time;
+	int	st_line_mod8, st_line;
+	int	i;
 
+	/* always redraws to the next multiple of 8 lines due to redraw */
+	/*  issues: char changed on one screen redraw at line 0 with */
+	/*  num_lines=1.  We need to have drawn lines 1-7 also since line 1 */
+	/*  will not see any changed bytes */
+	st_line_mod8 = start_line & 7;
+	st_line = start_line;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 560;
+	start_line = start_line >> 3;
 
 	y = start_line;
 	line_mask = 1 << (y);
@@ -1013,7 +995,8 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 		halt_printf("redraw_changed_text: mem_ptr: %08x\n", mem_ptr);
 	}
 
-	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
+	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, (st_line_mod8 == 0));
+	/* avoid clearing changed bits unless we are line 0 (mod 8) */
 
 	if(ch_mask == 0) {
 		return;
@@ -1047,9 +1030,10 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 		left = MIN(x1, left);
 		right = MAX(x1 + shift_per, right);
 		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
+		b_ptr = &screen_data[(8*y + st_line_mod8)*2*pixels_per_line +
+									x1*14];
 		img_ptr = (word32 *)b_ptr;
-		img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
+		img_ptr2 = (word32 *)(b_ptr + pixels_per_line);
 
 
 		for(x2 = 0; x2 < shift_per; x2 += 2) {
@@ -1072,8 +1056,10 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 					}
 				}
 			}
+			save_img_ptr = img_ptr;
+			save_img_ptr2 = img_ptr2;
 
-			for(i = 0; i < 8; i++) {
+			for(i = st_line_mod8; i < 8; i++) {
 				font_ptr1 = &(g_font40_even_bits[val0][i][0]);
 				tmp0 = (font_ptr1[0] & and_val) + add_val;
 				tmp1 = (font_ptr1[1] & and_val) + add_val;
@@ -1111,20 +1097,20 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 				img_ptr2[5] = tmp5;
 				img_ptr2[6] = tmp6;
 
-				img_ptr += (2*A2_WINDOW_WIDTH)/4;
-				img_ptr2 += (2*A2_WINDOW_WIDTH)/4;
+				img_ptr += (2*pixels_per_line)/4;
+				img_ptr2 += (2*pixels_per_line)/4;
 			}
 
-			img_ptr -= (8*2*A2_WINDOW_WIDTH)/4;
-			img_ptr2 -= (8*2*A2_WINDOW_WIDTH)/4;
-			img_ptr += 7;
-			img_ptr2 += 7;
+			img_ptr = save_img_ptr + 7;
+			img_ptr2 = save_img_ptr2 + 7;
 		}
 	}
 	GET_ITIMER(end_time);
 
-	g_a2_line_left_edge[start_line] = (left*14);
-	g_a2_line_right_edge[start_line] = (right*14);
+	for(i = 0; i < (8 - st_line_mod8); i++) {
+		g_a2_line_left_edge[st_line + i] = (left*14);
+		g_a2_line_right_edge[st_line + i] = (right*14);
+	}
 
 	if(left >= right || left < 0 || right < 0) {
 		printf("line %d, 40: left >= right: %d >= %d\n",
@@ -1137,37 +1123,41 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 }
 
 void
-redraw_changed_text_80(int start_offset, int start_line, int reparse,
-	byte *screen_data, int altcharset, int bg_val, int fg_val)
+redraw_changed_text_80(int start_offset, int start_line, int num_lines,
+	int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val,
+	int pixels_per_line)
 {
-	word32 mem_ptr;
-	byte	val0, val1, val2, val3;
+	const word32 *font_ptr0, *font_ptr1, *font_ptr2, *font_ptr3;
+	word32	*ch_ptr;
+	word32	*img_ptr, *img_ptr2;
+	word32	*save_img_ptr, *save_img_ptr2;
+	byte	*b_ptr;
+	byte	*slow_mem_ptr;
+	word32	ch_mask;
+	word32	ch_tmp;
+	word32	mask_per_line;
+	word32	mem_ptr;
 	word32	tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6;
 	word32	diff_val;
 	word32	add_val, and_val, ff_val;
-	byte	*b_ptr;
-	word32	*img_ptr, *img_ptr2;
-	const word32 *font_ptr0, *font_ptr1, *font_ptr2, *font_ptr3;
 	word32	palette_add;
+	word32	line_mask;
+	word32	val0, val1, val2, val3;
+	int	st_line_mod8, st_line;
 	int	flash_state;
 	int	y;
 	int	x1, x2;
 	int	i;
-	word32	line_mask;
-
-	word32	*ch_ptr;
-	word32	mask_per_line;
 	int	ch_bitpos;
 	int	bits_per_line;
 	int	ch_shift_amount;
-	word32	ch_mask;
-	word32	ch_tmp;
-	byte	*slow_mem_ptr;
 	int	shift_per;
 	int	left, right;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 560;
+	st_line_mod8 = start_line & 7;
+	st_line = start_line;
+
+	start_line = start_line >> 3;
 
 	y = start_line;
 	line_mask = 1 << (y);
@@ -1176,7 +1166,7 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 		halt_printf("redraw_changed_text: mem_ptr: %08x\n", mem_ptr);
 	}
 
-	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
+	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, (st_line_mod8 == 0));
 
 	if(ch_mask == 0) {
 		return;
@@ -1207,9 +1197,10 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 		right = MAX(x1 + shift_per, right);
 
 		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
+		b_ptr = &screen_data[(y*8 + st_line_mod8)*2*pixels_per_line +
+									x1*14];
 		img_ptr = (word32 *)b_ptr;
-		img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
+		img_ptr2 = (word32 *)(b_ptr + pixels_per_line);
 
 		for(x2 = 0; x2 < shift_per; x2 += 2) {
 			/*  do 4 chars at once! */
@@ -1250,8 +1241,10 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 					}
 				}
 			}
+			save_img_ptr = img_ptr;
+			save_img_ptr2 = img_ptr2;
 
-			for(i = 0; i < 8; i++) {
+			for(i = st_line_mod8; i < 8; i++) {
 				font_ptr0 = &(g_font80_off0_bits[val0][i][0]);
 				tmp0 = (font_ptr0[0] & and_val) + add_val;
 
@@ -1297,20 +1290,20 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 				img_ptr2[5] = tmp5;
 				img_ptr2[6] = tmp6;
 
-				img_ptr += (2*A2_WINDOW_WIDTH)/4;
-				img_ptr2 += (2*A2_WINDOW_WIDTH)/4;
+				img_ptr += (2*pixels_per_line)/4;
+				img_ptr2 += (2*pixels_per_line)/4;
 			}
 
-			img_ptr -= (8*2*A2_WINDOW_WIDTH)/4;
-			img_ptr2 -= (8*2*A2_WINDOW_WIDTH)/4;
-			img_ptr += 7;
-			img_ptr2 += 7;
+			img_ptr = save_img_ptr + 7;
+			img_ptr2 = save_img_ptr2 + 7;
 
 		}
 	}
 
-	g_a2_line_left_edge[start_line] = (left*14);
-	g_a2_line_right_edge[start_line] = (right*14);
+	for(i = 0; i < (8 - st_line_mod8); i++) {
+		g_a2_line_left_edge[st_line + i] = (left*14);
+		g_a2_line_right_edge[st_line + i] = (right*14);
+	}
 
 	if(left >= right || left < 0 || right < 0) {
 		printf("line %d, 80: left >= right: %d >= %d\n",
@@ -1321,11 +1314,17 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 }
 
 void
-redraw_changed_gr(int start_offset, int start_line, int reparse,
-	byte *screen_data)
+redraw_changed_gr(int start_offset, int start_line, int num_lines, int reparse,
+	byte *screen_data, int pixels_per_line)
 {
 	word32	*img_ptr;
+	word32	*save_img_ptr;
+	word32	*ch_ptr;
 	byte	*b_ptr;
+	byte	*slow_mem_ptr;
+	word32	mask_per_line;
+	word32	ch_mask;
+	word32	ch_tmp;
 	word32	mem_ptr;
 	word32	line_mask;
 	word32	val0, val1;
@@ -1337,20 +1336,19 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 	int	x1, x2;
 	int	y;
 	int	y2;
-
-	word32	*ch_ptr;
-	word32	mask_per_line;
 	int	ch_bitpos;
 	int	bits_per_line;
 	int	ch_shift_amount;
-	word32	ch_mask;
-	word32	ch_tmp;
-	byte	*slow_mem_ptr;
 	int	shift_per;
 	int	left, right;
+	int	st_line_mod8, st_line, eff_line, end_line;
+	int	i;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 560;
+	st_line_mod8 = start_line & 7;
+	st_line = start_line;
+	end_line = 8;	// st_line_mod8 + num_lines;
+
+	start_line = start_line >> 3;
 
 	y = start_line;
 	line_mask = 1 << y;
@@ -1359,7 +1357,7 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 		printf("redraw_changed_gr: mem_ptr: %08x\n", mem_ptr);
 	}
 
-	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
+	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, (st_line_mod8 == 0));
 
 	if(ch_mask == 0) {
 		return;
@@ -1383,12 +1381,15 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 		right = MAX(x1 + shift_per, right);
 
 		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
+		b_ptr = &screen_data[(y*8 + st_line_mod8)*2*pixels_per_line +
+									x1*14];
 		img_ptr = (word32 *)b_ptr;
 
 		for(x2 = 0; x2 < shift_per; x2 += 2) {
 			val_even = *slow_mem_ptr++;
 			val_odd = *slow_mem_ptr++;
+
+			save_img_ptr = img_ptr;
 
 			for(half = 0; half < 2; half++) {
 				val0 = val_even & 0xf;
@@ -1404,6 +1405,12 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 #endif
 
 				for(y2 = 0; y2 < 8; y2++) {
+					eff_line = half*4 + (y2 >> 1);
+					if((eff_line < st_line_mod8) ||
+						(eff_line > end_line)) {
+						continue;
+					}
+				
 					img_ptr[0] = val0_wd + palette_add;
 					img_ptr[1] = val0_wd + palette_add;
 					img_ptr[2] = val0_wd + palette_add;
@@ -1411,7 +1418,7 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 					img_ptr[4] = val1_wd + palette_add;
 					img_ptr[5] = val1_wd + palette_add;
 					img_ptr[6] = val1_wd + palette_add;
-					img_ptr += (A2_WINDOW_WIDTH)/4;
+					img_ptr += (pixels_per_line)/4;
 				}
 
 
@@ -1419,23 +1426,30 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 				val_odd = val_odd >> 4;
 			}
 
-			img_ptr -= (16*A2_WINDOW_WIDTH)/4;
-			img_ptr += 7;
+			img_ptr = save_img_ptr + 7;
 		}
 	}
 
-	g_a2_line_left_edge[start_line] = (left*14);
-	g_a2_line_right_edge[start_line] = (right*14);
+	for(i = 0; i < (8 - st_line_mod8); i++) {
+		g_a2_line_left_edge[st_line + i] = (left*14);
+		g_a2_line_right_edge[st_line + i] = (right*14);
+	}
 
 	g_need_redraw = 0;
 }
 
 void
-redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
-	byte *screen_data)
+redraw_changed_dbl_gr(int start_offset, int start_line, int num_lines,
+	int reparse, byte *screen_data, int pixels_per_line)
 {
 	word32	*img_ptr;
+	word32	*save_img_ptr;
+	word32	*ch_ptr;
 	byte	*b_ptr;
+	byte	*slow_mem_ptr;
+	word32	mask_per_line;
+	word32	ch_mask;
+	word32	ch_tmp;
 	word32	mem_ptr;
 	word32	line_mask;
 	word32	val0, val1, val2, val3;
@@ -1448,29 +1462,28 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 	int	x1, x2;
 	int	y;
 	int	y2;
-
-	word32	*ch_ptr;
-	word32	mask_per_line;
 	int	ch_bitpos;
 	int	bits_per_line;
 	int	ch_shift_amount;
-	word32	ch_mask;
-	word32	ch_tmp;
-	byte	*slow_mem_ptr;
 	int	shift_per;
 	int	left, right;
+	int	st_line_mod8, st_line, eff_line, end_line;
+	int	i;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 560;
+	st_line_mod8 = start_line & 7;
+	end_line = 8;	// st_line_mod8 + num_lines
+	st_line = start_line;
+
+	start_line = start_line >> 3;
 
 	y = start_line;
 	line_mask = 1 << y;
 	mem_ptr = 0x400 + g_screen_index[y] + start_offset;
 	if(mem_ptr < 0x400 || mem_ptr >= 0xc00) {
-		printf("redraw_changed_gr: mem_ptr: %08x\n", mem_ptr);
+		printf("redraw_changed_dbl_gr: mem_ptr: %08x\n", mem_ptr);
 	}
 
-	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
+	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, (st_line_mod8 == 0));
 
 	if(ch_mask == 0) {
 		return;
@@ -1494,7 +1507,8 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 		right = MAX(x1 + shift_per, right);
 
 		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
+		b_ptr = &screen_data[(y*8 + st_line_mod8)*2*pixels_per_line +
+									x1*14];
 		img_ptr = (word32 *)b_ptr;
 
 		for(x2 = 0; x2 < shift_per; x2 += 2) {
@@ -1503,6 +1517,8 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 			val_even_aux = slow_mem_ptr[0x10000];
 			val_odd_aux = slow_mem_ptr[0x10001];
 			slow_mem_ptr += 2;
+
+			save_img_ptr = img_ptr;
 
 			for(half = 0; half < 2; half++) {
 				val0 = val_even_aux & 0xf;
@@ -1533,6 +1549,11 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 #endif
 
 				for(y2 = 0; y2 < 8; y2++) {
+					eff_line = half*4 + (y2 >> 1);
+					if((eff_line < st_line_mod8) ||
+							(eff_line > end_line)) {
+						continue;
+					}
 					img_ptr[0] = val0_wd + palette_add;
 					img_ptr[1] = val01_wd + palette_add;
 					img_ptr[2] = val1_wd + palette_add;
@@ -1540,7 +1561,7 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 					img_ptr[4] = val2_wd + palette_add;
 					img_ptr[5] = val23_wd + palette_add;
 					img_ptr[6] = val3_wd + palette_add;
-					img_ptr += (A2_WINDOW_WIDTH)/4;
+					img_ptr += (pixels_per_line)/4;
 				}
 
 				val_even_aux = val_even_aux >> 4;
@@ -1549,36 +1570,42 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 				val_odd_main = val_odd_main >> 4;
 			}
 
-			img_ptr -= (16*A2_WINDOW_WIDTH)/4;
-			img_ptr += 7;
+			img_ptr = save_img_ptr + 7;
 		}
 	}
 
-	g_a2_line_left_edge[start_line] = (left*14);
-	g_a2_line_right_edge[start_line] = (right*14);
+	for(i = 0; i < (8 - st_line_mod8); i++) {
+		g_a2_line_left_edge[st_line + i] = (left*14);
+		g_a2_line_right_edge[st_line + i] = (right*14);
+	}
 
 	g_need_redraw = 0;
 }
 
 void
-redraw_changed_hires(int start_offset, int start_line, int color, int reparse,
-	byte *screen_data)
+redraw_changed_hires(int start_offset, int start_line, int num_lines,
+	int color, int reparse, byte *screen_data, int pixels_per_line)
 {
 	if(!color) {
-		redraw_changed_hires_color(start_offset, start_line, reparse,
-			screen_data);
+		redraw_changed_hires_color(start_offset, start_line, num_lines,
+			reparse, screen_data, pixels_per_line);
 	} else {
-		redraw_changed_hires_bw(start_offset, start_line, reparse,
-			screen_data);
+		redraw_changed_hires_bw(start_offset, start_line, num_lines,
+			reparse, screen_data, pixels_per_line);
 	}
 }
 
 void
-redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
-	byte *screen_data)
+redraw_changed_hires_bw(int start_offset, int start_line, int num_lines,
+	int reparse, byte *screen_data, int pixels_per_line)
 {
 	word32	*img_ptr, *img_ptr2;
+	word32	*ch_ptr;
 	byte	*b_ptr;
+	byte	*slow_mem_ptr;
+	word32	mask_per_line;
+	word32	ch_mask;
+	word32	ch_tmp;
 	word32	tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6;
 	word32	mem_ptr;
 	word32	val0, val1;
@@ -1587,20 +1614,16 @@ redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
 	word32	palette_add;
 	int	y;
 	int	x1, x2;
-
-	word32	*ch_ptr;
-	word32	mask_per_line;
 	int	ch_bitpos;
 	int	bits_per_line;
 	int	ch_shift_amount;
-	word32	ch_mask;
-	word32	ch_tmp;
-	byte	*slow_mem_ptr;
 	int	shift_per;
 	int	left, right;
+	int	st_line;
+	int	i;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 560;
+	st_line = start_line;
+	start_line = start_line >> 3;
 
 	palette_add = (g_a2vid_palette << 4);
 	palette_add = palette_add + (palette_add << 8) + (palette_add << 16) +
@@ -1609,12 +1632,12 @@ redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
 	left = 40;
 	right = 0;
 
-	for(y = 8*start_line; y < 8*(start_line + 1); y++) {
+	for(y = st_line; y < (st_line + num_lines); y++) {
 		line_mask = 1 << (y >> 3);
 		mem_ptr = 0x2000 + (((y & 7) * 0x400) +
 				g_screen_index[y >> 3]) + start_offset;
 
-		CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
+		CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, 1);
 
 		if(ch_mask == 0) {
 			continue;
@@ -1636,16 +1659,15 @@ redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
 			right = MAX(x1 + shift_per, right);
 
 			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
+			b_ptr = &screen_data[(y*2)*pixels_per_line + x1*14];
 			img_ptr = (word32 *)b_ptr;
-			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
+			img_ptr2 = (word32 *)(b_ptr + pixels_per_line);
 
 			for(x2 = 0; x2 < shift_per; x2 += 2) {
 				val0 = *slow_mem_ptr++;
 				val1 = *slow_mem_ptr++;
 
-				val_whole = ((val1 & 0x7f) << 7) +
-								(val0 & 0x7f);
+				val_whole = ((val1 & 0x7f) << 7) +(val0 & 0x7f);
 
 				tmp0 = g_bw_hires_convert[val_whole & 3];
 				val_whole = val_whole >> 2;
@@ -1683,18 +1705,25 @@ redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	g_a2_line_left_edge[start_line] = (left*14);
-	g_a2_line_right_edge[start_line] = (right*14);
+	for(i = 0; i < num_lines; i++) {
+		g_a2_line_left_edge[st_line + i] = (left*14);
+		g_a2_line_right_edge[st_line + i] = (right*14);
+	}
 
 	g_need_redraw = 0;
 }
 
 void
-redraw_changed_hires_color(int start_offset, int start_line, int reparse,
-	byte *screen_data)
+redraw_changed_hires_color(int start_offset, int start_line, int num_lines,
+	int reparse, byte *screen_data, int pixels_per_line)
 {
 	word32	*img_ptr, *img_ptr2;
+	word32	*ch_ptr;
 	byte	*b_ptr;
+	byte	*slow_mem_ptr;
+	word32	mask_per_line;
+	word32	ch_mask;
+	word32	ch_tmp;
 	word32	mem_ptr;
 	word32	val0, val1;
 	word32	val_whole;
@@ -1706,23 +1735,19 @@ redraw_changed_hires_color(int start_offset, int start_line, int reparse,
 	word32	val_hi;
 	word32	tmp_val;
 	word32	palette_add;
-	int	j;
 	int	y;
 	int	x1, x2;
-
-	word32	*ch_ptr;
-	word32	mask_per_line;
 	int	ch_bitpos;
 	int	bits_per_line;
 	int	ch_shift_amount;
-	word32	ch_mask;
-	word32	ch_tmp;
-	byte	*slow_mem_ptr;
 	int	shift_per;
 	int	left, right;
+	int	st_line;
+	int	i, j;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 560;
+	st_line = start_line;
+
+	start_line = start_line >> 3;
 
 	palette_add = (g_a2vid_palette << 4);
 	palette_add = palette_add + (palette_add << 8) + (palette_add << 16) +
@@ -1731,12 +1756,12 @@ redraw_changed_hires_color(int start_offset, int start_line, int reparse,
 	left = 40;
 	right = 0;
 
-	for(y = 8*start_line; y < 8*(start_line + 1); y++) {
+	for(y = st_line; y < (st_line + num_lines); y++) {
 		line_mask = 1 << (y >> 3);
 		mem_ptr = 0x2000 + (((y & 7) * 0x400) +
 				g_screen_index[y >> 3]) + start_offset;
 
-		CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
+		CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, 1);
 
 		if(ch_mask == 0) {
 			continue;
@@ -1759,9 +1784,9 @@ redraw_changed_hires_color(int start_offset, int start_line, int reparse,
 			right = MAX(x1 + shift_per, right);
 
 			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
+			b_ptr = &screen_data[(y*2)*pixels_per_line + x1*14];
 			img_ptr = (word32 *)b_ptr;
-			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
+			img_ptr2 = (word32 *)(b_ptr + pixels_per_line);
 
 			prev_pixel = 0;
 			prev_hi = 0;
@@ -1817,33 +1842,40 @@ redraw_changed_hires_color(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	g_a2_line_left_edge[start_line] = (left*14);
-	g_a2_line_right_edge[start_line] = (right*14);
+	for(i = 0; i < num_lines; i++) {
+		g_a2_line_left_edge[st_line + i] = (left*14);
+		g_a2_line_right_edge[st_line + i] = (right*14);
+	}
 
 	g_need_redraw = 0;
 }
 
 
 void
-redraw_changed_dbl_hires(int start_offset, int start_line, int color,
-	int reparse, byte *screen_data)
+redraw_changed_dbl_hires(int start_offset, int start_line, int num_lines,
+	int color, int reparse, byte *screen_data, int pixels_per_line)
 {
 	if(!color) {
 		redraw_changed_dbl_hires_color(start_offset, start_line,
-				reparse, screen_data);
+			num_lines, reparse, screen_data, pixels_per_line);
 	} else {
-		redraw_changed_dbl_hires_bw(start_offset, start_line, reparse,
-				screen_data);
+		redraw_changed_dbl_hires_bw(start_offset, start_line,
+			num_lines, reparse, screen_data, pixels_per_line);
 	}
 }
 
 
 void
-redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
-	byte *screen_data)
+redraw_changed_dbl_hires_bw(int start_offset, int start_line, int num_lines,
+	int reparse, byte *screen_data, int pixels_per_line)
 {
-	byte	*b_ptr;
 	word32	*img_ptr, *img_ptr2;
+	word32	*ch_ptr;
+	byte	*b_ptr;
+	byte	*slow_mem_ptr;
+	word32	mask_per_line;
+	word32	ch_mask;
+	word32	ch_tmp;
 	word32	mem_ptr;
 	word32	val0, val1, val2, val3;
 	word32	tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6;
@@ -1852,20 +1884,16 @@ redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
 	word32	palette_add;
 	int	y;
 	int	x1, x2;
-
-	word32	*ch_ptr;
-	word32	mask_per_line;
 	int	ch_bitpos;
 	int	bits_per_line;
 	int	ch_shift_amount;
-	word32	ch_mask;
-	word32	ch_tmp;
-	byte	*slow_mem_ptr;
 	int	shift_per;
 	int	left, right;
+	int	st_line;
+	int	i;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 560;
+	st_line = start_line;
+	start_line = start_line >> 3;
 
 	palette_add = (g_a2vid_palette << 4);
 	palette_add = palette_add + (palette_add << 8) + (palette_add << 16) +
@@ -1874,12 +1902,12 @@ redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
 	left = 40;
 	right = 0;
 
-	for(y = 8*start_line; y < 8*(start_line + 1); y++) {
+	for(y = st_line; y < (st_line + num_lines); y++) {
 		line_mask = 1 << (y >> 3);
 		mem_ptr = 0x2000 + (((y & 7) * 0x400) + g_screen_index[y >> 3] +
 			start_offset);
 
-		CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
+		CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, 1);
 
 		if(ch_mask == 0) {
 			continue;
@@ -1897,9 +1925,9 @@ redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
 			right = MAX(x1 + shift_per, right);
 
 			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
+			b_ptr = &screen_data[(y*2)*pixels_per_line + x1*14];
 			img_ptr = (word32 *)b_ptr;
-			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
+			img_ptr2 = (word32 *)(b_ptr + pixels_per_line);
 
 			for(x2 = 0; x2 < shift_per; x2 += 2) {
 				val0 = slow_mem_ptr[0x10000];
@@ -1949,18 +1977,25 @@ redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	g_a2_line_left_edge[start_line] = (left*14);
-	g_a2_line_right_edge[start_line] = (right*14);
+	for(i = 0; i < num_lines; i++) {
+		g_a2_line_left_edge[st_line + i] = (left*14);
+		g_a2_line_right_edge[st_line + i] = (right*14);
+	}
 
 	g_need_redraw = 0;
 }
 
 void
-redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
-	byte *screen_data)
+redraw_changed_dbl_hires_color(int start_offset, int start_line, int num_lines,
+	int reparse, byte *screen_data, int pixels_per_line)
 {
-	byte	*b_ptr;
+	word32	*ch_ptr;
 	word32	*img_ptr, *img_ptr2;
+	byte	*slow_mem_ptr;
+	byte	*b_ptr;
+	word32	mask_per_line;
+	word32	ch_mask;
+	word32	ch_tmp;
 	word32	mem_ptr;
 	word32	val0, val1, val2, val3;
 	word32	tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6;
@@ -1970,20 +2005,16 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 	word32	palette_add;
 	int	y;
 	int	x1, x2;
-
-	word32	*ch_ptr;
-	word32	mask_per_line;
 	int	ch_bitpos;
 	int	bits_per_line;
 	int	ch_shift_amount;
-	word32	ch_mask;
-	word32	ch_tmp;
-	byte	*slow_mem_ptr;
 	int	shift_per;
 	int	left, right;
+	int	st_line;
+	int	i;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 560;
+	st_line = start_line;
+	start_line = start_line >> 3;
 
 	palette_add = (g_a2vid_palette << 4);
 	palette_add = palette_add + (palette_add << 8) + (palette_add << 16) +
@@ -1992,12 +2023,12 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 	left = 40;
 	right = 0;
 
-	for(y = 8*start_line; y < 8*(start_line + 1); y++) {
+	for(y = st_line; y < (st_line + num_lines); y++) {
 		line_mask = 1 << (y >> 3);
 		mem_ptr = 0x2000 + (((y & 7) * 0x400) + g_screen_index[y >> 3] +
 			start_offset);
 
-		CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
+		CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse, 1);
 
 		if(ch_mask == 0) {
 			continue;
@@ -2021,9 +2052,9 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 			right = MAX(x1 + shift_per, right);
 
 			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
+			b_ptr = &screen_data[(y*2)*pixels_per_line + x1*14];
 			img_ptr = (word32 *)b_ptr;
-			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
+			img_ptr2 = (word32 *)(b_ptr + pixels_per_line);
 
 			for(x2 = 0; x2 < shift_per; x2 += 2) {
 				val0 = slow_mem_ptr[0x10000];
@@ -2080,273 +2111,298 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	g_a2_line_left_edge[start_line] = (left*14);
-	g_a2_line_right_edge[start_line] = (right*14);
+	for(i = 0; i < num_lines; i++) {
+		g_a2_line_left_edge[st_line + i] = (left*14);
+		g_a2_line_right_edge[st_line + i] = (right*14);
+	}
 
 	g_need_redraw = 0;
 }
 
-word32	g_saved_palettes[16][8];
+word32	g_saved_line_palettes[200][8];
 int	g_saved_a2vid_palette = -1;
-int	g_a2vid_palette_remap[16];
-int	g_superhires_palette_checked = 0;
+word32	g_a2vid_palette_remap[16];
 
-void
-check_super_hires_palette_changes(int reparse)
+int
+video_rebuild_super_hires_palette(word32 scan_info, int line, int reparse)
 {
 	word32	*word_ptr;
-	byte	*byte_ptr;
 	word32	*ch_ptr;
-	word32	ch_mask;
-	int	palette_changed;
-	int	saved_a2vid_palette, a2vid_palette;
+	byte	*byte_ptr;
+	word32	ch_mask, mask_per_line;
 	word32	tmp;
+	word32	scan, old_scan;
+	int	palette_changed;
 	int	diff0, diff1, diff2;
 	int	val0, val1, val2;
 	int	diffs;
 	int	low_delta, low_color;
 	int	delta;
 	int	full;
-	int	i, j, k;
+	int	ch_bit_offset, ch_word_offset;
+	int	bits_per_line;
+	int	palette;
+	int	j, k;
 
 	palette_changed = 0;
+	palette = scan_info & 0xf;
 
-	a2vid_palette = g_a2vid_palette;
-	saved_a2vid_palette = g_saved_a2vid_palette;
+	ch_ptr = &(slow_mem_changed[0x9e00 >> CHANGE_SHIFT]);
+	ch_bit_offset = (palette << 5) >> SHIFT_PER_CHANGE;
+	ch_word_offset = ch_bit_offset >> 5;
+	ch_bit_offset = ch_bit_offset & 0x1f;
+	bits_per_line = (0x20 >> SHIFT_PER_CHANGE);
+	mask_per_line = -(1 << (32 - bits_per_line));
+	mask_per_line = mask_per_line >> ch_bit_offset;
 
-	g_saved_a2vid_palette = a2vid_palette;
+	ch_mask = ch_ptr[ch_word_offset] & mask_per_line;
+	ch_ptr[ch_word_offset] &= ~mask_per_line;	/* clear the bits */
 
-	if(saved_a2vid_palette != a2vid_palette) {
-		reparse = 1;
+	old_scan = g_superhires_scan_save[line];
+	scan = (scan_info & 0xfaf) + (g_palette_change_cnt[palette] << 12);
+	g_superhires_scan_save[line] = scan;
+
+#if 0
+	if(line == 1) {
+		word_ptr = (word32 *)&(g_slow_memory_ptr[0x19e00+palette*0x20]);
+		printf("y1vrshp, ch:%08x, s:%08x,os:%08x %d = %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			ch_mask, scan, old_scan, reparse,
+			word_ptr[0], word_ptr[1], word_ptr[2], word_ptr[3],
+			word_ptr[4], word_ptr[5], word_ptr[6], word_ptr[7]);
+	}
+#endif
+
+	if(!reparse && (ch_mask == 0) && (((scan ^ old_scan) & (~0xf0)) == 0)) {
+		/* nothing changed, get out fast */
+		return 0;
+	}
+
+	if(ch_mask) {
+		/* indicates the palette has changed, and other scan lines */
+		/*  using this palette need to do a full 32-byte compare to */
+		/*  decide if they need to update or not */
+		g_palette_change_cnt[palette]++;
+	}
+
+	word_ptr = (word32 *)&(g_slow_memory_ptr[0x19e00 + palette*0x20]);
+	diffs = reparse;
+	for(j = 0; j < 8; j++) {
+		if(word_ptr[j] != g_saved_line_palettes[line][j]) {
+			diffs = 1;
+			break;
+		}
+	}
+
+	if(diffs == 0) {
+		return 0;
+	}
+
+	/* first, save this word_ptr into saved_line_palettes */
+	byte_ptr = (byte *)word_ptr;
+	for(j = 0; j < 8; j++) {
+		g_saved_line_palettes[line][j] = word_ptr[j];
 	}
 
 	full = g_installed_full_superhires_colormap;
 
-	ch_ptr = &(slow_mem_changed[0x9e00 >> CHANGE_SHIFT]);
-	ch_mask = ch_ptr[0] | ch_ptr[1];
-	ch_ptr[0] = 0;
-	ch_ptr[1] = 0;
-
-	if(!reparse && ch_mask == 0) {
-		/* nothing changed, get out fast */
-		return;
-	}
-
-	for(i = 0; i < 0x10; i++) {
-		word_ptr = (word32 *)&(g_slow_memory_ptr[0x19e00 + i*0x20]);
-		diffs = reparse;
-		for(j = 0; j < 8; j++) {
-			if(word_ptr[j] != g_saved_palettes[i][j]) {
-				diffs = 1;
-				break;
-			}
-		}
-
-		if(diffs == 0) {
-			continue;
-		}
-
-		palette_changed = 1;
-
-		/* first, save this word_ptr into saved_palettes */
-		byte_ptr = (byte *)word_ptr;
-		for(j = 0; j < 8; j++) {
-			g_saved_palettes[i][j] = word_ptr[j];
-		}
-
-		if(i == a2vid_palette && !full) {
-			/* construct new color approximations from lores */
-			for(j = 0; j < 16; j++) {
-				tmp = *byte_ptr++;
-				val2 = (*byte_ptr++) & 0xf;
-				val0 = tmp & 0xf;
-				val1 = (tmp >> 4) & 0xf;
-				low_delta = 0x1000;
-				low_color = 0x0;
-				for(k = 0; k < 16; k++) {
-					diff0 = g_expanded_col_0[k] - val0;
-					diff1 = g_expanded_col_1[k] - val1;
-					diff2 = g_expanded_col_2[k] - val2;
-					if(diff0 < 0) {
-						diff0 = -diff0;
-					}
-					if(diff1 < 0) {
-						diff1 = -diff1;
-					}
-					if(diff2 < 0) {
-						diff2 = -diff2;
-					}
-					delta = diff0 + diff1 + diff2;
-					if(delta < low_delta) {
-						low_delta = delta;
-						low_color = k;
-					}
-				}
-
-				g_a2vid_palette_remap[j] = low_color;
-			}
-		}
-
-		byte_ptr = (byte *)word_ptr;
-		/* this palette has changed */
+	if(!full && palette == g_a2vid_palette) {
+		/* construct new color approximations from lores */
 		for(j = 0; j < 16; j++) {
-			val0 = *byte_ptr++;
-			val1 = *byte_ptr++;
-			video_update_color_array(i*16 + j, (val1<<8) + val0);
+			tmp = *byte_ptr++;
+			val2 = (*byte_ptr++) & 0xf;
+			val0 = tmp & 0xf;
+			val1 = (tmp >> 4) & 0xf;
+			low_delta = 0x1000;
+			low_color = 0x0;
+			for(k = 0; k < 16; k++) {
+				diff0 = g_expanded_col_0[k] - val0;
+				diff1 = g_expanded_col_1[k] - val1;
+				diff2 = g_expanded_col_2[k] - val2;
+				if(diff0 < 0) {
+					diff0 = -diff0;
+				}
+				if(diff1 < 0) {
+					diff1 = -diff1;
+				}
+				if(diff2 < 0) {
+					diff2 = -diff2;
+				}
+				delta = diff0 + diff1 + diff2;
+				if(delta < low_delta) {
+					low_delta = delta;
+					low_color = k;
+				}
+			}
+
+			g_a2vid_palette_remap[j] = low_color;
 		}
 	}
 
-	if(palette_changed) {
-		g_palette_changed++;
+	byte_ptr = (byte *)word_ptr;
+	/* this palette has changed */
+	for(j = 0; j < 16; j++) {
+		val0 = *byte_ptr++;
+		val1 = *byte_ptr++;
+		video_update_color_array(palette*16 + j, (val1<<8) + val0);
 	}
+
+	g_palette_change_summary = 1;
+
+	return 1;
 }
 
-#define SUPER_TYPE	redraw_changed_super_hires_oneline_norm_320
-#define SUPER_A2VID	0
-#define SUPER_MODE640	0
-#define SUPER_FILL	0
+#define SUPER_TYPE	redraw_changed_super_hires_oneline_nofill_8
+#define SUPER_FILL		0
+#define SUPER_PIXEL_SIZE	8
 #include "superhires.h"
 #undef	SUPER_TYPE
-#undef	SUPER_A2VID
-#undef	SUPER_MODE640
 #undef	SUPER_FILL
+#undef	SUPER_PIXEL_SIZE
 
-#define SUPER_TYPE	redraw_changed_super_hires_oneline_norm_640
-#define SUPER_A2VID	0
-#define SUPER_MODE640	1
-#define SUPER_FILL	0
+#define SUPER_TYPE	redraw_changed_super_hires_oneline_nofill_16
+#define SUPER_FILL		0
+#define SUPER_PIXEL_SIZE	16
 #include "superhires.h"
 #undef	SUPER_TYPE
-#undef	SUPER_A2VID
-#undef	SUPER_MODE640
 #undef	SUPER_FILL
+#undef	SUPER_PIXEL_SIZE
 
-#define SUPER_TYPE	redraw_changed_super_hires_oneline_a2vid_320
-#define SUPER_A2VID	1
-#define SUPER_MODE640	0
-#define SUPER_FILL	0
+#define SUPER_TYPE	redraw_changed_super_hires_oneline_nofill_32
+#define SUPER_FILL		0
+#define SUPER_PIXEL_SIZE	32
 #include "superhires.h"
 #undef	SUPER_TYPE
-#undef	SUPER_A2VID
-#undef	SUPER_MODE640
 #undef	SUPER_FILL
+#undef	SUPER_PIXEL_SIZE
 
-#define SUPER_TYPE	redraw_changed_super_hires_oneline_a2vid_640
-#define SUPER_A2VID	1
-#define SUPER_MODE640	1
-#define SUPER_FILL	0
+#define SUPER_TYPE	redraw_changed_super_hires_oneline_fill_8
+#define SUPER_FILL		1
+#define SUPER_PIXEL_SIZE	8
 #include "superhires.h"
 #undef	SUPER_TYPE
-#undef	SUPER_A2VID
-#undef	SUPER_MODE640
 #undef	SUPER_FILL
+#undef	SUPER_PIXEL_SIZE
 
-#define SUPER_TYPE	redraw_changed_super_hires_oneline_fill_320
-#define SUPER_A2VID	0
-#define SUPER_MODE640	0
-#define SUPER_FILL	1
+#define SUPER_TYPE	redraw_changed_super_hires_oneline_fill_16
+#define SUPER_FILL		1
+#define SUPER_PIXEL_SIZE	16
 #include "superhires.h"
 #undef	SUPER_TYPE
-#undef	SUPER_A2VID
-#undef	SUPER_MODE640
 #undef	SUPER_FILL
+#undef	SUPER_PIXEL_SIZE
 
-#define SUPER_TYPE	redraw_changed_super_hires_oneline_a2vid_fill_320
-#define SUPER_A2VID	1
-#define SUPER_MODE640	0
-#define SUPER_FILL	1
+#define SUPER_TYPE	redraw_changed_super_hires_oneline_fill_32
+#define SUPER_FILL		1
+#define SUPER_PIXEL_SIZE	32
 #include "superhires.h"
 #undef	SUPER_TYPE
-#undef	SUPER_A2VID
-#undef	SUPER_MODE640
 #undef	SUPER_FILL
+#undef	SUPER_PIXEL_SIZE
+
 
 
 void
-redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
-	byte *screen_data)
+redraw_changed_super_hires(int start_offset, int start_line, int num_lines,
+	int in_reparse, byte *screen_data)
 {
-	word32	all_checks;
-	word32	check[8];
-	word32	this_check;
-	int	line;
-	int	y;
-	int	i;
-	word32	tmp;
-	word32	line_mask;
-	int	a2vid_palette;
-	int	type;
-
 	word32	*ch_ptr;
 	word32	mask_per_line;
-	int	ch_bitpos;
-	int	bits_per_line;
-
+	word32	all_checks;
+	word32	check0, check1, mask0, mask1;
+	word32	this_check;
+	word32	tmp;
+	word32	line_mask;
 	word32	pal;
-	word32	scan;
-	word32	old_scan;
-	int	left, right;
+	word32	scan, old_scan;
 	word32	kd_tmp_debug;
+	int	y;
+	int	bits_per_line;
+	int	a2vid_palette;
+	int	type;
+	int	left, right;
+	int	st_line;
+	int	check_bit_pos, check_word_off;
+	int	pixel_size, pixel_size_type;
+	int	use_a2vid_palette, mode_640;
+	int	pixels_per_line;
+	int	ret;
+	int	i;
 
+	st_line = start_line;
+	start_line = start_line >> 3;
 
-	if(!g_superhires_palette_checked) {
-		g_superhires_palette_checked = 1;
-		check_super_hires_palette_changes(in_reparse);
+	pixel_size = g_kimage_superhires.mdepth;
+	pixels_per_line = g_kimage_superhires.width_act;
+
+	pixel_size_type = (pixel_size >> 3) - 1;
+	/* pixel_size_type is now: 0=8bit, 1=16bit, 3=32bit */
+	if(pixel_size_type >= 3) {
+		pixel_size_type = 2;
 	}
 
 	kd_tmp_debug = g_a2_screen_buffer_changed;
 
-	g_a2_line_full_left_edge[start_line] = 0;
-	g_a2_line_full_right_edge[start_line] = 640;
-
 	line_mask = 1 << (start_line);
 
-	ch_ptr = &(slow_mem_changed[(0x2000 + 8*start_line*0xa0) >>
-								CHANGE_SHIFT]);
-	ch_bitpos = 0;
+	ch_ptr = &(slow_mem_changed[(0x2000) >> CHANGE_SHIFT]);
 	bits_per_line = 160 >> SHIFT_PER_CHANGE;
 	mask_per_line = -(1 << (32 - bits_per_line));
-
-	/* handle palette counting */
-	for(y = 8*start_line; y < 8*(start_line + 1); y++) {
-		scan = g_slow_memory_ptr[0x19d00 + y];
-		pal = scan & 0xf;
-		g_shr_palette_used[pal]++;
-	}
 
 	if(SHIFT_PER_CHANGE != 3) {
 		halt_printf("SHIFT_PER_CHANGE must be 3!\n");
 		return;
 	}
 
-	check[0] = ch_ptr[0] & mask_per_line;
-	check[1] = ((ch_ptr[0] << 20) + (ch_ptr[1] >> 12)) & mask_per_line;
-	check[2] = ((ch_ptr[1] << 8)) & mask_per_line;
-	check[3] = ((ch_ptr[1] << 28) + (ch_ptr[2] >> 4)) & mask_per_line;
-	check[4] = ((ch_ptr[2] << 16) + (ch_ptr[3] >> 16)) & mask_per_line;
-	check[5] = ((ch_ptr[3] << 4)) & mask_per_line;
-	check[6] = ((ch_ptr[3] << 24) + (ch_ptr[4] >> 8)) & mask_per_line;
-	check[7] = ((ch_ptr[4] << 12)) & mask_per_line;
-
-	ch_ptr[0] = 0;
-	ch_ptr[1] = 0;
-	ch_ptr[2] = 0;
-	ch_ptr[3] = 0;
-	ch_ptr[4] = 0;
-
 	a2vid_palette = g_a2vid_palette;
 	if(g_installed_full_superhires_colormap) {
 		a2vid_palette = -1;
+	} else {
+		/* handle palette counting for finding least-used palette */
+		if(pixel_size == 8) {
+			for(y = 8*start_line; y < 8*(start_line + 1); y++) {
+				scan = g_slow_memory_ptr[0x19d00 + y];
+				pal = scan & 0xf;
+				g_shr_palette_used[pal]++;
+			}
+		}
 	}
 
 	all_checks = 0;
-	for(line = 0; line < 8; line++) {
-		y = 8*start_line + line;
+	check0 = 0;
+	check1 = 0;
+	for(y = st_line; y < (st_line + num_lines); y++) {
 		scan = g_slow_memory_ptr[0x19d00 + y];
+		check_bit_pos = bits_per_line * y;
+		check_word_off = check_bit_pos >> 5;	/* 32 bits per word */
+		check_bit_pos = check_bit_pos & 0x1f;	/* 5-bit bit_pos */
+		check0 = ch_ptr[check_word_off];
+		check1 = ch_ptr[check_word_off+1];
+		mask0 = mask_per_line >> check_bit_pos;
+		mask1 = 0;
+		this_check = check0 << check_bit_pos;
+				/* move indicated bit to MSbit position */
+		if((check_bit_pos + bits_per_line) > 32) {
+			this_check |= (check1 >> (32 - check_bit_pos));
+			mask1 = mask_per_line << (32 - check_bit_pos);
+		}
+
+		ch_ptr[check_word_off] = check0 & ~mask0;
+		ch_ptr[check_word_off+1] = check1 & ~mask1;
+
+		this_check = this_check & mask_per_line;
 		old_scan = g_superhires_scan_save[y];
-		g_superhires_scan_save[y] = scan;
-		this_check = check[line];
-		if(in_reparse || (scan ^ old_scan) & 0xaf) {
+		use_a2vid_palette = ((scan & 0xf) == (word32)a2vid_palette);
+		scan = (scan + (a2vid_palette << 8)) & 0xfff;
+
+		ret = video_rebuild_super_hires_palette(scan, y, in_reparse);
+#if 0
+		if(y == 1) {
+			printf("y1, ch:%08x, ret:%d, scan:%03x, os:%03x\n",
+				this_check, ret, scan, old_scan);
+		}
+#endif
+		if(ret || in_reparse || ((scan ^ old_scan) & 0xa0)) {
+					/* 0x80 == mode640, 0x20 = fill */
 			this_check = -1;
 		}
 
@@ -2354,8 +2410,9 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 			continue;
 		}
 
-		type = ((scan & 0xa0) >> 5) +
-				(((scan & 0xf) == a2vid_palette) << 1);
+		mode_640 = (scan & 0x80);
+
+		type = ((scan >> 5) & 1) + (pixel_size_type << 1);
 		if(type & 1) {
 			/* fill mode--redraw whole line */
 			this_check = -1;
@@ -2367,39 +2424,35 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 
 
 		switch(type) {
-		case 0:	/* no_a2vid, 320, nofill */
-			redraw_changed_super_hires_oneline_norm_320(
-				screen_data, y, scan, this_check);
+		case 0:	/* nofill, 8 byte pixels */
+			redraw_changed_super_hires_oneline_nofill_8(
+				screen_data, pixels_per_line, y, scan,
+				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 1:	/* no_a2vid, 320, fill */
-			redraw_changed_super_hires_oneline_fill_320(
-				screen_data, y, scan, this_check);
+		case 1:	/* fill, 8 byte pixels */
+			redraw_changed_super_hires_oneline_fill_8(
+				screen_data, pixels_per_line, y, scan,
+				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 2:	/* a2vid, 320, nofill */
-			redraw_changed_super_hires_oneline_a2vid_320(
-				screen_data, y, scan, this_check);
+		case 2:	/* nofill, 16 byte pixels */
+			redraw_changed_super_hires_oneline_nofill_16(
+				screen_data, pixels_per_line, y, scan,
+				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 3:	/* a2vid, 320, fill */
-			redraw_changed_super_hires_oneline_a2vid_fill_320(
-				screen_data, y, scan, this_check);
+		case 3:	/* fill, 16 byte pixels */
+			redraw_changed_super_hires_oneline_fill_16(
+				screen_data, pixels_per_line, y, scan,
+				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 4:	/* no_a2vid, 640, nofill */
-			redraw_changed_super_hires_oneline_norm_640(
-				screen_data, y, scan, this_check);
+		case 4:	/* nofill, 32 byte pixels */
+			redraw_changed_super_hires_oneline_nofill_32(
+				screen_data, pixels_per_line, y, scan,
+				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 5:	/* no_a2vid, 640, fill */
-			/* No fill mode in 640 */
-			redraw_changed_super_hires_oneline_norm_640(
-				screen_data, y, scan, this_check);
-			break;
-		case 6:	/* a2vid, 640, nofill */
-			redraw_changed_super_hires_oneline_a2vid_640(
-				screen_data, y, scan, this_check);
-			break;
-		case 7:	/* a2vid, 640, fill */
-			/* no fill mode in 640 */
-			redraw_changed_super_hires_oneline_a2vid_640(
-				screen_data, y, scan, this_check);
+		case 5:	/* fill, 32 byte pixels */
+			redraw_changed_super_hires_oneline_fill_32(
+				screen_data, pixels_per_line, y, scan,
+				this_check, use_a2vid_palette, mode_640);
 			break;
 		default:
 			halt_printf("type: %d bad!\n", type);
@@ -2420,9 +2473,12 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 		}
 	}
 
-	g_a2_line_left_edge[start_line] = (4*left);
-	g_a2_line_right_edge[start_line] = (4*right);
+	for(i = 0; i < num_lines; i++) {
+		g_a2_line_left_edge[st_line + i] = 4*left;
+		g_a2_line_right_edge[st_line + i] = 4*right;
+	}
 
+#if 0
 	if((g_a2_screen_buffer_changed & (1 << start_line)) != 0) {
 		if(((g_full_refresh_needed & (1 << start_line)) == 0) &&
 							left >= right) {
@@ -2430,18 +2486,14 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 				start_line, left, right);
 			printf("mask_per_line: %08x, all_checks: %08x\n",
 				mask_per_line, all_checks);
-			for(i = 0; i < 8; i++) {
-				printf("check[%d] = %08x\n", i, check[i]);
-			}
-			printf("a2_screen_chang: %08x, init_left: %d, "
-				"init_right:%d\n", kd_tmp_debug,
-				g_a2_line_full_left_edge[start_line],
-				g_a2_line_full_right_edge[start_line]);
+			printf("check0,1 = %08x,%08x\n", check0, check1);
+			printf("a2_screen_chang: %08x\n", kd_tmp_debug);
 #ifdef HPUX
 			U_STACK_TRACE();
 #endif
 		}
 	}
+#endif
 
 	g_need_redraw = 0;
 }
@@ -2449,89 +2501,177 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 void
 display_screen()
 {
-	int	i;
-
-	for(i = 0; i < 25; i++) {
-		g_a2_line_must_reparse[i] = 1;
-		g_a2_line_full_left_edge[i] = 0;
-		g_a2_line_full_right_edge[i] = 560;
-	}
-
-	refresh_screen();
+	video_update_through_line(262);
 }
 
 word32 g_cycs_in_refresh_line = 0;
 word32 g_cycs_in_refresh_ximage = 0;
 
-int	g_num_lines_a2vid = 0;
 int	g_num_lines_superhires = 0;
+int	g_num_lines_prev_superhires = 0;
 
 void
-refresh_screen()
+video_update_event_line(int line)
 {
-	register word32 start_time, start_time2;
-	register word32 end_time;
-	int	previous_superhires;
-	int	i;
+	int	new_line;
 
+	video_update_through_line(line);
 
-	GET_ITIMER(start_time);
-
-	previous_superhires = g_num_lines_superhires;
-	g_num_lines_superhires = 0;
-	g_num_lines_a2vid = 0;
-	g_superhires_palette_checked = 0;
-
-	GET_ITIMER(start_time2);
-	for(i = 0; i < 25; i++) {
-		refresh_line(i);
+	new_line = line + 1;
+	if(new_line < 200) {
+		if(!g_config_control_panel) {
+			add_event_vid_upd(new_line);
+		}
+	} else if(line >= 262) {
+		video_update_through_line(0);
+		if(!g_config_control_panel) {
+			add_event_vid_upd(1);	/* add event for new screen */
+		}
 	}
-
-	if(g_palette_changed) {
-		video_update_colormap();
-		g_palette_changed = 0;
-	}
-	if(previous_superhires && !g_num_lines_superhires) {
-		/* switched out from superhires--refresh */
-		g_border_sides_refresh_needed = 1;
-	}
-
-	/* deal with border */
-	refresh_border();
-
-	if(g_status_refresh_needed) {
-		g_status_refresh_needed = 0;
-		x_redraw_status_lines();
-	}
-
-	GET_ITIMER(end_time);
-	g_cycs_in_refresh_line += (end_time - start_time);
-
-	GET_ITIMER(start_time);
-	video_push_kimages();
-	GET_ITIMER(end_time);
-	g_cycs_in_refresh_ximage += (end_time - start_time);
 }
 
 void
-refresh_line(int line)
+video_update_through_line(int line)
+{
+	register word32 start_time;
+	register word32 end_time;
+	int	*mode_ptr;
+	word32	mask;
+	int	last_line, num_lines;
+	int	must_reparse;
+	int	new_all_stat, prev_all_stat;
+	int	new_stat, prev_stat;
+	int	i;
+
+#if 0
+	vid_printf("\nvideo_upd for line %d, lines: %06x\n\n", line,
+				get_lines_since_vbl(g_cur_dcycs));
+#endif
+
+	GET_ITIMER(start_time);
+
+	video_update_all_stat_through_line(line);
+
+	i = g_vid_update_last_line;
+
+	last_line = MIN(200, line+1);	/* go through line, but not past 200 */
+
+	prev_stat = -2;
+	prev_all_stat = -2;
+	num_lines = 0;
+	must_reparse = 0;
+	for(i = g_vid_update_last_line; i < last_line; i++) {
+		new_all_stat = g_a2_new_all_stat[i];
+		if(new_all_stat != g_a2_cur_all_stat[i]) {
+			/* regen line_stat for this line */
+			g_a2_cur_all_stat[i] = new_all_stat;
+			if(new_all_stat == prev_all_stat) {
+				/* save a lookup */
+				new_stat = prev_stat;
+			} else {
+				new_stat = video_all_stat_to_line_stat(i,
+								new_all_stat);
+			}
+			if(new_stat != g_a2_line_stat[i]) {
+				/* status changed */
+				g_a2_line_stat[i] = new_stat;
+				mode_ptr = video_update_kimage_ptr(i, new_stat);
+				if(mode_ptr[i] != new_stat) {
+					must_reparse = 1;
+					mode_ptr[i] = new_stat;
+				}
+				mask = 1 << (line >> 3);
+				g_full_refresh_needed |= mask;
+				g_a2_screen_buffer_changed |= mask;
+			}
+		}
+
+		new_stat = g_a2_line_stat[i];
+
+		if( ((new_stat == prev_stat) && ((i & 7) != 0)) ||
+							(num_lines == 0) ) {
+			/* merge prev and this together */
+			prev_stat = new_stat;
+			num_lines++;
+			continue;
+		}
+
+		/* else, we must call refresh */
+		video_refresh_lines(i - num_lines, num_lines, must_reparse);
+		num_lines = 1;
+		prev_all_stat = -1;
+		prev_stat = new_stat;
+		must_reparse = 0;
+	}
+	if(num_lines > 0) {
+		video_refresh_lines(i - num_lines, num_lines, must_reparse);
+	}
+
+	g_vid_update_last_line = last_line;
+
+	/* deal with border */
+	if(line >= 262) {
+		if(g_num_lines_prev_superhires != g_num_lines_superhires) {
+			/* switched in/out from superhires--refresh borders */
+			g_border_sides_refresh_needed = 1;
+		}
+		refresh_border();
+
+		if(g_status_refresh_needed) {
+			g_status_refresh_needed = 0;
+			x_redraw_status_lines();
+		}
+	}
+	GET_ITIMER(end_time);
+
+	g_cycs_in_refresh_line += (end_time - start_time);
+
+	if(line >= 262) {
+		GET_ITIMER(start_time);
+		if(g_palette_change_summary) {
+			g_palette_change_summary = 0;
+			video_update_colormap();
+		}
+
+		video_push_kimages();
+		GET_ITIMER(end_time);
+		g_cycs_in_refresh_ximage += (end_time - start_time);
+
+		g_num_lines_prev_superhires = g_num_lines_superhires;
+		g_num_lines_superhires = 0;
+	}
+}
+
+void
+video_refresh_lines(int st_line, int num_lines, int must_reparse)
 {
 	byte	*ptr;
-	int	must_reparse;
+	int	line;
 	int	stat;
 	int	mode;
-	int	dbl;
-	int	page;
-	int	color;
+	int	dbl, page, color;
 	int	altchar, bg_color, text_color;
+	int	pixels_per_line;
+	int	i;
+
+	line = st_line;
+
+	/* do some basic checking, num_lines should be 1-8, and */
+	/*  st_line+num_lines-1 cannot roll over 8 */
+	if((num_lines < 1) || (num_lines > 8) ||
+					(((st_line & 7) + num_lines) > 8) ) {
+		halt_printf("video_refresh_lines called with %d, %d\n",
+			st_line, num_lines);
+		return;
+	}
 
 	stat = g_a2_line_stat[line];
-	must_reparse = g_a2_line_must_reparse[line];
 	ptr = g_a2_line_kimage[line]->data_ptr;
+	pixels_per_line = g_a2_line_kimage[line]->width_act;
 
-	g_a2_line_left_edge[line] = 640;
-	g_a2_line_right_edge[line] = 0;
-
+	/* do not zero g_a2_line_left/right_edge here since text/gr routs */
+	/*  need to leave stale values around for drawing to work correctly */
+	/* all routs force in new left/right when there are screen changes */
 
 	dbl = stat & 1;
 	color = (stat >> 1) & 1;
@@ -2544,54 +2684,52 @@ refresh_line(int line)
 
 	switch(mode) {
 	case MODE_TEXT:
-		g_num_lines_a2vid++;
-
 		altchar = (stat >> 7) & 1;
 		bg_color = (stat >> 8) & 0xf;
 		text_color = (stat >> 12) & 0xf;
 		if(dbl) {
-			redraw_changed_text_80(0x000 + page*0x400, line,
-				must_reparse, ptr, altchar, bg_color,
-				text_color);
+			redraw_changed_text_80(0x000 + page*0x400, st_line,
+				num_lines, must_reparse, ptr, altchar, bg_color,
+				text_color, pixels_per_line);
 		} else {
-			redraw_changed_text_40(0x000 + page*0x400, line,
-				must_reparse, ptr, altchar, bg_color,
-				text_color);
+			redraw_changed_text_40(0x000 + page*0x400, st_line,
+				num_lines, must_reparse, ptr, altchar, bg_color,
+				text_color, pixels_per_line);
 		}
 		break;
 	case MODE_GR:
-		g_num_lines_a2vid++;
 		if(dbl) {
-			redraw_changed_dbl_gr(0x000 + page*0x400, line,
-				must_reparse, ptr);
+			redraw_changed_dbl_gr(0x000 + page*0x400, st_line,
+				num_lines, must_reparse, ptr, pixels_per_line);
 		} else {
-			redraw_changed_gr(0x000 + page*0x400, line,
-				must_reparse, ptr);
+			redraw_changed_gr(0x000 + page*0x400, st_line,
+				num_lines, must_reparse, ptr, pixels_per_line);
 		}
 		break;
 	case MODE_HGR:
-		g_num_lines_a2vid++;
 		if(dbl) {
-			redraw_changed_dbl_hires(0x000 + page*0x2000, line,
-				color, must_reparse, ptr);
+			redraw_changed_dbl_hires(0x000 + page*0x2000, st_line,
+				num_lines, color, must_reparse, ptr,
+				pixels_per_line);
 		} else {
-			redraw_changed_hires(0x000 + page*0x2000, line,
-				color, must_reparse, ptr);
+			redraw_changed_hires(0x000 + page*0x2000, st_line,
+				num_lines, color, must_reparse, ptr,
+				pixels_per_line);
 		}
 		break;
 	case MODE_SUPER_HIRES:
 		g_num_lines_superhires++;
-		redraw_changed_super_hires(0, line, must_reparse, ptr);
+		redraw_changed_super_hires(0, st_line, num_lines,
+				must_reparse, ptr);
 		break;
 	case MODE_BORDER:
-		g_num_lines_a2vid++;
-		if(line != 24) {
-			halt_printf("Border line not 24!\n");
+		if(line < 192) {
+			halt_printf("Border line not 192: %d\n", line);
 		}
-		g_a2_line_full_left_edge[line] = 0;
-		g_a2_line_left_edge[line] = 0;
-		g_a2_line_full_right_edge[line] = 560;
-		g_a2_line_right_edge[line] = 560;
+		for(i = 0; i < num_lines; i++) {
+			g_a2_line_left_edge[line + i] = 0;
+			g_a2_line_right_edge[line + i] = 560;
+		}
 		if(g_border_line24_refresh_needed) {
 			g_border_line24_refresh_needed = 0;
 			g_a2_screen_buffer_changed |= (1 << 24);
@@ -2601,8 +2739,6 @@ refresh_line(int line)
 		halt_printf("refresh screen: mode: 0x%02x unknown!\n", mode);
 		exit(7);
 	}
-
-	g_a2_line_must_reparse[line] = 0;
 }
 
 void
@@ -2724,7 +2860,8 @@ video_get_kimages()
 	video_get_kimage(&g_kimage_text[1], 0, 8, 8);
 	video_get_kimage(&g_kimage_hires[0], 0, 8, 8);
 	video_get_kimage(&g_kimage_hires[1], 0, 8, 8);
-	video_get_kimage(&g_kimage_superhires, 0, 8, 8);
+	video_get_kimage(&g_kimage_superhires, 0, g_screen_depth,
+							g_screen_mdepth);
 	video_get_kimage(&g_kimage_border_special, 1, g_screen_depth,
 							g_screen_mdepth);
 	video_get_kimage(&g_kimage_border_sides, 2, g_screen_depth,
@@ -2800,23 +2937,23 @@ video_push_lines(Kimage *kimage_ptr, int start_line, int end_line, int left_pix,
 			g_a2_screen_buffer_changed, g_full_refresh_needed);
 	}
 
-	srcy = 16*start_line;
+	srcy = 2*start_line;
 
 	mdepth_mismatch = (kimage_ptr->mdepth != g_screen_mdepth);
 	if(mdepth_mismatch) {
 		/* translate from 8-bit pseudo to correct visual */
 		video_convert_kimage_depth(kimage_ptr, &g_mainwin_kimage,
 			left_pix, srcy, (right_pix - left_pix),
-			16*(end_line - start_line));
+			2*(end_line - start_line));
 		kimage_ptr = &g_mainwin_kimage;
 	}
-	g_refresh_bytes_xfer += 16*(end_line - start_line) *
+	g_refresh_bytes_xfer += 2*(end_line - start_line) *
 							(right_pix - left_pix);
 
 
 	x_push_kimage(kimage_ptr, BASE_MARGIN_LEFT + left_pix,
 			BASE_MARGIN_TOP + srcy, left_pix, srcy,
-			(right_pix - left_pix), 16*(end_line - start_line));
+			(right_pix - left_pix), 2*(end_line - start_line));
 }
 
 void
@@ -2835,11 +2972,11 @@ video_push_border_sides_lines(int end_x, int width, int start_line,
 		start_line, end_line, end_x - width, end_x);
 #endif
 	kimage_ptr = &g_kimage_border_sides;
-	g_refresh_bytes_xfer += 16 * (end_line - start_line) * width;
+	g_refresh_bytes_xfer += 2 * (end_line - start_line) * width;
 
-	srcy = 16 * start_line;
+	srcy = 2 * start_line;
 	x_push_kimage(kimage_ptr, end_x - width, BASE_MARGIN_TOP + srcy,
-			0, srcy, width, 16*(end_line - start_line));
+			0, srcy, width, 2*(end_line - start_line));
 }
 
 void
@@ -2856,12 +2993,12 @@ video_push_border_sides()
 #endif
 
 	/* redraw left sides */
-	video_push_border_sides_lines(BORDER_WIDTH, BORDER_WIDTH, 0, 25);
+	video_push_border_sides_lines(BORDER_WIDTH, BORDER_WIDTH, 0, 200);
 
 	/* right side--can be "jagged" */
 	prev_line = -1;
 	old_width = -1;
-	for(i = 0; i < 25; i++) {
+	for(i = 0; i < 200; i++) {
 		mode = (g_a2_line_stat[i] >> 4) & 7;
 		width = EFF_BORDER_WIDTH;
 		if(mode == MODE_SUPER_HIRES) {
@@ -2876,7 +3013,7 @@ video_push_border_sides()
 	}
 
 	video_push_border_sides_lines(X_A2_WINDOW_WIDTH, old_width,
-								prev_line, 25);
+								prev_line, 200);
 }
 
 void
@@ -2889,8 +3026,7 @@ video_push_border_special()
 	height = BASE_MARGIN_TOP;
 
 	kimage_ptr = &g_kimage_border_special;
-	g_refresh_bytes_xfer += 16 * width *
-				(BASE_MARGIN_TOP + BASE_MARGIN_BOTTOM);
+	g_refresh_bytes_xfer += width * (BASE_MARGIN_TOP + BASE_MARGIN_BOTTOM);
 
 	x_push_kimage(kimage_ptr, 0, BASE_MARGIN_TOP + A2_WINDOW_HEIGHT,
 			0, 0, width, BASE_MARGIN_BOTTOM);
@@ -2904,12 +3040,13 @@ video_push_kimages()
 {
 	register word32 start_time;
 	register word32 end_time;
-	int	start;
+	Kimage	*last_kim, *cur_kim;
 	word32	mask;
+	int	start;
 	int	line;
 	int	left_pix, right_pix;
 	int	left, right;
-	Kimage	*last_kim, *cur_kim;
+	int	line_div8;
 
 	if(g_border_sides_refresh_needed) {
 		g_border_sides_refresh_needed = 0;
@@ -2927,23 +3064,28 @@ video_push_kimages()
 	GET_ITIMER(start_time);
 
 	start = -1;
-	mask = 1;
 	last_kim = (Kimage *)-1;
 	cur_kim = (Kimage *)0;
 
 	left_pix = 640;
 	right_pix = 0;
 
-	for(line = 0; line < 25; line++) {
-		if((g_full_refresh_needed & (1 << line)) != 0) {
-			left = g_a2_line_full_left_edge[line];
-			right = g_a2_line_full_right_edge[line];
+	for(line = 0; line < 200; line++) {
+		line_div8 = line >> 3;
+		mask = 1 << (line_div8);
+		cur_kim = g_a2_line_kimage[line];
+		if((g_full_refresh_needed & mask) != 0) {
+			left = 0;
+			right = 560;
+			if(cur_kim == &g_kimage_superhires) {
+				right = 640;
+			}
 		} else {
 			left = g_a2_line_left_edge[line];
 			right = g_a2_line_right_edge[line];
 		}
 
-		if(!(g_a2_screen_buffer_changed & mask)) {
+		if(!(g_a2_screen_buffer_changed & mask) || (left > right)) {
 			/* No need to update this line */
 			/* Refresh previous chunks of lines, if any */
 			if(start >= 0) {
@@ -2955,7 +3097,6 @@ video_push_kimages()
 			}
 		} else {
 			/* Need to update this line */
-			cur_kim = g_a2_line_kimage[line];
 			if(start < 0) {
 				start = line;
 				last_kim = cur_kim;
@@ -2972,15 +3113,13 @@ video_push_kimages()
 			left_pix = MIN(left, left_pix);
 			right_pix = MAX(right, right_pix);
 		}
-		mask = mask << 1;
 	}
 
 	if(start >= 0) {
-		video_push_lines(last_kim, start, 25, left_pix, right_pix);
+		video_push_lines(last_kim, start, 200, left_pix, right_pix);
 	}
 
 	g_a2_screen_buffer_changed = 0;
-
 	g_full_refresh_needed = 0;
 
 	x_push_done();
@@ -3035,10 +3174,12 @@ video_update_color_array(int col_num, int a2_color)
 		return;
 	}
 
+#if 0
 	if(g_screen_depth != 8) {
 		/* redraw whole superhires for now */
 		g_full_refresh_needed = -1;
 	}
+#endif
 
 	video_update_color_raw(col_num, a2_color);
 }
@@ -3057,16 +3198,6 @@ video_update_colormap()
 		for(i = 0; i < 16; i++) {
 			video_update_color_raw(palette + i, g_lores_colors[i]);
 		}
-	}
-
-	if(full) {
-		if(g_screen_depth != 8) {
-			/* Must redraw all, for now */
-			g_a2_screen_buffer_changed = -1;
-			g_full_refresh_needed = -1;
-			return;
-		}
-	} else {
 		x_update_physical_colormap();
 	}
 }
@@ -3097,3 +3228,14 @@ video_update_status_line(int line, const char *string)
 	buf[STATUS_LINE_LENGTH] = 0;
 }
 
+void
+video_show_debug_info()
+{
+	word32	tmp1;
+
+	printf("g_cur_dcycs: %f, last_vbl: %f\n", g_cur_dcycs,
+							g_last_vbl_dcycs);
+	tmp1 = get_lines_since_vbl(g_cur_dcycs);
+	printf("lines since vbl: %06x\n", tmp1);
+	printf("Last line updated: %d\n", g_vid_update_last_line);
+}

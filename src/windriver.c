@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.4 2002-11-19 00:09:59-08 kadickey Exp $";
+const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.5 2003-11-03 01:29:52-05 kentd Exp $";
 
 #define WIN32_LEAN_AND_MEAN	/* Tell windows we want less header gunk */
 #define STRICT			/* Tell Windows we want compile type checks */
@@ -18,7 +18,6 @@ const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.4 2002-11-19 00:09
 #include <mmsystem.h>
 #include <winsock.h>
 #include <commctrl.h>
-#include <conio.h>
 
 #include "defc.h"
 #include "protos_windriver.h"
@@ -315,8 +314,8 @@ win_event_handler(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam)
 }
 
 
-int APIENTRY
-WinMain(HINSTANCE curr, HINSTANCE prev, LPSTR cmd, int nShow)
+int
+main(int argc, char **argv)
 {
 	WNDCLASS wndclass;
 	RECT	rect;
@@ -367,7 +366,7 @@ WinMain(HINSTANCE curr, HINSTANCE prev, LPSTR cmd, int nShow)
 
 
 	// Call kegsmain
-	return kegsmain(__argc, __argv);
+	return kegsmain(argc, argv);
 }
 
 

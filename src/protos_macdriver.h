@@ -8,25 +8,32 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_protos_mac_h[] = "@(#)$KmKId: protos_macdriver.h,v 1.2 2002-11-19 00:10:38-08 kadickey Exp $";
+const char rcsid_protos_mac_h[] = "@(#)$KmKId: protos_macdriver.h,v 1.4 2003-10-20 22:37:41-04 kentd Exp $";
 
 /* END_HDR */
-
 /* macdriver.c */
-void update_color_array(int col_num, int a2_color);
-void convert_to_xcolor(int col_num, int a2_color);
-void update_physical_colormap(void);
+OSStatus quit_event_handler(EventHandlerCallRef call_ref, EventRef event, void *ignore);
+void show_alert(const char *str1, const char *str2, const char *str3, int num);
+OSStatus my_cmd_handler(EventHandlerCallRef handlerRef, EventRef event, void *userdata);
+void update_window(void);
+void show_event(UInt32 event_class, UInt32 event_kind, int handled);
+OSStatus my_win_handler(EventHandlerCallRef handlerRef, EventRef event, void *userdata);
+OSStatus dummy_event_handler(EventHandlerCallRef call_ref, EventRef in_event, void *ignore);
+void mac_update_modifiers(word32 state);
+void mac_warp_mouse(void);
+void check_input_events(void);
+void temp_run_application_event_loop(void);
+int main(int argc, char *argv[]);
+void x_update_color(int col_num, int red, int green, int blue, word32 rgb);
+void x_update_physical_colormap(void);
 void show_xcolor_array(void);
 void xdriver_end(void);
+void x_get_kimage(Kimage *kimage_ptr);
 void dev_video_init(void);
-byte *mac_get_ximage(byte **data_ptr, int extended_info);
-void update_status_line(int line, const char *string);
-void redraw_status_lines(void);
-void x_refresh_ximage(void);
-void x_refresh_lines(byte *xim, int start_line, int end_line, int left_pix, int right_pix);
-void x_convert_8to16(byte *ptr_in, byte *ptr_out, int startx, int starty, int width, int height);
-void x_convert_8to24(byte *ptr_in, byte *ptr_out, int startx, int starty, int width, int height);
-void check_input_events(void);
+void x_redraw_status_lines(void);
+void x_push_kimage(Kimage *kimage_ptr, int destx, int desty, int srcx, int srcy, int width, int height);
+void x_push_done(void);
 void x_auto_repeat_on(int must);
 void x_auto_repeat_off(int must);
+void x_warp_pointer(int do_warp);
 

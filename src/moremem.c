@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.223 2002-11-19 00:09:59-08 kadickey Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.226 2003-10-29 15:09:55-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -49,11 +49,18 @@ extern int g_apple35_sel;
 extern int cur_drive;
 
 int	g_zipgs_unlock = 0;
-int	g_zipgs_disabled = 0;
 int	g_zipgs_reg_c059 = 0x5f;
+	// 7=LC cache dis, 6==5ms paddle del en, 5==5ms ext del en,
+	// 4==5ms c02e enab, 3==CPS follow enab, 2-0: 111
 int	g_zipgs_reg_c05a = 0x0f;
+	// 7:4 = current ZIP speed, 0=100%, 1=93.75%, F=6.25%
+	// 3:0: always 1111
 int	g_zipgs_reg_c05b = 0x40;
+	// 7==1ms clock, 6==cshupd: tag data at c05f updated
+	// 5==LC cache disable, 4==bd is disabled, 3==delay in effect,
+	// 2==rombank, 1-0==ram size (00:8K, 01=16K, 10=32K, 11=64K)
 int	g_zipgs_reg_c05c = 0x00;
+	// 7:1==slot delay enable (for 52-54ms), 0==speaker 5ms delay
 
 int	statereg;
 int	halt_on_c02a = 0;
@@ -1297,8 +1304,7 @@ io_read(word32 loc, double *cyc_ptr)
 			if(g_zipgs_unlock >= 4) {
 				word64_tmp = (word64)dcycs;
 				tmp = (word64_tmp >> 9) & 1;
-				return (tmp << 7) + (g_zipgs_reg_c05b & 0x6f) +
-					(g_zipgs_disabled << 4);;
+				return (tmp << 7) + (g_zipgs_reg_c05b & 0x7f);
 			} else {
 				annunc_1 = 1;
 			}
@@ -1695,10 +1701,11 @@ io_write(word32 loc, int val, double *cyc_ptr)
 				fixup_intcx();
 			}
 			return;
-		case 0x25: /* 0xc025 */
 		case 0x28: /* 0xc028 */
 		case 0x2c: /* 0xc02c */
 			UNIMPL_WRITE;
+		case 0x25: /* 0xc025 */
+			/* Space Shark writes to c025--ignore */
 		case 0x2e: /* 0xc02e */
 		case 0x2f: /* 0xc02f */
 			/* Modulae writes to this--just ignore them */
@@ -1772,7 +1779,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 				set_halt(HALT_EVENT);
 			}
 			speed_fast = tmp;
-			if((val & 0xf) != g_slot_motor_detect) {
+			if((val & 0xf) != (int)g_slot_motor_detect) {
 				set_halt(HALT_EVENT);
 			}
 			g_slot_motor_detect = (val & 0xf);
@@ -1944,12 +1951,20 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			} else if((val & 0xf0) == 0xa0) {
 				g_zipgs_unlock = 0;
 			} else if(g_zipgs_unlock >= 4) {
-				g_zipgs_disabled = 1;
+				if((g_zipgs_reg_c05b & 0x10) == 0) {
+					/* to recalculate times */
+					set_halt(HALT_EVENT);
+				}
+				g_zipgs_reg_c05b |= 0x10;	// disable
 			}
 			return;
 		case 0x5b: /* 0xc05b */
 			if(g_zipgs_unlock >= 4) {
-				g_zipgs_disabled = 0;
+				if((g_zipgs_reg_c05b & 0x10) != 0) {
+					/* to recalculate times */
+					set_halt(HALT_EVENT);
+				}
+				g_zipgs_reg_c05b &= (~0x10);	// enable
 			} else {
 				annunc_1 = 1;
 			}
@@ -1963,6 +1978,10 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			return;
 		case 0x5d: /* 0xc05d */
 			if(g_zipgs_unlock >= 4) {
+				if(((g_zipgs_reg_c05a ^ val) >= 0x10) &&
+					((g_zipgs_reg_c05b & 0x10) == 0)) {
+					set_halt(HALT_EVENT);
+				}
 				g_zipgs_reg_c05a = val | 0xf;
 			} else {
 				annunc_2 = 1;

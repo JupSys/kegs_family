@@ -9,10 +9,10 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.147 2002-11-19 00:10:38-08 kadickey Exp $";
+const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.167 2003-10-29 12:20:07-05 kentd Exp $";
 #endif
 
-/* xdriver.c */
+/* xdriver.c and macdriver.c and windriver.c */
 void update_color_array(int col_num, int a2_color);
 void set_border_color(int val);
 void x_update_physical_colormap(void);
@@ -57,8 +57,20 @@ int enter_engine(Engine_reg *ptr);
 void clr_halt_act(void);
 void set_halt_act(int val);
 
-/* END_HDR */
+/* special scc_macdriver.c prototypes */
+int scc_serial_mac_init(int port);
+void scc_serial_mac_change_params(int port);
+void scc_serial_mac_fill_readbuf(int port, double dcycs);
+void scc_serial_mac_empty_writebuf(int port);
 
+/* special scc_windriver.c prototypes */
+int scc_serial_win_init(int port);
+void scc_serial_win_change_params(int port);
+void scc_serial_win_fill_readbuf(int port, double dcycs);
+void scc_serial_win_empty_writebuf(int port);
+
+
+/* END_HDR */
 /* adb.c */
 void adb_init(void);
 void adb_reset(void);
@@ -85,7 +97,7 @@ int adb_read_c027(void);
 void adb_write_c027(int val);
 int read_adb_ram(word32 addr);
 void write_adb_ram(word32 addr, int val);
-int update_mouse(int x, int y, int button_state, int button_valid);
+int update_mouse(int x, int y, int button_states, int buttons_valid);
 int mouse_read_c024(void);
 void adb_key_event(int a2code, int is_up);
 word32 adb_read_c000(void);
@@ -93,15 +105,18 @@ word32 adb_access_c010(void);
 word32 adb_read_c025(void);
 int adb_is_cmd_key_down(void);
 int adb_is_option_key_down(void);
+void adb_increment_speed(void);
 void adb_physical_key_update(int a2code, int is_up);
 void adb_virtual_key_update(int a2code, int is_up);
 void adb_kbd_repeat_off(void);
-void adb_increment_speed(void);
 
 /* clock.c */
 double get_dtime(void);
 int micro_sleep(double dtime);
-void setup_bram(void);
+void clk_bram_zero(void);
+void clk_bram_set(int bram_num, int offset, int val);
+void clk_setup_bram_version(void);
+void clk_write_bram(FILE *fconf);
 void update_cur_time(void);
 void clock_update(void);
 void clock_update_if_needed(void);
@@ -113,8 +128,52 @@ void do_clock_data(void);
 
 /* compile_time.c */
 
+/* config.c */
+void config_init_menus(Cfg_menu *menuptr);
+void config_init(void);
+void cfg_exit(void);
+void cfg_text_screen_dump(void);
+void config_vbl_update(int doit_3_persec);
+void config_parse_option(char *buf, int pos, int len, int line);
+void config_parse_bram(char *buf, int pos, int len);
+void config_parse_config_kegs_file(void);
+Disk *cfg_get_dsk_from_slot_drive(int slot, int drive);
+void config_generate_config_kegs_name(char *outstr, int maxlen, Disk *dsk, int with_extras);
+void config_write_config_kegs_file(void);
+void insert_disk(int slot, int drive, const char *name, int ejected, int force_size, const char *partition_name, int part_num);
+void eject_named_disk(Disk *dsk, const char *name, const char *partition_name);
+void eject_disk_by_num(int slot, int drive);
+void eject_disk(Disk *dsk);
+int cfg_get_fd_size(int fd);
+int cfg_partition_read_block(int fd, void *buf, int blk, int blk_size);
+int cfg_partition_find_by_name_or_num(int fd, const char *partnamestr, int part_num, Disk *dsk);
+int cfg_partition_make_list(int fd);
+int cfg_maybe_insert_disk(int slot, int drive, const char *namestr);
+void cfg_htab_vtab(int x, int y);
+void cfg_home(void);
+void cfg_cleol(void);
+void cfg_putchar(int c);
+void cfg_printf(const char *fmt, ...);
+void cfg_print_num(int num, int max_len);
+void cfg_get_disk_name(char *outstr, int maxlen, int type_ext, int with_extras);
+void cfg_parse_menu(Cfg_menu *menu_ptr, int menu_pos, int highlight_pos, int change);
+void cfg_get_base_path(char *pathptr, const char *inptr, int go_up);
+void cfg_file_init(void);
+void cfg_free_alldirents(Cfg_listhdr *listhdrptr);
+void cfg_file_add_dirent(Cfg_listhdr *listhdrptr, const char *nameptr, int is_dir, int size, int image_start, int part_num);
+int cfg_dirent_sortfn(const void *obj1, const void *obj2);
+void cfg_file_readdir(const char *pathptr);
+char *cfg_shorten_filename(const char *in_ptr, int maxlen);
+void cfg_fix_topent(Cfg_listhdr *listhdrptr);
+void cfg_file_draw(void);
+void cfg_partition_selected(void);
+void cfg_file_selected(void);
+void cfg_file_handle_key(int key);
+void config_control_panel(void);
+
 /* dis.c */
 int get_num(void);
+void debugger_help(void);
 void do_debug_intfc(void);
 word32 dis_get_memory_ptr(word32 addr);
 void show_one_toolset(FILE *toolfile, int toolnum, word32 addr);
@@ -143,6 +202,9 @@ void scc_reset(void);
 void scc_hard_reset_port(int port);
 void scc_reset_port(int port);
 void scc_regen_clocks(int port);
+void scc_port_init(int port);
+void scc_try_to_empty_writebuf(int port);
+void scc_try_fill_readbuf(int port, double dcycs);
 void scc_update(double dcycs);
 void do_scc_event(int type, double dcycs);
 void show_scc_state(void);
@@ -164,10 +226,17 @@ void scc_add_to_readbuf(int port, word32 val, double dcycs);
 void scc_add_to_writebuf(int port, word32 val, double dcycs);
 word32 scc_read_data(int port, double dcycs);
 void scc_write_data(int port, word32 val, double dcycs);
-int scc_socket_init(int port);
+
+/* scc_socket_driver.c */
+void scc_socket_init(int port);
+void scc_socket_change_params(int port);
 void scc_accept_socket(int port);
-void scc_try_fill_readbuf(int port, double dcycs);
-void scc_try_to_empty_writebuf(int port);
+void scc_socket_fill_readbuf(int port, double dcycs);
+void scc_socket_empty_writebuf(int port);
+
+/* scc_windriver.c */
+
+/* scc_macdriver.c */
 
 /* iwm.c */
 void iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525);
@@ -175,7 +244,7 @@ void iwm_init(void);
 void iwm_reset(void);
 void draw_iwm_status(int line, char *buf);
 void iwm_flush_disk_to_unix(Disk *dsk);
-void iwm_vbl_update(void);
+void iwm_vbl_update(int doit_3_persec);
 void iwm_show_stats(void);
 void iwm_touch_switches(int loc, double dcycs);
 void iwm_move_to_track(Disk *dsk, int new_track);
@@ -211,13 +280,6 @@ void disk_nib_out(Disk *dsk, byte val, int size);
 void disk_nib_end_track(Disk *dsk);
 void iwm_show_track(int slot_drive, int track);
 void iwm_show_a_track(Track *trk);
-void maybe_parse_disk_conf_file(void);
-void insert_disk(Disk *dsk, char *name, int virtual_image, int size);
-void eject_named_disk(Disk *dsk, char *name);
-void eject_if_untouched(Disk *dsk);
-void eject_disk(Disk *dsk);
-void kegs_file_copy(char *orig_name, char *new_name);
-void eject_disk_by_num(int slot, int drive);
 
 /* joystick_driver.c */
 void joystick_init(void);
@@ -278,6 +340,7 @@ void check_engine_asm_defines(void);
 byte *memalloc_align(int size, int skip_amt);
 void memory_ptr_init(void);
 int kegsmain(int argc, char **argv);
+void kegs_expand_path(char *out_ptr, const char *in_ptr, int maxlen);
 void setup_kegs_file(char *outname, int maxlen, int ok_if_missing, const char **name_ptr);
 void initialize_events(void);
 void check_for_one_event_type(int type);
@@ -287,6 +350,7 @@ void add_event_stop(double dcycs);
 void add_event_doc(double dcycs, int osc);
 void add_event_scc(double dcycs, int type);
 void add_event_vbl(void);
+void add_event_vid_upd(int line);
 double remove_event_doc(int osc);
 double remove_event_scc(int type);
 void show_all_events(void);
@@ -305,15 +369,12 @@ void init_reg(void);
 void handle_action(word32 ret);
 void do_break(word32 ret);
 void do_cop(word32 ret);
-void do_wdm(void);
+void do_wdm(word32 arg);
 void do_wai(void);
 void do_stp(void);
 void size_fail(int val, word32 v1, word32 v2);
 
 /* smartport.c */
-int get_fd_size(int fd);
-void read_partition_block(int fd, void *buf, int blk, int blk_size);
-int find_partition_by_name(int fd, char *name, Disk *dsk);
 void smartport_error(void);
 void smartport_log(word32 start_addr, int cmd, int rts_addr, int cmd_list);
 void do_c70d(word32 arg0);
@@ -364,58 +425,58 @@ void reliable_buf_write(word32 *shm_addr, int pos, int size);
 void reliable_zero_write(int amt);
 void child_sound_loop(int read_fd, int write_fd, word32 *shm_addr);
 void child_sound_playit(word32 tmp);
-void child_sound_init_hpdev(void);
-void child_sound_init_alib(void);
 
 /* video.c */
 void video_init(void);
 void show_a2_line_stuff(void);
 void video_reset(void);
 void video_update(void);
-void change_display_mode(double dcycs);
-int get_line_stat(int line, int new_all_stat);
-void update_a2_ptrs(int line, int new_stat);
+int video_all_stat_to_line_stat(int line, int new_all_stat);
+int *video_update_kimage_ptr(int line, int new_stat);
 void change_a2vid_palette(int new_palette);
 void check_a2vid_palette(void);
-void update_a2_line_info(void);
+void change_display_mode(double dcycs);
+void video_update_all_stat_through_line(int line);
 void change_border_color(double dcycs, int val);
 void update_border_info(void);
+void video_border_pixel_write(Kimage *kimage_ptr, int starty, int num_lines, word32 val);
 void update_border_line(int line_in, int color);
-void redraw_changed_text_40(int start_offset, int start_line, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val);
-void redraw_changed_text_80(int start_offset, int start_line, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val);
-void redraw_changed_gr(int start_offset, int start_line, int reparse, byte *screen_data);
-void redraw_changed_dbl_gr(int start_offset, int start_line, int reparse, byte *screen_data);
-void redraw_changed_hires(int start_offset, int start_line, int color, int reparse, byte *screen_data);
-void redraw_changed_hires_bw(int start_offset, int start_line, int reparse, byte *screen_data);
-void redraw_changed_hires_color(int start_offset, int start_line, int reparse, byte *screen_data);
-void redraw_changed_dbl_hires(int start_offset, int start_line, int color, int reparse, byte *screen_data);
-void redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse, byte *screen_data);
-void redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse, byte *screen_data);
-void check_super_hires_palette_changes(int reparse);
-void redraw_changed_super_hires_oneline_norm_320(byte *screen_data, int y, int scan, word32 ch_mask);
-void redraw_changed_super_hires_oneline_norm_640(byte *screen_data, int y, int scan, word32 ch_mask);
-void redraw_changed_super_hires_oneline_a2vid_320(byte *screen_data, int y, int scan, word32 ch_mask);
-void redraw_changed_super_hires_oneline_a2vid_640(byte *screen_data, int y, int scan, word32 ch_mask);
-void redraw_changed_super_hires_oneline_fill_320(byte *screen_data, int y, int scan, word32 ch_mask);
-void redraw_changed_super_hires_oneline_a2vid_fill_320(byte *screen_data, int y, int scan, word32 ch_mask);
-void redraw_changed_super_hires(int start_offset, int start_line, int in_reparse, byte *screen_data);
+void redraw_changed_text_40(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val, int pixels_per_line);
+void redraw_changed_text_80(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val, int pixels_per_line);
+void redraw_changed_gr(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
+void redraw_changed_dbl_gr(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
+void redraw_changed_hires(int start_offset, int start_line, int num_lines, int color, int reparse, byte *screen_data, int pixels_per_line);
+void redraw_changed_hires_bw(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
+void redraw_changed_hires_color(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
+void redraw_changed_dbl_hires(int start_offset, int start_line, int num_lines, int color, int reparse, byte *screen_data, int pixels_per_line);
+void redraw_changed_dbl_hires_bw(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
+void redraw_changed_dbl_hires_color(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
+int video_rebuild_super_hires_palette(word32 scan_info, int line, int reparse);
+void redraw_changed_super_hires_oneline_nofill_8(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
+void redraw_changed_super_hires_oneline_nofill_16(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
+void redraw_changed_super_hires_oneline_nofill_32(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
+void redraw_changed_super_hires_oneline_fill_8(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
+void redraw_changed_super_hires_oneline_fill_16(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
+void redraw_changed_super_hires_oneline_fill_32(byte *screen_data, int pixels_per_line, int y, int scan, word32 ch_mask, int use_a2vid_palette, int mode_640);
+void redraw_changed_super_hires(int start_offset, int start_line, int num_lines, int in_reparse, byte *screen_data);
 void display_screen(void);
-void refresh_screen(void);
-void refresh_line(int line);
+void video_update_event_line(int line);
+void video_update_through_line(int line);
+void video_refresh_lines(int st_line, int num_lines, int must_reparse);
 void refresh_border(void);
 void end_screen(void);
-int font_fail(int num);
 void read_a2_font(void);
 void video_get_kimage(Kimage *kimage_ptr, int extend_info, int depth, int mdepth);
-void video_get_kimages();
+void video_get_kimages(void);
 void video_convert_kimage_depth(Kimage *kim_in, Kimage *kim_out, int startx, int starty, int width, int height);
 void video_push_lines(Kimage *kimage_ptr, int start_line, int end_line, int left_pix, int right_pix);
-void video_push_border_sides();
-void video_push_border_special();
-void video_push_kimages();
+void video_push_border_sides_lines(int end_x, int width, int start_line, int end_line);
+void video_push_border_sides(void);
+void video_push_border_special(void);
+void video_push_kimages(void);
 void video_update_color_raw(int col_num, int a2_color);
 void video_update_color_array(int col_num, int a2_color);
-void video_update_colormap();
+void video_update_colormap(void);
 void video_update_status_line(int line, const char *string);
-
+void video_show_debug_info(void);
 

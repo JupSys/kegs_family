@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.320 2002-11-20 16:44:15-08 kadickey Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.331 2003-10-29 15:10:07-05 kentd Exp $";
 
 #include <math.h>
 
@@ -34,6 +34,7 @@ const char *g_kegs_default_paths[] = { "", "./", "${HOME}/",
 #define EV_DOC_INT	4
 #define EV_VBL_INT	5
 #define EV_SCC		6
+#define EV_VID_UPD	7
 
 extern int g_stepping;
 
@@ -57,6 +58,10 @@ extern int c041_en_vbl_ints;
 extern int g_c046_val;
 extern int c046_25sec_irq_pend;
 extern int c046_vbl_irq_pending;
+extern int g_zipgs_reg_c059;
+extern int g_zipgs_reg_c05a;
+extern int g_zipgs_reg_c05b;
+extern int g_zipgs_unlock;
 
 extern int g_engine_c_mode;
 extern int defs_instr_start_8;
@@ -79,6 +84,7 @@ extern int g_iwm_motor_on;
 extern int g_fast_disk_emul;
 extern int g_slow_525_emul_wr;
 extern int g_apple35_sel;
+extern int g_config_control_panel;
 
 extern int g_audio_enable;
 extern int g_preferred_rate;
@@ -92,6 +98,10 @@ int	g_rom_version = 0;
 int	g_halt_on_bad_read = 0;
 int	g_ignore_bad_acc = 0;
 int	g_use_alib = 0;
+int	g_raw_serial = 1;
+
+int	g_config_iwm_vbl_count = 0;
+const char g_kegs_version_str[] = "0.80";
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
@@ -128,6 +138,9 @@ word32 stop_run_at;
 
 int g_25sec_cntr = 0;
 int g_1sec_cntr = 0;
+
+double g_dnatcycs_1sec = 0.0;
+word32 g_natcycs_lastvbl = 0;
 
 int Verbose = 0;
 int Halt_on = 0;
@@ -179,8 +192,10 @@ show_pc_log()
 		fprintf(stderr,"fopen failed...errno: %d\n", errno);
 		exit(2);
 	}
+#if 0
 	fprintf(pcfile, "current pc_log_ptr: %p, start: %p, end: %p\n",
 		log_pc_ptr, log_pc_start_ptr, log_pc_end_ptr);
+#endif
 
 	start_dcycs = log_pc_ptr->dcycs;
 
@@ -826,6 +841,8 @@ kegsmain(int argc, char **argv)
 		}
 	}
 
+	iwm_init();
+	config_init();
 
 	load_roms();
 	memory_ptr_init();
@@ -842,9 +859,8 @@ kegsmain(int argc, char **argv)
 #endif
 	sound_init();
 
-	iwm_init();
 	scc_init();
-	setup_bram();		/* load_roms must be called first! */
+	clk_setup_bram_version();	/* load_roms must be called first! */
 	adb_init();
 
 	do_reset();
@@ -854,8 +870,7 @@ kegsmain(int argc, char **argv)
 	/* If we get here, we hit a breakpoint, call debug intfc */
 	do_debug_intfc();
 
-	end_screen();
-
+	my_exit(0);
 	return 0;
 }
 
@@ -1158,6 +1173,15 @@ add_event_vbl()
 	add_event_entry(dcycs, EV_VBL_INT);
 }
 
+void
+add_event_vid_upd(int line)
+{
+	double	dcycs;
+
+	dcycs = g_last_vbl_dcycs + ((DCYCS_IN_16MS * line) / 262.0);
+	add_event_entry(dcycs, EV_VID_UPD + (line << 8));
+}
+
 double
 remove_event_doc(int osc)
 {
@@ -1205,9 +1229,11 @@ double	g_sim_sum = 0.0;
 
 double	g_cur_sim_dtime = 0.0;
 double	g_projected_pmhz = 1.0;
+double	g_zip_pmhz = 8.0;
 
 Fplus	g_recip_projected_pmhz_slow;
 Fplus	g_recip_projected_pmhz_fast;
+Fplus	g_recip_projected_pmhz_zip;
 Fplus	g_recip_projected_pmhz_unl;
 
 Fplus	*g_cur_fplus_ptr = 0;
@@ -1221,6 +1247,32 @@ show_pmhz()
 
 }
 
+void
+setup_zip_speeds()
+{
+	double	frecip;
+	double	fmhz;
+	int	mult;
+
+	mult = 16 - ((g_zipgs_reg_c05a >> 4) & 0xf);
+		// 16 = full speed, 1 = 1/16th speed
+	fmhz = (8.0 * mult) / 16.0;
+	if(mult == 16) {
+		/* increase full speed by 19% to make zipgs freq measuring */
+		/* programs work correctly */
+		fmhz = fmhz * 1.19;
+	}
+	frecip = 1.0 / fmhz;
+	g_zip_pmhz = fmhz;
+	g_recip_projected_pmhz_zip.plus_1 = frecip;
+	g_recip_projected_pmhz_zip.plus_2 = 2.0 * frecip;
+	g_recip_projected_pmhz_zip.plus_3 = 3.0 * frecip;
+	if(frecip >= 0.5) {
+		g_recip_projected_pmhz_zip.plus_x_minus_1 = 1.01;
+	} else {
+		g_recip_projected_pmhz_zip.plus_x_minus_1 = 1.01 - frecip;
+	}
+}
 
 void
 run_prog()
@@ -1235,6 +1287,8 @@ run_prog()
 	double	fspeed_mult;
 	double	fcycles_stop;
 	word32	ret;
+	word32	zip_speed, zip_speed_new;
+	int	zip_en, zip_follow_cps;
 	int	type;
 	int	motor_on;
 	int	iwm_1;
@@ -1243,7 +1297,7 @@ run_prog()
 	int	apple35_sel;
 	int	fast;
 	int	this_type;
-
+	int	unl_speed;
 
 	fflush(stdout);
 
@@ -1259,6 +1313,9 @@ run_prog()
 	g_recip_projected_pmhz_fast.plus_3 = (3.0 / 2.5);
 	g_recip_projected_pmhz_fast.plus_x_minus_1 = (1.98 - (1.0/2.5));
 
+	zip_speed = g_zipgs_reg_c05a & 0xf0;
+	setup_zip_speeds();
+
 	if(g_cur_fplus_ptr == 0) {
 		g_recip_projected_pmhz_unl = g_recip_projected_pmhz_slow;
 	}
@@ -1272,21 +1329,36 @@ run_prog()
 			/* Interrupt! */
 		}
 
-
 		motor_on = g_iwm_motor_on;
 		limit_speed = g_limit_speed;
 		apple35_sel = g_apple35_sel;
-		fast = speed_fast;
+		zip_en = ((g_zipgs_reg_c05b & 0x10) == 0);
+		zip_follow_cps = ((g_zipgs_reg_c059 & 0x8) != 0);
+		zip_speed_new = g_zipgs_reg_c05a & 0xf0;
+		fast = speed_fast || (zip_en && !zip_follow_cps);
 
 		iwm_1 = motor_on && !apple35_sel &&
 				(g_slot_motor_detect & 0x4) &&
 				(g_slow_525_emul_wr || !g_fast_disk_emul);
 		iwm_25 = (motor_on && apple35_sel) && !g_fast_disk_emul;
-		if(fast && (!iwm_1 && !iwm_25) && (limit_speed == 0)) {
-			/* unlimited speed */
-			fspeed_mult = g_projected_pmhz;
-			fplus_ptr = &g_recip_projected_pmhz_unl;
-		} else if(fast && (iwm_25 || (!iwm_1 && limit_speed == 2)) ) {
+		unl_speed = fast && (!iwm_1 && !iwm_25) && (limit_speed == 0) &&
+			zip_en;
+		if(unl_speed) {
+			/* unlimited speed, or zip speed */
+			if(zip_speed_new != zip_speed) {
+				zip_speed = zip_speed_new;
+				setup_zip_speeds();
+			}
+			if(zip_speed != 0 || (g_zipgs_unlock >= 4)) {
+				/* use slowed-down zip speed */
+				fspeed_mult = g_zip_pmhz;
+				fplus_ptr = &g_recip_projected_pmhz_zip;
+			} else {
+				/* use unlimited speed */
+				fspeed_mult = g_projected_pmhz;
+				fplus_ptr = &g_recip_projected_pmhz_unl;
+			}
+		} else if(fast && !iwm_1 && !(limit_speed == 1)) {
 			fspeed_mult = 2.5;
 			fplus_ptr = &g_recip_projected_pmhz_fast;
 		} else {
@@ -1395,6 +1467,9 @@ run_prog()
 			case EV_SCC:
 				do_scc_event(type >> 8, dcycs);
 				break;
+			case EV_VID_UPD:
+				video_update_event_line(type >> 8);
+				break;
 			default:
 				printf("Unknown event: %d!\n", type);
 				exit(3);
@@ -1424,6 +1499,9 @@ run_prog()
 		}
 		if(g_stepping) {
 			break;
+		}
+		if(g_config_control_panel) {
+			config_control_panel();
 		}
 	}
 
@@ -1595,6 +1673,7 @@ extern int g_status_refresh_needed;
 void
 update_60hz(double dcycs, double dtime_now)
 {
+	register word32 end_time;
 	char	status_buf[1024];
 	char	sim_mhz_buf[128];
 	char	total_mhz_buf[128];
@@ -1611,8 +1690,10 @@ update_60hz(double dcycs, double dtime_now)
 	double	dtime_this_vbl;
 	double	dadjcycs_this_vbl;
 	double	dadj_cycles_1sec;
+	double	dtmp1, dtmp2, dtmp3, dtmp4, dtmp5;
+	double	dnatcycs_1sec;
 	int	tmp;
-	int	cycs_int;
+	int	doit_3_persec;
 	int	cur_vbl_index;
 	int	prev_vbl_index;
 
@@ -1655,6 +1736,10 @@ update_60hz(double dcycs, double dtime_now)
 	}
 	g_vbl_index_count = cur_vbl_index;
 
+	GET_ITIMER(end_time);
+	g_dnatcycs_1sec += (double)(end_time - g_natcycs_lastvbl);
+	g_natcycs_lastvbl = end_time;
+
 	if(prev_vbl_index == 0) {
 		if(g_sim_sum < (1.0/190.0)) {
 			sim_mhz_ptr = "???";
@@ -1672,19 +1757,26 @@ update_60hz(double dcycs, double dtime_now)
 								(1000000.0));
 			total_mhz_ptr = total_mhz_buf;
 		}
-		cycs_int = (word32)dadj_cycles_1sec;
 		sprintf(status_buf, "dcycs:%13.1f sim MHz:%s "
-			"Eff MHz:%s, c:%06x, sec:%1.3f vol:%02x pal:%x",
-			dcycs, sim_mhz_ptr, total_mhz_ptr, cycs_int,
+			"Eff MHz:%s, sec:%1.3f vol:%02x pal:%x",
+			dcycs/(1000.0*1000.0), sim_mhz_ptr, total_mhz_ptr,
 			dtime_diff_1sec, g_doc_vol, g_a2vid_palette);
 		video_update_status_line(0, status_buf);
 
-		sprintf(status_buf, "xfer:%08x, xred_cs:%03x_%05x, "
-			"ch_in:%08x ref_l:%08x ref_x:%08x",
-			g_refresh_bytes_xfer,
-			g_cycs_in_xredraw >> 20, g_cycs_in_xredraw & 0xfffff,
-			g_cycs_in_check_input, g_cycs_in_refresh_line,
-			g_cycs_in_refresh_ximage);
+		if(g_dnatcycs_1sec < (1000.0*1000.0)) {
+			/* make it so large that all %'s become 0 */
+			g_dnatcycs_1sec = 800.0*1000.0*1000.0*1000.0;
+		}
+		dnatcycs_1sec = g_dnatcycs_1sec / 100.0; /* eff mult by 100 */
+
+		dtmp1 = (double)(g_cycs_in_xredraw) / dnatcycs_1sec;
+		dtmp2 = (double)(g_cycs_in_check_input) / dnatcycs_1sec;
+		dtmp3 = (double)(g_cycs_in_refresh_line) / dnatcycs_1sec;
+		dtmp4 = (double)(g_cycs_in_refresh_ximage) / dnatcycs_1sec;
+		sprintf(status_buf, "xfer:%08x, %5.1f xred_cs:%4.1f%% "
+			"ch_in:%4.1f%% ref_l:%4.1f%% ref_x:%4.1f%%",
+			g_refresh_bytes_xfer, g_dnatcycs_1sec/(1000.0*1000.0),
+			dtmp1, dtmp2, dtmp3, dtmp4);
 		video_update_status_line(1, status_buf);
 
 		sprintf(status_buf, "Ints:%3d I/O:%4dK BRK:%3d COP:%2d "
@@ -1695,14 +1787,14 @@ update_60hz(double dcycs, double dtime_now)
 			g_engine_doc_int);
 		video_update_status_line(2, status_buf);
 
-		sprintf(status_buf, "snd1:%03x_%05x, 2:%03x_%05x, "
-			"3:%03x_%05x, st:%03x_%05x est:%03x_%05x %4.2f",
-			g_cycs_in_sound1 >> 20, g_cycs_in_sound1 & 0xfffff,
-			g_cycs_in_sound2 >> 20, g_cycs_in_sound2 & 0xfffff,
-			g_cycs_in_sound3 >> 20, g_cycs_in_sound3 & 0xfffff,
-			g_cycs_in_start_sound>>20,g_cycs_in_start_sound&0xfffff,
-			g_cycs_in_est_sound>>20, g_cycs_in_est_sound & 0xfffff,
-			g_fvoices);
+		dtmp1 = (double)(g_cycs_in_sound1) / dnatcycs_1sec;
+		dtmp2 = (double)(g_cycs_in_sound2) / dnatcycs_1sec;
+		dtmp3 = (double)(g_cycs_in_sound3) / dnatcycs_1sec;
+		dtmp4 = (double)(g_cycs_in_start_sound) / dnatcycs_1sec;
+		dtmp5 = (double)(g_cycs_in_est_sound) / dnatcycs_1sec;
+		sprintf(status_buf, "snd1:%4.1f%%, 2:%4.1f%%, "
+			"3:%4.1f%%, st:%4.1f%% est:%4.1f%% %4.2f",
+			dtmp1, dtmp2, dtmp3, dtmp4, dtmp5, g_fvoices);
 		video_update_status_line(3, status_buf);
 
 		sprintf(status_buf, "snd_plays: %4d, doc_ev: %4d, st_snd: %4d "
@@ -1713,7 +1805,9 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		video_update_status_line(6, "KEGS v0.71");
+		sprintf(status_buf, "KEGS v%-6s           "
+			"Press F4 for Configuration Menu", g_kegs_version_str);
+		video_update_status_line(6, status_buf);
 
 		g_status_refresh_needed = 1;
 
@@ -1739,6 +1833,7 @@ update_60hz(double dcycs, double dtime_now)
 		g_cycs_in_sound4 = 0;
 		g_cycs_in_start_sound = 0;
 		g_cycs_in_est_sound = 0;
+		g_dnatcycs_1sec = 0.0;
 		g_refresh_bytes_xfer = 0;
 
 		g_num_snd_plays = 0;
@@ -1787,9 +1882,9 @@ update_60hz(double dcycs, double dtime_now)
 		predicted_pmhz = 1.0;
 	}
 
-	if(!(predicted_pmhz < 150.0)) {
-		irq_printf("predicted: %f, setting to 90.0\n", predicted_pmhz);
-		predicted_pmhz = 90.0;
+	if(!(predicted_pmhz < 250.0)) {
+		irq_printf("predicted: %f, setting to 250.0\n", predicted_pmhz);
+		predicted_pmhz = 250.0;
 	}
 
 	recip_predicted_pmhz = 1.0/predicted_pmhz;
@@ -1861,7 +1956,17 @@ update_60hz(double dcycs, double dtime_now)
 		check_scan_line_int(dcycs, 0);
 	}
 
-	iwm_vbl_update();
+	doit_3_persec = 0;
+	if(g_config_iwm_vbl_count > 0) {
+		g_config_iwm_vbl_count--;
+	} else {
+		g_config_iwm_vbl_count = 20;
+		doit_3_persec = 1;
+	}
+
+	iwm_vbl_update(doit_3_persec);
+	config_vbl_update(doit_3_persec);
+
 	video_update();
 	sound_update(dcycs);
 	clock_update();
@@ -2020,6 +2125,9 @@ handle_action(word32 ret)
 		irq_printf("Special fast IRQ response.  irq_pending: %x\n",
 			g_irq_pending);
 		break;
+	case RET_WDM:
+		do_wdm(ret & 0xff);
+		break;
 	default:
 		halt_printf("Unknown special action: %08x!\n", ret);
 	}
@@ -2101,9 +2209,14 @@ do_mvn(word32 banks)
 #endif
 
 void
-do_wdm()
+do_wdm(word32 arg)
 {
-	halt_printf("do_wdm!\n");
+	switch(arg) {
+	case 0x8d: /* Bouncin Ferno does WDM 8d */
+		break;
+	default:
+		halt_printf("do_wdm: %02x!\n", arg);
+	}
 }
 
 void

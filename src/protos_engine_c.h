@@ -9,9 +9,10 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_engine_c_h[] = "@(#)$KmKId: protos_engine_c.h,v 1.7 2002-11-19 00:10:38-08 kadickey Exp $";
+const char rcsid_protos_engine_c_h[] = "@(#)$KmKId: protos_engine_c.h,v 1.8 2003-01-18 01:16:56-05 kentd Exp $";
 #endif
 
+/* END_HDR */
 /* engine_c.c */
 void check_breakpoints(word32 addr);
 word32 get_memory8_io_stub(word32 addr, byte *stat, double *fcycs_ptr, double fplus_x_m1);
