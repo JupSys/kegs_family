@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.88 2003-11-04 11:11:48-05 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$KmKId: dis.c,v 1.89 2003-11-06 11:46:21-05 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -538,7 +538,9 @@ do_blank()
 			g_stepping = 1;
 			do_step();
 			if(enter_debug || halt_sim != 0) {
-				break;
+				if(halt_sim != HALT_EVENT) {
+					break;
+				}
 			}
 		}
 		list_kpc = engine.kpc;

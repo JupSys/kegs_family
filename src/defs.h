@@ -12,7 +12,7 @@
 	.data
 	.export rcsdif_defs_h,data
 rcsdif_defs_h
-	.stringz "@(#)$KmKId: defs.h,v 1.22 2002-11-19 00:10:38-08 kadickey Exp $"
+	.stringz "@(#)$KmKId: defs.h,v 1.22 2002-11-19 03:10:38-05 kadickey Exp $"
 	.code
 #endif
 

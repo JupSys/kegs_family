@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-// $KmKId: protos_windriver.h,v 1.3 2002-11-19 00:10:38-08 kadickey Exp $
+// $KmKId: protos_windriver.h,v 1.3 2002-11-19 03:10:38-05 kadickey Exp $
 
 /* windriver.c */
 void update_color_array(int col_num, int a2_color);

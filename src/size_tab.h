@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$KmKId: size_tab.h,v 1.13 2002-11-19 00:10:38-08 kadickey Exp $"
+	.stringz "@(#)$KmKId: size_tab.h,v 1.13 2002-11-19 03:10:38-05 kadickey Exp $"
 #else
 
 	.word	inst00_SYM+1	/* brk */

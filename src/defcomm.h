@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$KmKId: defcomm.h,v 1.93 2002-11-19 00:10:38-08 kadickey Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$KmKId: defcomm.h,v 1.93 2002-11-19 03:10:38-05 kadickey Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.118 2003-11-03 22:15:42-05 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.120 2003-11-06 11:50:34-05 kentd Exp $";
 
 #include <time.h>
 
@@ -105,6 +105,9 @@ int	Max_color_size = 256;
 word32 g_palette_8to1624[256];
 word32 g_a2palette_8to1624[256];
 
+word32	g_saved_line_palettes[200][8];
+int	g_saved_a2vid_palette = -1;
+word32	g_a2vid_palette_remap[16];
 
 word32	g_red_mask = 0xff;
 word32	g_green_mask = 0xff;
@@ -312,6 +315,12 @@ video_init()
 	for(i = 0; i < 200; i++) {
 		g_a2_new_all_stat[i] = 0;
 		g_a2_cur_all_stat[i] = 1;
+		for(j = 0; j < 8; j++) {
+			g_saved_line_palettes[i][j] = (word32)-1;
+		}
+	}
+	for(i = 0; i < 262; i++) {
+		g_cur_border_colors[i] = -1;
 	}
 
 	g_new_a2_stat_cur_line = 0;
@@ -661,7 +670,7 @@ change_a2vid_palette(int new_palette)
 	g_palette_change_cnt[new_palette]++;
 	g_border_last_vbl_changes = 1;
 	for(i = 0; i < 262; i++) {
-		g_cur_border_colors[i] ^= 1;;
+		g_cur_border_colors[i] = -1;
 	}
 }
 
@@ -750,7 +759,7 @@ video_update_all_stat_through_line(int line)
 }
 
 
-#define MAX_BORDER_CHANGES	65536
+#define MAX_BORDER_CHANGES	16384
 
 STRUCT(Border_changes) {
 	float	fcycs;
@@ -781,13 +790,15 @@ change_border_color(double dcycs, int val)
 void
 update_border_info()
 {
-	float	flines_per_fcyc;
+	double	dlines_per_dcyc;
+	double	dcycs, dline, dcyc_line_start;
+	int	offset;
+	int	new_line_offset, last_line_offset;
 	int	new_line;
 	int	new_val;
-	int	last_line;
 	int	limit;
 	int	color_now;
-	int	i, j;
+	int	i;
 
 	/* to get this routine to redraw the border, change */
 	/*  g_vbl_border_color,  set g_border_last_vbl_changes = 1 */
@@ -795,34 +806,58 @@ update_border_info()
 
 	color_now = g_vbl_border_color;
 
-	flines_per_fcyc = (float)(262.0 / DCYCS_IN_16MS);
+	dlines_per_dcyc = (double)(262.0 / DCYCS_IN_16MS);
 	limit = g_num_border_changes;
-	last_line = 0;
-	for(i = 0; i < limit; i++) {
-		new_line = (g_border_changes[i].fcycs * flines_per_fcyc);
-		new_val = g_border_changes[i].val;
-		if(new_line < 0 || new_line > 262) {
-			printf("new_line: %d\n", new_line);
-			new_line = last_line;
-		}
-		for(j = last_line; j < new_line; j++) {
-			if(g_cur_border_colors[j] != color_now) {
-				update_border_line(j, color_now);
-				g_cur_border_colors[j] = color_now;
-			}
-		}
-		last_line = new_line;
-		color_now = new_val;
-	}
-
-	/* check remaining lines */
 	if(g_border_last_vbl_changes || limit) {
-		for(j = last_line; j < 262; j++) {
-			if(g_cur_border_colors[j] != color_now) {
-				update_border_line(j, color_now);
-				g_cur_border_colors[j] = color_now;
+		/* add a dummy entry */
+		g_border_changes[limit].fcycs = DCYCS_IN_16MS + 21.0;
+		g_border_changes[limit].val = g_border_color;
+		limit++;
+	}
+	last_line_offset = (-1 << 8) + 44;
+	for(i = 0; i < limit; i++) {
+		dcycs = g_border_changes[i].fcycs;
+		dline = dcycs * dlines_per_dcyc;
+		new_line = (int)dline;
+		dcyc_line_start = (double)new_line * (DCYCS_IN_16MS/262.0);
+		offset = ((int)(dcycs - dcyc_line_start)) & 0xff;
+
+		/* here comes the tricky part */
+		/* offset is from 0 to 65, where 0-3 is the right border of
+		/*  the previous line, 4-20 is horiz blanking, 21-24 is the */
+		/*  left border and 25-64 is the main window */
+		/* Convert this to a new notation which is 0-3 is the left */
+		/*  border, 4-43 is the main window, and 44-47 is the right */
+		/* basically, add -21 to offset, and wrap < 0 to previous ln */
+		/* note this makes line -1 offset 44-47 the left hand border */
+		/* for true line 261 on the screen */
+		offset -= 21;
+		if(offset < 0) {
+			new_line--;
+			offset += 64;
+		}
+		new_val = g_border_changes[i].val;
+		new_line_offset = (new_line << 8) + offset;
+
+		if(new_line_offset < -256 || new_line_offset >(262*256 + 0x80)){
+			printf("new_line_offset: %05x\n", new_line_offset);
+			new_line_offset = last_line_offset;
+		}
+		while(last_line_offset < new_line_offset) {
+			/* see if this will finish it */
+			if((last_line_offset & -256)==(new_line_offset & -256)){
+				update_border_line(last_line_offset,
+						new_line_offset, color_now);
+				last_line_offset = new_line_offset;
+			} else {
+				update_border_line(last_line_offset,
+						(last_line_offset & -256) + 65,
+						color_now);
+				last_line_offset =(last_line_offset & -256)+256;
 			}
 		}
+
+		color_now = new_val;
 	}
 
 #if 0
@@ -831,7 +866,7 @@ update_border_info()
 	}
 #endif
 
-	if(limit) {
+	if(limit > 1) {
 		g_border_last_vbl_changes = 1;
 	} else {
 		g_border_last_vbl_changes = 0;
@@ -842,23 +877,133 @@ update_border_info()
 }
 
 void
+update_border_line(int st_line_offset, int end_line_offset, int color)
+{
+	word32	val;
+	int	st_offset, end_offset;
+	int	left, right;
+	int	line;
+
+	line = st_line_offset >> 8;
+	if(line != (end_line_offset >> 8)) {
+		halt_printf("ubl, %04x %04x %02x!\n", st_line_offset,
+					end_line_offset, color);
+	}
+	if(line < -1 || line >= 262) {
+		halt_printf("ubl-b, mod line is %d\n", line);
+		line = 0;
+	}
+	if(line < 0 || line >= 262) {
+		line = 0;
+	}
+
+	st_offset = st_line_offset & 0xff;
+	end_offset = end_line_offset & 0xff;
+
+	if((st_offset == 0) && (end_offset >= 0x41)) {
+		/* might be the same as last time, save some work */
+		if(g_cur_border_colors[line] == color) {
+			return;
+		}
+		g_cur_border_colors[line] = color;
+	} else {
+		g_cur_border_colors[line] = -1;
+	}
+
+	val = (color + (g_a2vid_palette << 4));
+	val = (val << 24) + (val << 16) + (val << 8) + val;
+
+	/* 0-3: left border, 4-43: main window, 44-47: right border */
+	/* 48-65: horiz blanking */
+	/* first, do the sides from line 0 to line 199 */
+	if((line < 200) || (line >= 262)) {
+		if(line >= 262) {
+			line = 0;
+		}
+		if(st_offset < 4) {
+			/* left side */
+			left = st_offset;
+			right = MIN(4, end_offset);
+			video_border_pixel_write(&g_kimage_border_sides,
+				2*line, 2, val, (left * BORDER_WIDTH)/4,
+				(right * BORDER_WIDTH) / 4);
+
+			g_border_sides_refresh_needed = 1;
+		}
+		if((st_offset < 48) && (end_offset >= 44)) {
+			/* right side */
+			left = MAX(0, st_offset - 44);
+			right = MIN(4, end_offset - 44);
+			video_border_pixel_write(&g_kimage_border_sides,
+				2*line, 2, val,
+				32 + (left * EFF_BORDER_WIDTH/4),
+				32 + (right * EFF_BORDER_WIDTH/4));
+			g_border_sides_refresh_needed = 1;
+		}
+	}
+
+	if((line >= 192) && (line < 200)) {
+		if(st_offset < 44 && end_offset > 4) {
+			left = MAX(0, st_offset - 4);
+			right = MIN(40, end_offset - 4);
+			video_border_pixel_write(&g_kimage_text[0],
+				2*line, 2, val, left * 640 / 40,
+				right * 640 / 40);
+			g_border_line24_refresh_needed = 1;
+		}
+	}
+
+	/* now do the bottom, lines 200 to 215 */
+	if((line >= 200) && (line < (200 + BASE_MARGIN_BOTTOM/2)) ) {
+		line -= 200;
+		left = st_offset;
+		right = MIN(48, end_offset);
+		video_border_pixel_write(&g_kimage_border_special, 2*line, 2,
+			val, (left * X_A2_WINDOW_WIDTH / 48),
+			(right * X_A2_WINDOW_WIDTH / 48));
+		g_border_special_refresh_needed = 1;
+	}
+
+	/* and top, lines 236 to 262 */
+	if((line >= (262 - BASE_MARGIN_TOP/2)) && (line < 262)) {
+		line -= (262 - BASE_MARGIN_TOP/2);
+		left = st_offset;
+		right = MIN(48, end_offset);
+		video_border_pixel_write(&g_kimage_border_special,
+			BASE_MARGIN_BOTTOM + 2*line, 2, val,
+			(left * X_A2_WINDOW_WIDTH / 48),
+			(right * X_A2_WINDOW_WIDTH / 48));
+		g_border_special_refresh_needed = 1;
+	}
+}
+
+void
 video_border_pixel_write(Kimage *kimage_ptr, int starty, int num_lines,
-			word32 val)
+			word32 val, int st_off, int end_off)
 {
 	word32	*ptr;
 	int	width;
+	int	width_act;
 	int	mdepth;
-	int	pixels;
 	int	num_words, num_bytes;
 	int	bytes_per_pix;
-	int	i;
+	int	i, j;
 
-	width = kimage_ptr->width_act;
+	if(end_off <= st_off) {
+		return;
+	}
+
+	width = end_off - st_off;
+	width_act = kimage_ptr->width_act;
 	mdepth = kimage_ptr->mdepth;
-	pixels = num_lines * width;
 	bytes_per_pix = mdepth >> 3;
-	num_bytes = pixels * bytes_per_pix;
+	num_bytes = width * bytes_per_pix;
 	num_words = num_bytes >> 2;
+
+	if(width > width_act) {
+		halt_printf("border write but width %d > act %d\n", width,
+				width_act);
+	}
 
 	if(mdepth == 16) {
 		val = g_a2palette_8to1624[val & 0xff];
@@ -868,53 +1013,16 @@ video_border_pixel_write(Kimage *kimage_ptr, int starty, int num_lines,
 		val = g_a2palette_8to1624[val & 0xff];
 	}
 
-	ptr = (word32 *)&(kimage_ptr->data_ptr[starty*width*bytes_per_pix]);
-	for(i = 0; i < num_words; i++) {
-		*ptr++ = val;
-	}
-}
-
-void
-update_border_line(int line_in, int color)
-{
-	word32	val;
-	int	line;
-
-	val = (color + (g_a2vid_palette << 4));
-	val = (val << 24) + (val << 16) + (val << 8) + val;
-
-	if(line_in >= 200) {
-		if(line_in >= 262) {
-			halt_printf("line_in: %d out of range!\n", line_in);
-			line_in = 200;
+	for(i = 0; i < num_lines; i++) {
+		ptr = (word32 *)&(kimage_ptr->data_ptr[
+					(starty + i)*width_act*bytes_per_pix]);
+		ptr += ((st_off * bytes_per_pix) / 4);
+		/* HACK: the above isn't really right when bytes_per_pix is */
+		/*  less than four... */
+		for(j = 0; j < num_words; j++) {
+			*ptr++ = val;
 		}
-		line = (line_in - 200) >> 1;
-
-		if(2*line >= (X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8) ||
-				(line < 0)) {
-			printf("Line out of range: %d\n", line);
-			line = 0;
-		}
-
-		video_border_pixel_write(&g_kimage_border_special,2*line,2,val);
-
-		g_border_special_refresh_needed = 1;
-	} else if(line_in >= 192) {
-		line = line_in - 192;
-
-		if(line >= 8) {
-			printf("Line out of range2: %d\n", line);
-			line = 0;
-		}
-		video_border_pixel_write(&g_kimage_text[0], 2*(192+line),2,val);
-		g_border_line24_refresh_needed = 1;
 	}
-	if(line_in < 200) {
-		line = line_in;
-		video_border_pixel_write(&g_kimage_border_sides, 2*line, 2,val);
-		g_border_sides_refresh_needed = 1;
-	}
-
 }
 
 
@@ -2119,10 +2227,6 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int num_lines,
 	g_need_redraw = 0;
 }
 
-word32	g_saved_line_palettes[200][8];
-int	g_saved_a2vid_palette = -1;
-word32	g_a2vid_palette_remap[16];
-
 int
 video_rebuild_super_hires_palette(word32 scan_info, int line, int reparse)
 {
@@ -2172,7 +2276,10 @@ video_rebuild_super_hires_palette(word32 scan_info, int line, int reparse)
 	}
 #endif
 
-	if(!reparse && (ch_mask == 0) && (((scan ^ old_scan) & (~0xf0)) == 0)) {
+	diffs = reparse | ((scan ^ old_scan) & 0xf0f);
+		/* we must do full reparse if palette changed for this line */
+
+	if(!diffs && (ch_mask == 0) && (((scan ^ old_scan) & (~0xf0)) == 0)) {
 		/* nothing changed, get out fast */
 		return 0;
 	}
@@ -2185,7 +2292,6 @@ video_rebuild_super_hires_palette(word32 scan_info, int line, int reparse)
 	}
 
 	word_ptr = (word32 *)&(g_slow_memory_ptr[0x19e00 + palette*0x20]);
-	diffs = reparse;
 	for(j = 0; j < 8; j++) {
 		if(word_ptr[j] != g_saved_line_palettes[line][j]) {
 			diffs = 1;
@@ -2836,7 +2942,7 @@ video_get_kimage(Kimage *kimage_ptr, int extend_info, int depth, int mdepth)
 	}
 	if(extend_info & 2) {
 		/* Border at sides of screen */
-		width = EFF_BORDER_WIDTH;
+		width = BORDER_WIDTH + EFF_BORDER_WIDTH;
 		height = A2_WINDOW_HEIGHT;
 	}
 
@@ -2957,7 +3063,7 @@ video_push_lines(Kimage *kimage_ptr, int start_line, int end_line, int left_pix,
 }
 
 void
-video_push_border_sides_lines(int end_x, int width, int start_line,
+video_push_border_sides_lines(int src_x, int dest_x, int width, int start_line,
 	int end_line)
 {
 	Kimage	*kimage_ptr;
@@ -2975,8 +3081,8 @@ video_push_border_sides_lines(int end_x, int width, int start_line,
 	g_refresh_bytes_xfer += 2 * (end_line - start_line) * width;
 
 	srcy = 2 * start_line;
-	x_push_kimage(kimage_ptr, end_x - width, BASE_MARGIN_TOP + srcy,
-			0, srcy, width, 2*(end_line - start_line));
+	x_push_kimage(kimage_ptr, dest_x, BASE_MARGIN_TOP + srcy,
+			src_x, srcy, width, 2*(end_line - start_line));
 }
 
 void
@@ -2993,7 +3099,7 @@ video_push_border_sides()
 #endif
 
 	/* redraw left sides */
-	video_push_border_sides_lines(BORDER_WIDTH, BORDER_WIDTH, 0, 200);
+	video_push_border_sides_lines(0, 0, BORDER_WIDTH, 0, 200);
 
 	/* right side--can be "jagged" */
 	prev_line = -1;
@@ -3005,15 +3111,16 @@ video_push_border_sides()
 			width = BORDER_WIDTH;
 		}
 		if(width != old_width) {
-			video_push_border_sides_lines(X_A2_WINDOW_WIDTH,
-				old_width, prev_line, i);
+			video_push_border_sides_lines(BORDER_WIDTH,
+				X_A2_WINDOW_WIDTH - old_width, old_width,
+				prev_line, i);
 			prev_line = i;
 			old_width = width;
 		}
 	}
 
-	video_push_border_sides_lines(X_A2_WINDOW_WIDTH, old_width,
-								prev_line, 200);
+	video_push_border_sides_lines(BORDER_WIDTH,
+		X_A2_WINDOW_WIDTH - old_width, old_width, prev_line, 200);
 }
 
 void

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.333 2003-11-04 02:22:27-05 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.336 2003-11-06 11:46:39-05 kentd Exp $";
 
 #include <math.h>
 
@@ -22,7 +22,7 @@ const char *g_kegs_default_paths[] = { "", "./", "${HOME}/",
 	"${0}/Contents/Resources/", "/usr/local/lib/",
 	"/usr/local/kegs/", "/usr/local/lib/kegs/", "/usr/share/kegs/",
 	"/usr/share/", "/var/lib/", "/usr/lib/", "/lib/", "/etc/",
-	"/etc/kegs/", "${0}/..", 0 };
+	"/etc/kegs/", "${0}/", 0 };
 
 #define MAX_EVENTS	64
 
@@ -104,7 +104,7 @@ int	g_use_alib = 0;
 int	g_raw_serial = 1;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.81";
+const char g_kegs_version_str[] = "0.82";
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
@@ -165,7 +165,7 @@ int kbd_in_end = 0;
 byte kbd_in_buf[LEN_KBD_BUF];
 
 
-#define PC_LOG_LEN	(16*1024)
+#define PC_LOG_LEN	(8*1024)
 
 Pc_log pc_log_array[PC_LOG_LEN + 2];
 
@@ -1682,7 +1682,7 @@ update_60hz(double dcycs, double dtime_now)
 	char	sim_mhz_buf[128];
 	char	total_mhz_buf[128];
 	char	*sim_mhz_ptr, *total_mhz_ptr;
-	char	*code_str1, *code_str2;
+	char	*code_str1, *code_str2, *sp_str;
 	double	eff_pmhz;
 	double	planned_dcycs;
 	double	predicted_pmhz;
@@ -1746,26 +1746,34 @@ update_60hz(double dcycs, double dtime_now)
 	g_natcycs_lastvbl = end_time;
 
 	if(prev_vbl_index == 0) {
-		if(g_sim_sum < (1.0/190.0)) {
+		if(g_sim_sum < (1.0/250.0)) {
 			sim_mhz_ptr = "???";
 		} else {
-			sprintf(sim_mhz_buf, "%2.2f",
+			sprintf(sim_mhz_buf, "%6.2f",
 				(dadj_cycles_1sec / g_sim_sum) /
 							(1000.0*1000.0));
 			sim_mhz_ptr = sim_mhz_buf;
 		}
-		if(dtime_diff_1sec < (1.0/190.0)) {
+		if(dtime_diff_1sec < (1.0/250.0)) {
 			total_mhz_ptr = "???";
 		} else {
-			sprintf(total_mhz_buf, "%2.2f",
+			sprintf(total_mhz_buf, "%6.2f",
 				(dadj_cycles_1sec / dtime_diff_1sec) /
 								(1000000.0));
 			total_mhz_ptr = total_mhz_buf;
 		}
-		sprintf(status_buf, "dcycs:%13.1f sim MHz:%s "
-			"Eff MHz:%s, sec:%1.3f vol:%02x pal:%x",
+
+		switch(g_limit_speed) {
+		case 1:	sp_str = "1Mhz"; break;
+		case 2:	sp_str = "2.8Mhz"; break;
+		default: sp_str = "Unlimited"; break;
+		}
+
+		sprintf(status_buf, "dcycs:%9.1f sim MHz:%s "
+			"Eff MHz:%s, sec:%1.3f vol:%02x pal:%x, Limit:%s",
 			dcycs/(1000.0*1000.0), sim_mhz_ptr, total_mhz_ptr,
-			dtime_diff_1sec, g_doc_vol, g_a2vid_palette);
+			dtime_diff_1sec, g_doc_vol, g_a2vid_palette,
+			sp_str);
 		video_update_status_line(0, status_buf);
 
 		if(g_dnatcycs_1sec < (1000.0*1000.0)) {

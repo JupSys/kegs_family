@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_adb_h[] = "@(#)$KmKId: adb.h,v 1.9 2002-11-19 00:10:38-08 kadickey Exp $";
+const char rcsid_adb_h[] = "@(#)$KmKId: adb.h,v 1.9 2002-11-19 03:10:38-05 kadickey Exp $";
 
 #include "defc.h"
 

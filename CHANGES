@@ -1,4 +1,9 @@
 
+Changes in KEGS v0.82 since v0.81 (11/06/03)
+- Fix superhires display glitch introduced in v0.81.
+- Improved border handling--XMAS demo looks great.
+- Fix some X build problems introduced in v0.81.
+
 Changes in KEGS v0.81 since v0.80 (11/04/03)
 - Code Red/Yellow warnings about emulation stability
 - Windows file browsing fixes
@@ -11,7 +16,7 @@ Changes in KEGS v0.80 since v0.71 (10/31/03)
 - All emulator state is now saved in "config.kegs"
 - 3200 color pictures!  Video system much improved for display accuracy.
 - F8 Pointer grabbing works on Mac
-- ZipGs emulation
+- ZipGS emulation
 
 Changes in KEGS v0.71 since v0.70 (11/20/02)
 - Improved double-hires colors a lot.  -dhr140 is no longer the default

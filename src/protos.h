@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.169 2003-11-04 01:48:46-05 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.170 2003-11-06 11:46:33-05 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -441,9 +441,10 @@ void check_a2vid_palette(void);
 void change_display_mode(double dcycs);
 void video_update_all_stat_through_line(int line);
 void change_border_color(double dcycs, int val);
+void add_border_log(int st_line_offset, int end_line_offset, int line, int color);
 void update_border_info(void);
-void video_border_pixel_write(Kimage *kimage_ptr, int starty, int num_lines, word32 val);
-void update_border_line(int line_in, int color);
+void update_border_line(int st_line_offset, int end_line_offset, int color);
+void video_border_pixel_write(Kimage *kimage_ptr, int starty, int num_lines, word32 val, int st_off, int end_off);
 void redraw_changed_text_40(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val, int pixels_per_line);
 void redraw_changed_text_80(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val, int pixels_per_line);
 void redraw_changed_gr(int start_offset, int start_line, int num_lines, int reparse, byte *screen_data, int pixels_per_line);
@@ -473,7 +474,7 @@ void video_get_kimage(Kimage *kimage_ptr, int extend_info, int depth, int mdepth
 void video_get_kimages(void);
 void video_convert_kimage_depth(Kimage *kim_in, Kimage *kim_out, int startx, int starty, int width, int height);
 void video_push_lines(Kimage *kimage_ptr, int start_line, int end_line, int left_pix, int right_pix);
-void video_push_border_sides_lines(int end_x, int width, int start_line, int end_line);
+void video_push_border_sides_lines(int src_x, int end_x, int width, int start_line, int end_line);
 void video_push_border_sides(void);
 void video_push_border_special(void);
 void video_push_kimages(void);

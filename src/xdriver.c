@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.177 2003-11-03 23:22:56-05 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.178 2003-11-04 21:54:24-05 kentd Exp $";
 
 # if !defined(__CYGWIN__) && !defined(__POWERPC__)
 /* No shared memory on Cygwin */
@@ -20,6 +20,7 @@ const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.177 2003-11-03 23:22:5
 #include <X11/keysym.h>
 #include <time.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #ifdef X_SHARED_MEM
 # include <sys/ipc.h>

@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_sound_h[] = "@(#)$KmKId: sound.h,v 1.16 2002-11-19 09:10:37-08 kadickey Exp $";
+const char rcsid_sound_h[] = "@(#)$KmKId: sound.h,v 1.16 2002-11-19 12:10:37-05 kadickey Exp $";
 #endif
 
 #if !defined(_WIN32) && !defined(__CYGWIN__)

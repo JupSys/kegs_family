@@ -13,7 +13,7 @@
 	.data
 	.export rcsdif_op_routs_h,data
 rcsdif_op_routs_h
-	.stringz "@(#)$KmKId: op_routs.h,v 1.39 2002-11-19 22:17:03-08 kadickey Exp $"
+	.stringz "@(#)$KmKId: op_routs.h,v 1.39 2002-11-20 01:17:03-05 kadickey Exp $"
 	.code
 # endif
 

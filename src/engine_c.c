@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.48 2003-11-04 02:22:15-05 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.49 2003-11-04 21:52:39-05 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -326,7 +326,7 @@ check_breakpoints(word32 addr)
 	count = g_num_breakpoints;
 	for(i = 0; i < count; i++) {
 		if(g_breakpts[i] == addr) {
-			halt_printf("Hit breakpoint at %06x\n", addr);
+			halt2_printf("Hit breakpoint at %06x\n", addr);
 		}
 	}
 }

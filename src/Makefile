@@ -1,4 +1,4 @@
-# $Id: release_makefile_base,v 1.13 2003/11/04 03:20:21 kentd Exp $
+# $Id: release_makefile_base,v 1.14 2003/11/05 03:00:13 kentd Exp $
 
 OBJECTS1 = adb.o clock.o config.o dis.o engine_c.o scc.o iwm.o \
 	joystick_driver.o moremem.o paddles.o sim65816.o smartport.o \
@@ -38,9 +38,9 @@ kegsmac: $(OBJECTS) compile_time.o
 	touch '../KEGSMAC.app/Icon?'
 
 # Linux for X builds:
-kegslinux: $(OBJECTS) compile_time.o
+xkegs: $(OBJECTS) compile_time.o
 	$(CC) $(CCOPTS) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(XLIBS) $(EXTRA_LIBS) -lX11
-	mv kegslinux ..
+	mv xkegs ..
 
 # Cygwin for X builds:
 kegs.exe: $(OBJECTS) compile_time.o

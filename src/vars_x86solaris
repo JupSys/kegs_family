@@ -1,11 +1,11 @@
 
-TARGET = kegs
+TARGET = xkegs
 OBJECTS = $(OBJECTS1) engine_c.o sound_driver.o xdriver.o
 CC = gcc
 CCOPTS = -O
 OPTS =  -DNDEBUG -DSOLARIS -DKEGS_LITTLE_ENDIAN -DOSS
 SUFFIX =
-NAME = kegs
+NAME = xkegs
 LDFLAGS =
 LDOPTS =
 LD = $(CC)

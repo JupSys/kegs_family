@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_protos_x_h[] = "@(#)$KmKId: protos_xdriver.h,v 1.18 2002-11-19 00:10:38-08 kadickey Exp $";
+const char rcsid_protos_x_h[] = "@(#)$KmKId: protos_xdriver.h,v 1.18 2002-11-19 03:10:38-05 kadickey Exp $";
 
 /* END_HDR */
 

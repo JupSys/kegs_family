@@ -1,4 +1,4 @@
-/* $KmKId: kegsfont.h,v 1.1 2002-11-10 00:31:51-08 kadickey Exp $ */
+/* $KmKId: kegsfont.h,v 1.1 2002-11-10 03:31:51-05 kadickey Exp $ */
 
 /* char 0x00 (raw 0x40)  */
 	{ 0xc7, 0xbb, 0xab, 0xa3, 0xa7, 0xbf, 0xc3, 0xff },

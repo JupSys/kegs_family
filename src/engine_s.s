@@ -11,7 +11,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$KmKId: engine_s.s,v 1.152 2002-11-19 00:10:49-08 kadickey Exp $"
+	.stringz "@(#)$KmKId: engine_s.s,v 1.152 2002-11-19 03:10:49-05 kadickey Exp $"
 
 	.code
 
