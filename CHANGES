@@ -1,8 +1,15 @@
 
+Changes in KEGS v0.57 since v0.56 (12/27/99)
+- Another try at making timezone stuff work across all Unix variants.
+	Let me know if the time in the Apple //gs control panel doesn't
+	match your real local time.
+- Fix a bug created in v0.56 where the fast //e bank switch code had a typo.
+	This prevented ZBasic from working correctly.
+
 Changes in KEGS v0.56 since v0.55 (10/31/99)
 - Faster Apple //e bank switch emulation.
 - Simplified number of global variables for various softswitches.
-- Fix a bug which made 3.5" and 5.25" disk access much slower than necessary.
+- Fixed a bug which made 3.5" and 5.25" disk access much slower than necessary.
 - Improved scan-line interrupt accuracy (lets MEGADEMO run).
 - Improved sound interrupt accuracy (was hoping this would fix some sound
 	issues, but it doesn't seem to help).

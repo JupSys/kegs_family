@@ -1,6 +1,6 @@
 
 OBJECTS = engine_s.o $(OBJECTS1)
-CC = cc -Ae -C
+CC = cc -Ae -C +DA1.1
 CCOPTS = -O
 OPTS =  -DNDEBUG
 SUFFIX =

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.18 99/09/06 20:47:18 kentd Exp $";
+const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.19 99/12/20 23:33:06 kentd Exp $";
 
 #include "defc.h"
 #include <time.h>
@@ -20,11 +20,6 @@ const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.18 99/09/06 20:47:18 kent
 extern int Verbose;
 extern int g_vbl_count;
 extern int g_rom_version;
-
-#ifdef SOLARIS
-extern time_t timezone, altzone;
-extern int daylight;
-#endif
 
 #define CLK_IDLE		1
 #define CLK_TIME		2
@@ -125,44 +120,29 @@ setup_bram()
 			bram[i] = 0;
 		}
 	}
-#if defined SOLARIS
-	/* set timezone, altzone, and daylight */
-	(void)tzset();
-#endif
 }
 
 void
 update_cur_time()
 {
-	struct timeval tv;
-#ifndef SOLARIS
-	struct timezone tz;
-#endif
-	unsigned int secs;
+	time_t	cur_time;
+	unsigned int secs, secs2;
 
+	cur_time = time(0);
 
-#ifdef SOLARIS
-	gettimeofday(&tv, (void *)0);
-#else
-	gettimeofday(&tv, &tz);
-#endif
+	/* Figure out the timezone (effectively) by diffing two times. */
+	/* this is probably not right for a few hours around daylight savings*/
+	/*  time transition */
+	secs2 = mktime(gmtime(&cur_time));
+	secs = mktime(localtime(&cur_time));
 
-	secs = tv.tv_sec;
+	secs = (unsigned int)cur_time - (secs2 - secs);
+
 	/* add in secs to make date based on Apple Jan 1, 1904 instead of */
 	/*   Unix's Jan 1, 1970 */
 	/*  So add in 66 years and 17 leap year days (1904 is a leap year) */
 	secs += ((66*365) + 17) * (24*3600);
 
-#ifdef SOLARIS
-	secs -= (daylight <= 0)*timezone + (daylight > 0)*altzone;
-#else
-	secs -= (tz.tz_minuteswest) * 60;
-#endif
-
-#ifdef __linux__
-	/* attempt to do daylight savings time adjustment on Linux */
-	secs += ((tz.tz_dsttime != 0)*3600);
-#endif
 	g_clk_cur_time = secs;
 
 	clk_printf("Update g_clk_cur_time to %08x\n", g_clk_cur_time);

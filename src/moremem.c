@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.214 99/10/31 21:36:23 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.215 99/12/20 22:20:29 kentd Exp $";
 
 #include "defc.h"
 
@@ -59,7 +59,6 @@ int	g_zipgs_reg_c05b = 0x40;
 int	g_zipgs_reg_c05c = 0x00;
 
 int	statereg;
-int	old_statereg = 0xffff;
 int	halt_on_c02a = 0;
 int	g_shadow_all_banks = 0;
 int	g_num_shadow_all_banks = 0;
@@ -336,7 +335,7 @@ fixup_wrdefram(int new_wrdefram)
 		wrptr += 0x100;
 	}
 
-	wrptr = mem0wr;
+	wrptr = mem0wr + 0x1d000;
 	if(! LCBANK2) {
 		wrptr -= 0x1000;
 	}
@@ -345,7 +344,7 @@ fixup_wrdefram(int new_wrdefram)
 		wrptr += 0x100;
 	}
 
-	wrptr = mem0wr;
+	wrptr = mem0wr + 0xd000;
 	if(! LCBANK2) {
 		wrptr -= 0x1000;
 	}
@@ -623,9 +622,8 @@ set_statereg(double dcycs, int val)
 {
 	int	xor;
 
-	old_statereg = statereg;
+	xor = val ^ statereg;
 	statereg = val;
-	xor = val ^ old_statereg;
 	if(xor == 0) {
 		return;
 	}
@@ -970,6 +968,7 @@ show_bankptrs_bank0rdwr()
 	show_bankptrs(1);
 	show_bankptrs(0xe0);
 	show_bankptrs(0xe1);
+	printf("statereg: %02x\n", statereg);
 }
 
 void

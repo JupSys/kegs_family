@@ -59,13 +59,13 @@ engine_c.o: 8inst_c 16inst_c
 	$(CC) $(CCOPTS) $(XOPTS) -c $(OPTS) -I. $*.c
 
 partls: partls.c
-	$(CC) $(CCOPTS) -o partls$(SUFFIX) partls.c
+	$(CC) $(CCOPTS) $(OPTS) -o partls$(SUFFIX) partls.c
 
 dc2raw: dc2raw.c
-	$(CC) $(CCOPTS) -o dc2raw$(SUFFIX) dc2raw.c
+	$(CC) $(CCOPTS) $(OPTS) -o dc2raw$(SUFFIX) dc2raw.c
 
 to_pro: prodos.h prodos_protos.h to_pro.c
-	$(CC) $(CCOPTS) -o to_pro$(SUFFIX) to_pro.c
+	$(CC) $(CCOPTS) $(OPTS) -o to_pro$(SUFFIX) to_pro.c
 
 compile_time.o: $(OBJECTS)
 
