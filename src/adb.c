@@ -8,11 +8,13 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.69 2004-10-19 14:52:08-04 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.73 2004-11-14 14:05:33-05 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
 #include "adb.h"
+
+int g_fullscreen = 0;
 
 extern int Verbose;
 extern word32 g_vbl_count;
@@ -21,6 +23,7 @@ extern int g_num_lines_prev_superhires;
 extern int g_rom_version;
 extern int g_fast_disk_emul;
 extern int g_limit_speed;
+extern int g_irq_pending;
 extern int g_swap_paddles;
 extern int g_invert_paddles;
 extern int g_joystick_type;
@@ -109,11 +112,6 @@ int g_mouse_warp_y = 0;
 
 int	g_adb_mouse_valid_data = 0;
 int	g_adb_mouse_coord = 0;
-
-int	g_adb_data_int_sent = 0;
-int	g_adb_mouse_int_sent = 0;
-int	g_adb_kbd_srq_sent = 0;
-
 
 #define MAX_KBD_BUF		8
 
@@ -205,9 +203,9 @@ adb_reset()
 	g_kbd_ctl_addr = 2;
 	g_mouse_ctl_addr = 3;
 
-	g_adb_data_int_sent = 0;
-	g_adb_mouse_int_sent = 0;
-	g_adb_kbd_srq_sent = 0;
+	adb_clear_data_int();
+	adb_clear_mouse_int();
+	adb_clear_kbd_srq();
 
 	g_adb_data_pending = 0;
 	g_adb_interrupt_byte = 0;
@@ -267,8 +265,6 @@ show_adb_log(void)
 	printf("kbd: dev: %x, ctl: %x; mouse: dev: %x, ctl: %x\n",
 		g_kbd_dev_addr, g_kbd_ctl_addr,
 		g_mouse_dev_addr, g_mouse_ctl_addr);
-	printf("adb_data_int_sent: %d, adb_kbd_srq_sent: %d, mouse_int: %d\n",
-		g_adb_data_int_sent, g_adb_kbd_srq_sent, g_adb_mouse_int_sent);
 	printf("g_adb_state: %d, g_adb_interrupt_byte: %02x\n",
 		g_adb_state, g_adb_interrupt_byte);
 }
@@ -288,11 +284,8 @@ adb_add_kbd_srq()
 {
 	if(g_kbd_reg3_16bit & 0x200) {
 		/* generate SRQ */
-		g_adb_interrupt_byte |= 0x08;;
-		if(!g_adb_kbd_srq_sent) {
-			g_adb_kbd_srq_sent = 1;
-			add_irq();
-		}
+		g_adb_interrupt_byte |= 0x08;
+		add_irq(IRQ_PENDING_ADB_KBD_SRQ);
 	} else {
 		printf("Got keycode but no kbd SRQ!\n");
 	}
@@ -301,10 +294,7 @@ adb_add_kbd_srq()
 void
 adb_clear_kbd_srq()
 {
-	if(g_adb_kbd_srq_sent) {
-		remove_irq();
-		g_adb_kbd_srq_sent = 0;
-	}
+	remove_irq(IRQ_PENDING_ADB_KBD_SRQ);
 
 	/* kbd SRQ's are the only ones to handle now, so just clean it out */
 	g_adb_interrupt_byte &= (~(0x08));
@@ -314,10 +304,7 @@ void
 adb_add_data_int()
 {
 	if(g_c027_val & ADB_C027_DATA_INT) {
-		if(!g_adb_data_int_sent) {
-			g_adb_data_int_sent = 1;
-			add_irq();
-		}
+		add_irq(IRQ_PENDING_ADB_DATA);
 	}
 }
 
@@ -325,31 +312,20 @@ void
 adb_add_mouse_int()
 {
 	if(g_c027_val & ADB_C027_MOUSE_INT) {
-		if(!g_adb_mouse_int_sent) {
-			/* printf("Mouse int sent\n"); */
-			g_adb_mouse_int_sent = 1;
-			add_irq();
-		}
+		add_irq(IRQ_PENDING_ADB_MOUSE);
 	}
 }
 
 void
 adb_clear_data_int()
 {
-	if(g_adb_data_int_sent) {
-		remove_irq();
-		g_adb_data_int_sent = 0;
-	}
+	remove_irq(IRQ_PENDING_ADB_DATA);
 }
 
 void
 adb_clear_mouse_int()
 {
-	if(g_adb_mouse_int_sent) {
-		remove_irq();
-		g_adb_mouse_int_sent = 0;
-		/* printf("Mouse int clear, button: %d\n", g_mouse_a2_button);*/
-	}
+	remove_irq(IRQ_PENDING_ADB_MOUSE);
 }
 
 
@@ -597,7 +573,7 @@ adb_read_c026()
 	case ADB_IDLE:
 		ret = g_adb_interrupt_byte;
 		g_adb_interrupt_byte = 0;
-		if(g_adb_kbd_srq_sent) {
+		if(g_irq_pending & IRQ_PENDING_ADB_KBD_SRQ) {
 			g_adb_interrupt_byte |= 0x08;
 		}
 		if(g_adb_data_pending == 0) {
@@ -1730,7 +1706,7 @@ adb_physical_key_update(int a2code, int is_up)
 	if(special && !is_up) {
 		switch(special) {
 		case 0x04: /* F4 - Emulator config panel */
-			g_config_control_panel = !g_config_control_panel;
+			cfg_toggle_config_panel();
 			break;
 		case 0x06: /* F6 - emulator speed */
 			if(SHIFT_DOWN) {
@@ -1766,8 +1742,8 @@ adb_physical_key_update(int a2code, int is_up)
 			change_a2vid_palette((g_a2vid_palette + 1) & 0xf);
 			break;
 		case 0x0b: /* F11 - full screen */
-			/* g_fullscreen = !g_fullscreen; */
-			/* x_full_screen(g_full_screen); */
+			g_fullscreen = !g_fullscreen;
+			x_full_screen(g_fullscreen);
 			break;
 		}
 
@@ -1861,6 +1837,23 @@ adb_virtual_key_update(int a2code, int is_up)
 		if(g_virtual_key_up[i] & mask) {
 			g_virtual_key_up[i] &= (~mask);
 			adb_key_event(a2code, is_up);
+		}
+	}
+}
+
+void
+adb_all_keys_up()
+{
+	word32	mask;
+	int	i, j;
+
+	for(i = 0; i < 4; i++) {
+		for(j = 0; j < 32; j++) {
+			mask = 1 << j;
+			if((g_virtual_key_up[i] & mask) == 0) {
+				/* create key-up event */
+				adb_physical_key_update(i*32 + j, 1);
+			}
 		}
 	}
 }

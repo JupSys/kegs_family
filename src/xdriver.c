@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.185 2004-10-18 01:19:43-04 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.187 2004-11-15 16:24:19-05 kentd Exp $";
 
 # if !defined(__CYGWIN__) && !defined(__POWERPC__)
 /* No shared memory on Cygwin */
@@ -246,6 +246,23 @@ int
 main(int argc, char **argv)
 {
 	return kegsmain(argc, argv);
+}
+
+void
+x_dialog_create_kegs_conf(const char *str)
+{
+	/* do nothing -- not implemented yet */
+	return;
+}
+
+int
+x_show_alert(int is_fatal, const char *str)
+{
+	/* Not implemented yet */
+	adb_all_keys_up();
+
+	clear_fatal_logs();
+	return 0;
 }
 
 
@@ -1312,4 +1329,10 @@ x_auto_repeat_off(int must)
 		g_auto_repeat_on = 0;
 		adb_kbd_repeat_off();
 	}
+}
+
+void
+x_full_screen(int do_full)
+{
+	return;
 }

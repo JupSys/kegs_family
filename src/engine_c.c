@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.55 2004-10-19 17:39:52-04 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.57 2004-12-03 23:51:01-05 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -608,7 +608,7 @@ set_memory16_c(word32 addr, word32 val, int cycs)
 	fplus_1 = 0;
 	fplus_2 = 0;
 	fplus_x_m1 = 0;
-	SET_MEMORY16(addr, val, 1);
+	SET_MEMORY16(addr, val, 0);
 }
 
 void
@@ -729,10 +729,10 @@ fixed_memory_ptrs_init()
 	/* set g_slow_memory_ptr, g_rom_fc_ff_ptr, g_dummy_memory1_ptr, */
 	/*  and rom_cards_ptr */
 
-	g_slow_memory_ptr = memalloc_align(128*1024, 0);
-	g_dummy_memory1_ptr = memalloc_align(256, 1024);
-	g_rom_fc_ff_ptr = memalloc_align(256*1024, 1024);
-	g_rom_cards_ptr = memalloc_align(16*256, 1024);
+	g_slow_memory_ptr = memalloc_align(128*1024, 0, 0);
+	g_dummy_memory1_ptr = memalloc_align(256, 1024, 0);
+	g_rom_fc_ff_ptr = memalloc_align(256*1024, 512, 0);
+	g_rom_cards_ptr = memalloc_align(16*256, 256, 0);
 
 #if 0
 	printf("g_memory_ptr: %08x, dummy_mem: %08x, slow_mem_ptr: %08x\n",

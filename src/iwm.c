@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.115 2004-10-18 00:18:11-04 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.119 2004-11-21 17:44:14-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -86,11 +86,6 @@ void iwm_write_data_525(Disk *dsk, word32 val, int fast_disk_emul,double dcycs);
 void
 iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525)
 {
-	int	num_tracks;
-	int	i;
-
-	num_tracks = MAX_TRACKS;
-
 	dsk->dcycs_last_read = 0.0;
 	dsk->name_ptr = 0;
 	dsk->partition_name = 0;
@@ -112,15 +107,31 @@ iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525)
 	dsk->last_phase = 0;
 	dsk->nib_pos = 0;
 	dsk->num_tracks = 0;
+	dsk->trks = 0;
+
+}
+
+void
+disk_set_num_tracks(Disk *dsk, int num_tracks)
+{
+	int	i;
+
+	if(dsk->trks != 0) {
+		/* This should not be necessary! */
+		free(dsk->trks);
+		halt_printf("Needed to free dsk->trks: %p\n", dsk->trks);
+	}
+	dsk->num_tracks = num_tracks;
+	dsk->trks = (Trk *)malloc(num_tracks * sizeof(Trk));
 
 	for(i = 0; i < num_tracks; i++) {
-		dsk->tracks[i].dsk = dsk;
-		dsk->tracks[i].nib_area = 0;
-		dsk->tracks[i].track_dirty = 0;
-		dsk->tracks[i].overflow_size = 0;
-		dsk->tracks[i].track_len = 0;
-		dsk->tracks[i].unix_pos = -1;
-		dsk->tracks[i].unix_len = -1;
+		dsk->trks[i].dsk = dsk;
+		dsk->trks[i].nib_area = 0;
+		dsk->trks[i].track_dirty = 0;
+		dsk->trks[i].overflow_size = 0;
+		dsk->trks[i].track_len = 0;
+		dsk->trks[i].unix_pos = -1;
+		dsk->trks[i].unix_len = -1;
 	}
 }
 
@@ -210,6 +221,7 @@ draw_iwm_status(int line, char *buf)
 	video_update_status_line(line, buf);
 }
 
+
 void
 iwm_flush_disk_to_unix(Disk *dsk)
 {
@@ -253,8 +265,8 @@ iwm_flush_disk_to_unix(Disk *dsk)
 		num_dirty++;
 
 		/* Write it out */
-		unix_pos = dsk->tracks[j].unix_pos;
-		unix_len = dsk->tracks[j].unix_len;
+		unix_pos = dsk->trks[j].unix_pos;
+		unix_len = dsk->trks[j].unix_len;
 		if(unix_pos < 0 || unix_len < 0x1000) {
 			halt_printf("Disk:%s trk:%d, unix_pos:%08x, len:%08x\n",
 				dsk->name_ptr, j, unix_pos, unix_len);
@@ -366,6 +378,9 @@ iwm_touch_switches(int loc, double dcycs)
 		/* phase adjustments.  See if motor is on */
 
 		iwm.iwm_phase[phase] = on;
+		iwm_printf("Iwm phase %d=%d, all phases: %d %d %d %d (%f)\n",
+			phase, on, iwm.iwm_phase[0], iwm.iwm_phase[1],
+			iwm.iwm_phase[2], iwm.iwm_phase[3], dcycs);
 
 		if(iwm.motor_on) {
 			if(g_c031_disk35 & 0x40) {
@@ -527,7 +542,7 @@ iwm525_phase_change(int drive, int phase)
 		last_phase = 0;
 	}
 	if(qtr_track > 4*34) {
-		printf("Disk arm moved past track 0x21, moving it back\n");
+		printf("Disk arm moved past track 34, moving it back\n");
 		qtr_track = 4*34;
 		last_phase = 0;
 	}
@@ -536,9 +551,9 @@ iwm525_phase_change(int drive, int phase)
 
 	dsk->last_phase = last_phase;
 
-	iwm_printf("Moving drive to qtr track: %04x, %d, %d, %d,   "
-		"%d %d %d %d\n",
-		qtr_track, phase, delta, last_phase, iwm.iwm_phase[0],
+	iwm_printf("Moving drive to qtr track: %04x (trk:%d.%02d), %d, %d, %d, "
+		"%d %d %d %d\n", qtr_track, qtr_track>>2, 25*(qtr_track & 3),
+		phase, delta, last_phase, iwm.iwm_phase[0],
 		iwm.iwm_phase[1], iwm.iwm_phase[2], iwm.iwm_phase[3]);
 
 	/* sanity check stepping algorithm */
@@ -1053,7 +1068,7 @@ disk_unnib_4x4(Disk *dsk)
 }
 
 int
-iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
+iwm_denib_track525(Disk *dsk, Trk *trk, int qtr_track, byte *outbuf)
 {
 	byte	aux_buf[0x80];
 	byte	*buf;
@@ -1263,7 +1278,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 }
 
 int
-iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
+iwm_denib_track35(Disk *dsk, Trk *trk, int qtr_track, byte *outbuf)
 {
 	word32	buf_c00[0x100];
 	word32	buf_d00[0x100];
@@ -1590,17 +1605,14 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 int
 disk_track_to_unix(Disk *dsk, int qtr_track, byte *outbuf)
 {
-	Track	*trk;
+	Trk	*trk;
 	int	disk_525;
 
 	disk_525 = dsk->disk_525;
 
-	trk = &(dsk->tracks[qtr_track]);
+	trk = &(dsk->trks[qtr_track]);
 
 	if(trk->track_len == 0 || trk->track_dirty == 0) {
-#if 0
-		printf("disk_track_to_unix: dirty: %d\n", trk->track_dirty);
-#endif
 		return 0;
 	}
 
@@ -1641,7 +1653,7 @@ void
 disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size)
 {
 	byte	buffer[0x3000];
-	Track	*trk;
+	Trk	*trk;
 	int	ret, ret2;
 	int	i;
 
@@ -1654,7 +1666,7 @@ disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size)
 		buffer[i] = 0;
 	}
 
-	trk = &(dsk->tracks[qtr_track]);
+	trk = &(dsk->trks[qtr_track]);
 
 	if(dsk->disk_525) {
 		ret = iwm_denib_track525(dsk, trk, qtr_track, &(buffer[0]));
@@ -1677,7 +1689,7 @@ disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size)
 			ret, ret2, qtr_track);
 		show_hex_data(buf, 0x1000);
 		show_hex_data(buffer, 0x1000);
-		iwm_show_a_track(&(dsk->tracks[qtr_track]));
+		iwm_show_a_track(&(dsk->trks[qtr_track]));
 
 		exit(2);
 	}
@@ -1691,7 +1703,7 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 	int nib_len)
 {
 	byte	track_buf[TRACK_BUF_LEN];
-	Track	*trk;
+	Trk	*trk;
 	int	must_clear_track;
 	int	ret;
 	int	len;
@@ -1752,7 +1764,7 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 
 	dsk->nib_pos = 0;		/* for consistency */
 
-	trk = &(dsk->tracks[qtr_track]);
+	trk = &(dsk->trks[qtr_track]);
 	trk->track_dirty = 0;
 	trk->overflow_size = 0;
 	trk->track_len = 2*nib_len;
@@ -1773,7 +1785,7 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 }
 
 void
-iwm_nibblize_track_nib525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
+iwm_nibblize_track_nib525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track)
 {
 	byte	*nib_ptr;
 	byte	*trk_ptr;
@@ -1792,7 +1804,7 @@ iwm_nibblize_track_nib525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 }
 
 void
-iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
+iwm_nibblize_track_525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track)
 {
 	byte	partial_nib_buf[0x300];
 	word32	*word_ptr;
@@ -1884,7 +1896,7 @@ iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 }
 
 void
-iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
+iwm_nibblize_track_35(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track)
 {
 	int	phys_to_log_sec[16];
 	word32	buf_c00[0x100];
@@ -2139,7 +2151,7 @@ disk_4x4_nib_out(Disk *dsk, word32 val)
 void
 disk_nib_out(Disk *dsk, byte val, int size)
 {
-	Track	*trk;
+	Trk	*trk;
 	int	pos;
 	int	old_size;
 	int	track_len;
@@ -2149,9 +2161,12 @@ disk_nib_out(Disk *dsk, byte val, int size)
 
 	qtr_track = dsk->cur_qtr_track;
 
-	trk = &(dsk->tracks[qtr_track]);
-
-	track_len = trk->track_len;
+	track_len = 0;
+	trk = 0;
+	if(dsk->trks != 0) {
+		trk = &(dsk->trks[qtr_track]);
+		track_len = trk->track_len;
+	}
 
 	if(track_len <= 10) {
 		printf("Writing to an invalid qtr track: %02x!\n", qtr_track);
@@ -2223,7 +2238,7 @@ disk_nib_end_track(Disk *dsk)
 
 	dsk->nib_pos = 0;
 	qtr_track = dsk->cur_qtr_track;
-	dsk->tracks[qtr_track].track_dirty = 0;
+	dsk->trks[qtr_track].track_dirty = 0;
 
 	dsk->disk_dirty = 0;
 }
@@ -2232,7 +2247,7 @@ void
 iwm_show_track(int slot_drive, int track)
 {
 	Disk	*dsk;
-	Track	*trk;
+	Trk	*trk;
 	int	drive;
 	int	sel35;
 	int	qtr_track;
@@ -2256,22 +2271,25 @@ iwm_show_track(int slot_drive, int track)
 	} else {
 		qtr_track = track;
 	}
-	trk = &(dsk->tracks[qtr_track]);
+	if(dsk->trks == 0) {
+		return;
+	}
+	trk = &(dsk->trks[qtr_track]);
 
 	if(trk->track_len <= 0) {
 		printf("Track_len: %d\n", trk->track_len);
-		printf("No track for type: %d, drive: %d, qtrk: %02x\n",
+		printf("No track for type: %d, drive: %d, qtrk: 0x%02x\n",
 			sel35, drive, qtr_track);
 		return;
 	}
 
-	printf("Current drive: %d, q_track: %02x\n", drive, qtr_track);
+	printf("Current drive: %d, q_track: 0x%02x\n", drive, qtr_track);
 
 	iwm_show_a_track(trk);
 }
 
 void
-iwm_show_a_track(Track *trk)
+iwm_show_a_track(Trk *trk)
 {
 	int	sum;
 	int	len;

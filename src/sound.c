@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.107 2004-10-14 02:26:51-04 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.108 2004-10-31 00:56:07-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -397,10 +397,12 @@ sound_reset(double dcycs)
 			halt_printf("reset: has_irq[%02x] = %d\n", i,
 				g_doc_regs[i].has_irq_pending);
 		}
+		g_doc_regs[i].has_irq_pending = 0;
 	}
 	if(g_num_osc_interrupting) {
 		halt_printf("reset: num_osc_int:%d\n", g_num_osc_interrupting);
 	}
+	g_num_osc_interrupting = 0;
 
 	g_doc_num_osc_en = 1;
 	UPDATE_G_DCYCS_PER_DOC_UPDATE(1);
@@ -1212,7 +1214,7 @@ add_sound_irq(int osc)
 	g_doc_regs[osc].has_irq_pending = num_osc_interrupting;
 	g_num_osc_interrupting = num_osc_interrupting;
 
-	add_irq();
+	add_irq(IRQ_PENDING_DOC);
 	if(num_osc_interrupting == 1) {
 		doc_reg_e0 = 0x00 + (osc << 1);
 	}
@@ -1238,7 +1240,9 @@ remove_sound_irq(int osc, int must)
 		g_num_osc_interrupting--;
 		g_doc_regs[osc].has_irq_pending = 0;
 		DOC_LOG("rem_irq", osc, g_cur_dcycs * g_dsamps_per_dcyc, 0);
-		remove_irq();
+		if(g_num_osc_interrupting == 0) {
+			remove_irq(IRQ_PENDING_DOC);
+		}
 
 		first = 0x40 | (doc_reg_e0 >> 1);
 					/* if none found, then def = no ints */

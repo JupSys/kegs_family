@@ -9,10 +9,13 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.178 2004-10-17 12:54:59-04 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.188 2004-12-06 19:08:34-05 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
+int x_show_alert(int is_fatal, const char *str);
+int win_nonblock_read_stdin(int fd, char *bufptr, int len);
+void x_dialog_create_kegs_conf(const char *str);
 void update_color_array(int col_num, int a2_color);
 void set_border_color(int val);
 void x_update_physical_colormap(void);
@@ -31,6 +34,7 @@ void x_push_kimage(Kimage *kimage_ptr, int destx, int desty, int srcx, int srcy,
 void x_push_done();
 void x_hide_pointer(int);
 void x_get_kimage(Kimage *kimage_ptr);
+void x_full_screen(int do_full);
 
 /* test65.c */
 void do_gen_test(int got_num, int base_seed);
@@ -61,13 +65,13 @@ void set_halt_act(int val);
 /* special scc_macdriver.c prototypes */
 int scc_serial_mac_init(int port);
 void scc_serial_mac_change_params(int port);
-void scc_serial_mac_fill_readbuf(int port, double dcycs);
+void scc_serial_mac_fill_readbuf(int port, int space_left, double dcycs);
 void scc_serial_mac_empty_writebuf(int port);
 
 /* special scc_windriver.c prototypes */
 int scc_serial_win_init(int port);
 void scc_serial_win_change_params(int port);
-void scc_serial_win_fill_readbuf(int port, double dcycs);
+void scc_serial_win_fill_readbuf(int port, int space_left, double dcycs);
 void scc_serial_win_empty_writebuf(int port);
 
 /* special joystick_driver.c prototypes */
@@ -117,6 +121,7 @@ int adb_is_option_key_down(void);
 void adb_increment_speed(void);
 void adb_physical_key_update(int a2code, int is_up);
 void adb_virtual_key_update(int a2code, int is_up);
+void adb_all_keys_up(void);
 void adb_kbd_repeat_off(void);
 
 
@@ -141,10 +146,12 @@ void do_clock_data(void);
 void config_init_menus(Cfg_menu *menuptr);
 void config_init(void);
 void cfg_exit(void);
+void cfg_toggle_config_panel(void);
 void cfg_text_screen_dump(void);
 void config_vbl_update(int doit_3_persec);
 void config_parse_option(char *buf, int pos, int len, int line);
 void config_parse_bram(char *buf, int pos, int len);
+void config_load_roms(void);
 void config_parse_config_kegs_file(void);
 Disk *cfg_get_dsk_from_slot_drive(int slot, int drive);
 void config_generate_config_kegs_name(char *outstr, int maxlen, Disk *dsk, int with_extras);
@@ -166,7 +173,7 @@ void cfg_putchar(int c);
 void cfg_printf(const char *fmt, ...);
 void cfg_print_num(int num, int max_len);
 void cfg_get_disk_name(char *outstr, int maxlen, int type_ext, int with_extras);
-void cfg_parse_menu(Cfg_menu *menu_ptr, int menu_pos, int highlight_pos, int change);
+void cfg_parse_menu(Cfg_menu *menuptr, int menu_pos, int highlight_pos, int change);
 void cfg_get_base_path(char *pathptr, const char *inptr, int go_up);
 void cfg_file_init(void);
 void cfg_free_alldirents(Cfg_listhdr *listhdrptr);
@@ -178,6 +185,7 @@ char *cfg_shorten_filename(const char *in_ptr, int maxlen);
 void cfg_fix_topent(Cfg_listhdr *listhdrptr);
 void cfg_file_draw(void);
 void cfg_partition_selected(void);
+void cfg_file_update_ptr(char *str);
 void cfg_file_selected(void);
 void cfg_file_handle_key(int key);
 void config_control_panel(void);
@@ -203,7 +211,6 @@ void do_debug_list(void);
 void dis_do_memmove(void);
 void dis_do_pattern_search(void);
 void dis_do_compare(void);
-void load_roms(void);
 void do_debug_unix(void);
 void do_debug_load(void);
 int do_dis(FILE *outfile, word32 kpc, int accsize, int xsize, int op_provided, word32 instr);
@@ -219,7 +226,7 @@ void scc_hard_reset_port(int port);
 void scc_reset_port(int port);
 void scc_regen_clocks(int port);
 void scc_port_init(int port);
-void scc_try_to_empty_writebuf(int port);
+void scc_try_to_empty_writebuf(int port, double dcycs);
 void scc_try_fill_readbuf(int port, double dcycs);
 void scc_update(double dcycs);
 void do_scc_event(int type, double dcycs);
@@ -239,6 +246,8 @@ void scc_clr_tx_int(int port);
 void scc_set_zerocnt_int(int port);
 void scc_clr_zerocnt_int(int port);
 void scc_add_to_readbuf(int port, word32 val, double dcycs);
+void scc_add_to_readbufv(int port, double dcycs, const char *fmt, ...);
+void scc_transmit(int port, word32 val, double dcycs);
 void scc_add_to_writebuf(int port, word32 val, double dcycs);
 word32 scc_read_data(int port, double dcycs);
 void scc_write_data(int port, word32 val, double dcycs);
@@ -246,10 +255,23 @@ void scc_write_data(int port, word32 val, double dcycs);
 
 /* scc_socket_driver.c */
 void scc_socket_init(int port);
+void scc_socket_maybe_open_incoming(int port, double dcycs);
+void scc_socket_open_outgoing(int port, double dcycs);
+void scc_socket_make_nonblock(int port, double dcycs);
 void scc_socket_change_params(int port);
-void scc_accept_socket(int port);
-void scc_socket_fill_readbuf(int port, double dcycs);
-void scc_socket_empty_writebuf(int port);
+void scc_socket_close(int port, int full_close, double dcycs);
+void scc_accept_socket(int port, double dcycs);
+void scc_socket_telnet_reqs(int port, double dcycs);
+void scc_socket_fill_readbuf(int port, int space_left, double dcycs);
+void scc_socket_recvd_char(int port, int c, double dcycs);
+void scc_socket_empty_writebuf(int port, double dcycs);
+void scc_socket_modem_write(int port, int c, double dcycs);
+void scc_socket_do_cmd_str(int port, double dcycs);
+void scc_socket_send_modem_code(int port, int code, double dcycs);
+void scc_socket_modem_hangup(int port, double dcycs);
+void scc_socket_modem_connect(int port, double dcycs);
+void scc_socket_modem_do_ring(int port, double dcycs);
+void scc_socket_do_answer(int port, double dcycs);
 
 
 /* scc_windriver.c */
@@ -260,6 +282,7 @@ void scc_socket_empty_writebuf(int port);
 
 /* iwm.c */
 void iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525);
+void disk_set_num_tracks(Disk *dsk, int num_tracks);
 void iwm_init(void);
 void iwm_reset(void);
 void draw_iwm_status(int line, char *buf);
@@ -281,20 +304,20 @@ int iwm_read_data(Disk *dsk, int fast_disk_emul, double dcycs);
 void iwm_write_data(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
 void sector_to_partial_nib(byte *in, byte *nib_ptr);
 int disk_unnib_4x4(Disk *dsk);
-int iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf);
-int iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf);
+int iwm_denib_track525(Disk *dsk, Trk *trk, int qtr_track, byte *outbuf);
+int iwm_denib_track35(Disk *dsk, Trk *trk, int qtr_track, byte *outbuf);
 int disk_track_to_unix(Disk *dsk, int qtr_track, byte *outbuf);
 void show_hex_data(byte *buf, int count);
 void disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size);
 void disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len, int nib_len);
-void iwm_nibblize_track_nib525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
-void iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
-void iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
+void iwm_nibblize_track_nib525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track);
+void iwm_nibblize_track_525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track);
+void iwm_nibblize_track_35(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track);
 void disk_4x4_nib_out(Disk *dsk, word32 val);
 void disk_nib_out(Disk *dsk, byte val, int size);
 void disk_nib_end_track(Disk *dsk);
 void iwm_show_track(int slot_drive, int track);
-void iwm_show_a_track(Track *trk);
+void iwm_show_a_track(Trk *trk);
 
 
 /* joystick_driver.c */
@@ -357,11 +380,12 @@ void show_regs(void);
 void my_exit(int ret);
 void do_reset(void);
 void check_engine_asm_defines(void);
-byte *memalloc_align(int size, int skip_amt);
+byte *memalloc_align(int size, int skip_amt, void **alloc_ptr);
 void memory_ptr_init(void);
 int kegsmain(int argc, char **argv);
+void load_roms_init_memory(void);
 void kegs_expand_path(char *out_ptr, const char *in_ptr, int maxlen);
-void setup_kegs_file(char *outname, int maxlen, int ok_if_missing, const char **name_ptr);
+void setup_kegs_file(char *outname, int maxlen, int ok_if_missing, int can_create_file, const char **name_ptr);
 void initialize_events(void);
 void check_for_one_event_type(int type);
 void add_event_entry(double dcycs, int type);
@@ -377,8 +401,8 @@ void show_all_events(void);
 void show_pmhz(void);
 void setup_zip_speeds(void);
 void run_prog(void);
-void add_irq(void);
-void remove_irq(void);
+void add_irq(word32 irq_mask);
+void remove_irq(word32 irq_mask);
 void take_irq(int is_it_brk);
 void show_dtime_array(void);
 void update_60hz(double dcycs, double dtime_now);
@@ -394,6 +418,11 @@ void do_wdm(word32 arg);
 void do_wai(void);
 void do_stp(void);
 void size_fail(int val, word32 v1, word32 v2);
+int fatal_printf(const char *fmt, ...);
+int kegs_vprintf(const char *fmt, va_list ap);
+void must_write(int fd, char *bufptr, int len);
+void clear_fatal_logs(void);
+char *kegs_malloc_str(char *in_str);
 
 
 /* smartport.c */

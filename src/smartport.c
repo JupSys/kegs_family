@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.30 2004-10-11 22:55:43-04 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.31 2004-11-12 23:10:50-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -764,7 +764,7 @@ do_c700(word32 ret)
 
 	if(ret != 0) {
 		printf("Failure reading boot disk in s7d1!\n");
-		engine.kpc = 0xe000;
+		engine.kpc = 0xff59;	/* Jump to monitor, fix $36-$39 */
 	}
 }
 

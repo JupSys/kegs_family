@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.133 2004-10-19 17:51:49-04 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.135 2004-11-12 23:09:44-05 kentd Exp $";
 
 #include <time.h>
 
@@ -73,6 +73,12 @@ extern double g_last_vbl_dcycs;
 
 double	g_video_dcycs_check_input = 0.0;
 int	g_video_extra_check_inputs = 0;
+int	g_video_act_margin_left = BASE_MARGIN_LEFT;
+int	g_video_act_margin_right = BASE_MARGIN_RIGHT;
+int	g_video_act_margin_top = BASE_MARGIN_TOP;
+int	g_video_act_margin_bottom = BASE_MARGIN_BOTTOM;
+int	g_video_act_width = X_A2_WINDOW_WIDTH;
+int	g_video_act_height = X_A2_WINDOW_HEIGHT;
 
 int	g_need_redraw = 1;
 int	g_palette_change_summary = 0;
@@ -100,6 +106,7 @@ int	g_expanded_col_2[16];
 
 int g_cur_a2_stat = ALL_STAT_TEXT | ALL_STAT_ANNUNC3 |
 		(0xf << BIT_ALL_STAT_TEXT_COLOR);
+extern int g_save_cur_a2_stat;		/* from config.c */
 
 int	g_a2vid_palette = 0xe;
 int	g_installed_full_superhires_colormap = 0;
@@ -477,13 +484,20 @@ int	g_flash_count = 0;
 void
 video_reset()
 {
+	int	stat;
 	int	i;
 
 	g_installed_full_superhires_colormap = (g_screen_depth != 8);
-	g_cur_a2_stat = ALL_STAT_TEXT | ALL_STAT_ANNUNC3 |
-		(0xf << BIT_ALL_STAT_TEXT_COLOR);
+	stat = ALL_STAT_TEXT | ALL_STAT_ANNUNC3 |
+					(0xf << BIT_ALL_STAT_TEXT_COLOR);
 	if(g_use_bw_hires) {
-		g_cur_a2_stat |= ALL_STAT_COLOR_C021;
+		stat |= ALL_STAT_COLOR_C021;
+	}
+	if(g_config_control_panel) {
+		/* Don't update cur_a2_stat when in configuration panel */ 
+		g_save_cur_a2_stat = stat;
+	} else {
+		g_cur_a2_stat = stat;
 	}
 
 	g_palette_change_summary = 0;
@@ -3075,9 +3089,8 @@ video_push_lines(Kimage *kimage_ptr, int start_line, int end_line, int left_pix,
 	g_refresh_bytes_xfer += 2*(end_line - start_line) *
 							(right_pix - left_pix);
 
-
-	x_push_kimage(kimage_ptr, BASE_MARGIN_LEFT + left_pix,
-			BASE_MARGIN_TOP + srcy, left_pix, srcy,
+	x_push_kimage(kimage_ptr, g_video_act_margin_left + left_pix,
+			g_video_act_margin_top + srcy, left_pix, srcy,
 			(right_pix - left_pix), 2*(end_line - start_line));
 }
 
@@ -3100,8 +3113,30 @@ video_push_border_sides_lines(int src_x, int dest_x, int width, int start_line,
 	g_refresh_bytes_xfer += 2 * (end_line - start_line) * width;
 
 	srcy = 2 * start_line;
-	x_push_kimage(kimage_ptr, dest_x, BASE_MARGIN_TOP + srcy,
+
+	// Adjust dext_x to accound for changed margins
+	dest_x = dest_x + g_video_act_margin_left - BASE_MARGIN_LEFT;
+	if(dest_x < BASE_MARGIN_LEFT) {
+		src_x = src_x + g_video_act_margin_left - BASE_MARGIN_LEFT;
+		// Don't adjust src_x if doing right border
+	}
+	if(dest_x < 0) {
+		width = width + dest_x;
+		src_x = src_x - dest_x;
+		dest_x = 0;
+	}
+	if(src_x < 0) {
+		width = width + src_x;
+		dest_x = dest_x - src_x;
+		src_x = 0;
+	}
+	if(dest_x + width > g_video_act_width) {
+		width = g_video_act_width - dest_x;
+	}
+	if(width > 0) {
+		x_push_kimage(kimage_ptr, dest_x, g_video_act_margin_top + srcy,
 			src_x, srcy, width, 2*(end_line - start_line));
+	}
 }
 
 void
@@ -3147,18 +3182,39 @@ video_push_border_special()
 {
 	Kimage	*kimage_ptr;
 	int	width, height;
-
-	width = X_A2_WINDOW_WIDTH;
-	height = BASE_MARGIN_TOP;
+	int	src_x, src_y;
+	int	dest_x, dest_y;
 
 	kimage_ptr = &g_kimage_border_special;
+	width = g_video_act_width;
 	g_refresh_bytes_xfer += width * (BASE_MARGIN_TOP + BASE_MARGIN_BOTTOM);
 
-	x_push_kimage(kimage_ptr, 0, BASE_MARGIN_TOP + A2_WINDOW_HEIGHT,
-			0, 0, width, BASE_MARGIN_BOTTOM);
-	x_push_kimage(kimage_ptr, 0, 0,
-			0, BASE_MARGIN_BOTTOM, width, BASE_MARGIN_TOP);
-	
+	// First do bottom border: dest_x from 0 to 640+MARGIN_LEFT+MARGIN_RIGHT
+	//	and dest_y of BASE_MARGIN_BOTTOM starting at TOP+A2_HEIGHT
+	//	src_x is dest_x, and src_y is 0.
+	dest_y = g_video_act_margin_top + A2_WINDOW_HEIGHT;
+	height = g_video_act_margin_bottom;
+	src_y = BASE_MARGIN_BOTTOM - height;
+
+	dest_x = 0;
+	src_x = BASE_MARGIN_LEFT - g_video_act_margin_left;
+
+	if(width > 0 && height > 0) {
+		x_push_kimage(kimage_ptr, dest_x, dest_y, src_x, src_y,
+								width, height);
+	}
+
+	// Then fix top border: dest_x from 0 to 640+LEFT+RIGHT and
+	//	dest_y from 0 to TOP.  src_x is dest_x, but src_y is
+	//	BOTTOM to BOTTOM+TOP
+	//	Just use src_x and dest_x from earlier.
+	height = g_video_act_margin_top;
+	dest_y = 0;
+	src_y = BASE_MARGIN_BOTTOM;
+	if(width > 0 && height > 0) {
+		x_push_kimage(kimage_ptr, dest_x, dest_y, src_x, src_y,
+								width, height);
+	}
 }
 
 void

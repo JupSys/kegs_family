@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.97 2004-10-14 15:10:16-04 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.100 2004-11-09 02:02:07-05 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -73,6 +73,7 @@ void U_STACK_TRACE();
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdarg.h>
 #ifdef HPUX
 # include <machine/inline.h>		/* for GET_ITIMER */
 #endif
@@ -177,9 +178,19 @@ STRUCT(Cfg_listhdr) {
 	int	num_to_show;
 };
 
-STRUCT(Emustate_list) {
+STRUCT(Emustate_intlist) {
 	const char *str;
 	int	*iptr;
+};
+
+STRUCT(Emustate_dbllist) {
+	const char *str;
+	double	*dptr;
+};
+
+STRUCT(Emustate_word32list) {
+	const char *str;
+	word32	*wptr;
 };
 
 #ifdef __LP64__
@@ -203,6 +214,24 @@ STRUCT(Emustate_list) {
 #define C041_EN_SWITCH_INTS	0x04
 #define C041_EN_MOVE_INTS	0x02
 #define C041_EN_MOUSE		0x01
+
+/* WARNING: SCC1 and SCC0 interrupts must be in this order for scc.c */
+/*  This order matches the SCC hardware */
+#define IRQ_PENDING_SCC1_ZEROCNT	0x00001
+#define IRQ_PENDING_SCC1_TX		0x00002
+#define IRQ_PENDING_SCC1_RX		0x00004
+#define IRQ_PENDING_SCC0_ZEROCNT	0x00008
+#define IRQ_PENDING_SCC0_TX		0x00010
+#define IRQ_PENDING_SCC0_RX		0x00020
+#define IRQ_PENDING_C023_SCAN		0x00100
+#define IRQ_PENDING_C023_1SEC		0x00200
+#define IRQ_PENDING_C046_25SEC		0x00400
+#define IRQ_PENDING_C046_VBL		0x00800
+#define IRQ_PENDING_ADB_KBD_SRQ		0x01000
+#define IRQ_PENDING_ADB_DATA		0x02000
+#define IRQ_PENDING_ADB_MOUSE		0x04000
+#define IRQ_PENDING_DOC			0x08000
+
 
 #define EXTRU(val, pos, len) 				\
 	( ( (len) >= (pos) + 1) ? ((val) >> (31-(pos))) : \
