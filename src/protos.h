@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.172 2003-11-21 16:39:39-05 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$KmKId: protos.h,v 1.173 2004-03-23 17:26:19-05 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -29,7 +29,7 @@ void check_input_events(void);
 void x_redraw_status_lines(void);
 void x_push_kimage(Kimage *kimage_ptr, int destx, int desty, int srcx, int srcy, int width, int height);
 void x_push_done();
-void x_warp_pointer(int);
+void x_hide_pointer(int);
 void x_get_kimage(Kimage *kimage_ptr);
 
 /* test65.c */
@@ -104,7 +104,7 @@ void adb_write_c027(int val);
 int read_adb_ram(word32 addr);
 void write_adb_ram(word32 addr, int val);
 int update_mouse(int x, int y, int button_states, int buttons_valid);
-int mouse_read_c024(void);
+int mouse_read_c024(double dcycs);
 void adb_key_event(int a2code, int is_up);
 word32 adb_read_c000(void);
 word32 adb_access_c010(void);

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.124 2003-11-21 14:45:06-05 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.125 2004-03-23 17:25:50-05 kentd Exp $";
 
 #include <time.h>
 
@@ -110,6 +110,14 @@ word32 g_a2palette_8to1624[256];
 word32	g_saved_line_palettes[200][8];
 int	g_saved_a2vid_palette = -1;
 word32	g_a2vid_palette_remap[16];
+
+word32 g_cycs_in_refresh_line = 0;
+word32 g_cycs_in_refresh_ximage = 0;
+
+int	g_num_lines_superhires = 0;
+int	g_num_lines_superhires640 = 0;
+int	g_num_lines_prev_superhires = 0;
+int	g_num_lines_prev_superhires640 = 0;
 
 word32	g_red_mask = 0xff;
 word32	g_green_mask = 0xff;
@@ -2516,6 +2524,9 @@ redraw_changed_super_hires(int start_offset, int start_line, int num_lines,
 		}
 
 		mode_640 = (scan & 0x80);
+		if(mode_640) {
+			g_num_lines_superhires640++;
+		}
 
 		type = ((scan >> 5) & 1) + (pixel_size_type << 1);
 		if(type & 1) {
@@ -2529,27 +2540,27 @@ redraw_changed_super_hires(int start_offset, int start_line, int num_lines,
 
 
 		switch(type) {
-		case 0:	/* nofill, 8 byte pixels */
+		case 0:	/* nofill, 8 bit pixels */
 			redraw_changed_super_hires_oneline_nofill_8(
 				screen_data, pixels_per_line, y, scan,
 				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 1:	/* fill, 8 byte pixels */
+		case 1:	/* fill, 8 bit pixels */
 			redraw_changed_super_hires_oneline_fill_8(
 				screen_data, pixels_per_line, y, scan,
 				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 2:	/* nofill, 16 byte pixels */
+		case 2:	/* nofill, 16 bit pixels */
 			redraw_changed_super_hires_oneline_nofill_16(
 				screen_data, pixels_per_line, y, scan,
 				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 3:	/* fill, 16 byte pixels */
+		case 3:	/* fill, 16 bit pixels */
 			redraw_changed_super_hires_oneline_fill_16(
 				screen_data, pixels_per_line, y, scan,
 				this_check, use_a2vid_palette, mode_640);
 			break;
-		case 4:	/* nofill, 32 byte pixels */
+		case 4:	/* nofill, 32 bit pixels */
 			redraw_changed_super_hires_oneline_nofill_32(
 				screen_data, pixels_per_line, y, scan,
 				this_check, use_a2vid_palette, mode_640);
@@ -2608,12 +2619,6 @@ display_screen()
 {
 	video_update_through_line(262);
 }
-
-word32 g_cycs_in_refresh_line = 0;
-word32 g_cycs_in_refresh_ximage = 0;
-
-int	g_num_lines_superhires = 0;
-int	g_num_lines_prev_superhires = 0;
 
 void
 video_update_event_line(int line)
@@ -2743,7 +2748,9 @@ video_update_through_line(int line)
 		g_cycs_in_refresh_ximage += (end_time - start_time);
 
 		g_num_lines_prev_superhires = g_num_lines_superhires;
+		g_num_lines_prev_superhires640 = g_num_lines_superhires640;
 		g_num_lines_superhires = 0;
+		g_num_lines_superhires640 = 0;
 	}
 }
 

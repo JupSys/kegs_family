@@ -1,4 +1,8 @@
 
+Changes in KEGS v0.86 since v0.85 (xx/xx/04)
+- Add patch for Solaris sound by Jonathan Kalbfeld.
+- Fix so that F4 enters config panel even while running Prosel-16
+
 Changes in KEGS v0.85 since v0.84 (01/09/04)
 - Fix some minor 65816 bank-crossing bugs.
 - Add -noignhalt to allow user to stop on code red halts.

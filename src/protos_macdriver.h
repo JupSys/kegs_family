@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_protos_mac_h[] = "@(#)$KmKId: protos_macdriver.h,v 1.5 2003-11-19 19:50:29-05 kentd Exp $";
+const char rcsid_protos_mac_h[] = "@(#)$KmKId: protos_macdriver.h,v 1.6 2004-03-23 17:27:31-05 kentd Exp $";
 
 /* END_HDR */
 
@@ -36,5 +36,5 @@ void x_push_kimage(Kimage *kimage_ptr, int destx, int desty, int srcx, int srcy,
 void x_push_done(void);
 void x_auto_repeat_on(int must);
 void x_auto_repeat_off(int must);
-void x_warp_pointer(int do_warp);
+void x_hide_pointer(int do_hide);
 

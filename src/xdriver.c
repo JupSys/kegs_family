@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.180 2003-11-21 00:21:45-05 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.181 2004-03-23 17:25:25-05 kentd Exp $";
 
 # if !defined(__CYGWIN__) && !defined(__POWERPC__)
 /* No shared memory on Cygwin */
@@ -960,6 +960,23 @@ x_push_done()
 int g_num_check_input_calls = 0;
 int g_check_input_flush_rate = 2;
 
+int
+x_update_mouse(int raw_x, int raw_y, int button_states, int buttons_valid)
+{
+	int	x, y;
+
+	x = raw_x - BASE_MARGIN_LEFT;
+	y = raw_y - BASE_MARGIN_TOP;
+
+	if(g_warp_pointer && (x == A2_WINDOW_WIDTH/2) &&
+			(y == A2_WINDOW_HEIGHT/2) && (buttons_valid == 0) ) {
+		/* tell adb routs to recenter but ignore this motion */
+		update_mouse(x, y, 0, -1);
+		return 0;
+	}
+	return update_mouse(x, y, button_states, buttons_valid & 7);
+}
+
 void
 check_input_events()
 {
@@ -1016,21 +1033,22 @@ check_input_events()
 			vid_printf("Got button press of button %d!\n",
 						ev.xbutton.button);
 			buttons = (1 << ev.xbutton.button) >> 1;
-			motion = update_mouse(ev.xbutton.x, ev.xbutton.y,
-						buttons, buttons);
+			motion |= x_update_mouse(ev.xbutton.x, ev.xbutton.y,
+				buttons, buttons & 7);
 
 			break;
 		case ButtonRelease:
 			buttons = (1 << ev.xbutton.button) >> 1;
-			motion = update_mouse(ev.xbutton.x, ev.xbutton.y,
-						0, buttons);
+			motion |= x_update_mouse(ev.xbutton.x, ev.xbutton.y, 0,
+								buttons & 7);
 			break;
 		case MotionNotify:
 			if(ev.xmotion.window != g_a2_win) {
 				printf("Motion in window %08x unknown!\n",
 					(word32)ev.xmotion.window);
 			}
-			motion = update_mouse(ev.xmotion.x, ev.xmotion.y, 0, 0);
+			motion |= x_update_mouse(ev.xmotion.x, ev.xmotion.y, 0,
+								0);
 			break;
 		case Expose:
 			refresh_needed = -1;
@@ -1060,8 +1078,8 @@ check_input_events()
 
 	if(motion && g_warp_pointer) {
 		XWarpPointer(g_display, None, g_a2_win, 0, 0, 0, 0,
-			X_A2_WINDOW_WIDTH/2, X_A2_WINDOW_HEIGHT/2);
-		update_mouse(X_A2_WINDOW_WIDTH/2, X_A2_WINDOW_HEIGHT/2, 0, 0);
+			BASE_MARGIN_LEFT + (A2_WINDOW_WIDTH/2),
+			BASE_MARGIN_TOP + (A2_WINDOW_HEIGHT/2));
 	}
 
 	if(refresh_needed) {
@@ -1080,14 +1098,12 @@ check_input_events()
 }
 
 void
-x_warp_pointer(int do_warp)
+x_hide_pointer(int do_hide)
 {
-	if(do_warp) {
+	if(do_hide) {
 		XDefineCursor(g_display, g_a2_win, g_cursor);
-		printf("X Pointer grabbed\n");
 	} else {
 		XDefineCursor(g_display, g_a2_win, None);
-		printf("X Pointer released\n");
 	}
 }
 

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_macdriver_c[] = "@(#)$KmKId: macdriver.c,v 1.18 2003-11-20 23:50:45-05 kentd Exp $";
+const char rcsid_macdriver_c[] = "@(#)$KmKId: macdriver.c,v 1.19 2004-03-23 17:27:56-05 kentd Exp $";
 
 // Quartz: CreateCGContextForPort vs QDBeginCGContext
 
@@ -183,7 +183,7 @@ my_cmd_handler( EventHandlerCallRef handlerRef, EventRef event, void *userdata)
 		break;
 	case 'abou':
 		show_alert("KEGSMAC v", g_kegs_version_str,
-			", Copyright 2003 Kent Dickey\n"
+			", Copyright 2004 Kent Dickey\n"
 			"Latest version at http://kegs.sourceforge.net/\n", 0);
 		osresult = noErr;
 		break;
@@ -356,17 +356,16 @@ check_input_events()
 	OSStatus	err;
 	EventTargetRef	target;
 	EventRef	event;
-	CGMouseDelta	delta_x, delta_y;
 	UInt32		event_class, event_kind;
 	byte		mac_keycode;
 	UInt32		keycode;
 	UInt32		modifiers;
-	Point		mouse_point;
+	Point		mouse_point, mouse_delta_point;
 	WindowRef	window_ref;
 	int	button, button_state;
 	EventMouseButton	mouse_button;
 	int		handled;
-	int		mouse_events, mouse_delta;
+	int		mouse_events;
 	int		is_up;
 	int		in_win;
 	int		ignore;
@@ -378,7 +377,6 @@ check_input_events()
 	SetPortWindowPort(g_main_window);
 
 	mouse_events = 0;
-	mouse_delta = 0;
 	target = GetEventDispatcherTarget();
 	while(1) {
 		err = ReceiveNextEvent(0, NULL, kEventDurationNoWait,
@@ -444,6 +442,9 @@ check_input_events()
 				g_event_rgnhandle);
 			in_win =  PtInRgn(mouse_point, g_event_rgnhandle);
 			// in_win = 1 if it was in the contect region of window
+			err = GetEventParameter(event, kEventParamMouseDelta,
+				typeQDPoint, NULL, sizeof(Point), NULL,
+				&mouse_delta_point);
 			button = 0;
 			button_state = -1;
 			switch(event_kind) {
@@ -481,25 +482,30 @@ check_input_events()
 			GlobalToLocal(&mouse_point);
 
 			if(g_warp_pointer) {
-				CGGetLastMouseDelta(&delta_x, &delta_y);
-				g_mac_mouse_x += (int)delta_x;
-				g_mac_mouse_y += (int)delta_y;
+				if(err == 0) {
+					g_mac_mouse_x += mouse_delta_point.h;
+					g_mac_mouse_y += mouse_delta_point.v;
+				}
 				mac_warp_mouse();
 			} else {
-				g_mac_mouse_x = mouse_point.h;
-				g_mac_mouse_y = mouse_point.v;
+				g_mac_mouse_x = mouse_point.h -BASE_MARGIN_LEFT;
+				g_mac_mouse_y = mouse_point.v -BASE_MARGIN_TOP;
 			}
 
-			//printf("Mouse %d at: %d,%d button:%d, button_st:%d\n",
-			//	mouse_events, g_mac_mouse_x, g_mac_mouse_y,
-			//	button, button_state);
+#if 0
+			printf("Mouse %d at: %d,%d button:%d, button_st:%d\n",
+				mouse_events, g_mac_mouse_x, g_mac_mouse_y,
+				button, button_state);
+			printf("Mouse deltas: err:%d, %d,%d\n", (int)err,
+				mouse_delta_point.h, mouse_delta_point.v);
+#endif
 
 			update_mouse(g_mac_mouse_x, g_mac_mouse_y,
-				button_state, button);
+				button_state, button & 7);
 			if(g_warp_pointer) {
-				g_mac_mouse_x = X_A2_WINDOW_WIDTH/2;
-				g_mac_mouse_y = X_A2_WINDOW_HEIGHT/2;
-				update_mouse(g_mac_mouse_x, g_mac_mouse_y,0,0);
+				g_mac_mouse_x = A2_WINDOW_WIDTH/2;
+				g_mac_mouse_y = A2_WINDOW_HEIGHT/2;
+				update_mouse(g_mac_mouse_x, g_mac_mouse_y,0,-1);
 			}
 			break;
 		case kEventClassApplication:
@@ -939,9 +945,9 @@ x_auto_repeat_off(int must)
 }
 
 void
-x_warp_pointer(int do_warp)
+x_hide_pointer(int do_hide)
 {
-	if(do_warp) {
+	if(do_hide) {
 		HideCursor();
 	} else {
 		ShowCursor();

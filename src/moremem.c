@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.232 2003-11-21 14:45:42-05 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.233 2004-03-23 17:27:14-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -1126,7 +1126,7 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x23: /* 0xc023 */
 			return g_c023_val;
 		case 0x24: /* 0xc024 */
-			return mouse_read_c024();
+			return mouse_read_c024(dcycs);
 		case 0x25: /* 0xc025 */
 			return adb_read_c025();
 		case 0x26: /* 0xc026 */

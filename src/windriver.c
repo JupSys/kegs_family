@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.7 2004-01-09 01:16:08-05 kentd Exp $";
+const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.8 2004-03-23 17:25:37-05 kentd Exp $";
 
 #define WIN32_LEAN_AND_MEAN	/* Tell windows we want less header gunk */
 #define STRICT			/* Tell Windows we want compile type checks */
@@ -70,6 +70,9 @@ volatile BITMAPINFOHEADER *g_bmaphdr_ptr = 0;
 int g_num_a2_keycodes = 0;
 
 extern char *g_status_ptrs[MAX_STATUS_LINES];
+
+int g_win_button_states = 0;
+
 
 /* this table is used to search for the Windows VK_* in col 1 or 2 */
 /* flags bit 8 is or'ed into the VK, so we can distinguish keypad keys */
@@ -184,6 +187,24 @@ int g_a2_key_to_wsym[][3] = {
 	{ -1, -1, -1 }
 };
 
+int
+win_update_mouse(int x, int y, int button_states, int buttons_valid)
+{
+	int	buttons_changed;
+
+	buttons_changed = ((g_win_button_states & buttons_valid) !=
+								button_states);
+	g_win_button_states = (g_win_button_states & ~buttons_valid) |
+			(button_states & buttons_valid);
+	if(g_warp_pointer && (x == A2_WINDOW_WIDTH/2) &&
+			(y == A2_WINDOW_HEIGHT/2) && (!buttons_changed) ) {
+		/* tell adb routs to recenter but ignore this motion */
+		update_mouse(x, y, 0, -1);
+		return 0;
+	}
+	return update_mouse(x, y, button_states, buttons_valid & 7);
+}
+
 void
 win_event_mouse(WPARAM wParam, LPARAM lParam)
 {
@@ -194,8 +215,8 @@ win_event_mouse(WPARAM wParam, LPARAM lParam)
 	int	motion;
 
 	flags = wParam;
-	x = LOWORD(lParam);
-	y = HIWORD(lParam);
+	x = LOWORD(lParam) - BASE_MARGIN_LEFT;
+	y = HIWORD(lParam) - BASE_MARGIN_TOP;
 
 	buttons = (flags & 1) +
 			(((flags >> 1) & 1) << 2) +
@@ -203,12 +224,12 @@ win_event_mouse(WPARAM wParam, LPARAM lParam)
 #if 0
 	printf("Mouse at %d, %d fl: %08x, but: %d\n", x, y, flags, buttons);
 #endif
-	motion = update_mouse(x, y, buttons, 7);
+	motion = win_update_mouse(x, y, buttons, 7);
 
 	if(motion && g_warp_pointer) {
 		/* move mouse to center of screen */
-		pt.x = X_A2_WINDOW_WIDTH/2;
-		pt.y = X_A2_WINDOW_HEIGHT/2;
+		pt.x = BASE_MARGIN_LEFT + A2_WINDOW_WIDTH/2;
+		pt.y = BASE_MARGIN_TOP + A2_WINDOW_HEIGHT/2;
 		ClientToScreen(g_hwnd_main, &pt);
 		SetCursorPos(pt.x, pt.y);
 	}
@@ -606,9 +627,9 @@ x_auto_repeat_off(int must)
 }
 
 void
-x_warp_pointer(int do_warp)
+x_hide_pointer(int do_hide)
 {
-	if(do_warp) {
+	if(do_hide) {
 		ShowCursor(0);
 	} else {
 		ShowCursor(1);

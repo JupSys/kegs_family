@@ -8,13 +8,17 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sound_driver_c[] = "@(#)$KmKId: sound_driver.c,v 1.15 2003-11-21 14:47:53-05 kentd Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$KmKId: sound_driver.c,v 1.16 2004-03-22 19:08:08-05 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"
 
 #ifdef HPUX
 # include <sys/audio.h>
+#endif
+
+#ifdef SOLARIS
+# include <sys/audioio.h>
 #endif
 
 #if defined(__linux__) || defined(OSS)
@@ -53,7 +57,7 @@ word32 *g_childsnd_shm_addr = 0;
 
 void child_sound_init_linux();
 void child_sound_init_hpdev();
-void child_sound_init_alib();
+void child_sound_init_solaris();
 void child_sound_init_win32();
 void child_sound_init_mac();
 
@@ -132,6 +136,9 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
 
 #ifdef HPUX
 	child_sound_init_hpdev();
+#endif
+#ifdef SOLARIS
+	child_sound_init_solaris();
 #endif
 #if defined(__linux__) || defined(OSS)
 	child_sound_init_linux();
@@ -351,9 +358,38 @@ child_sound_init_hpdev()
 		exit(1);
 	}
 }
+#endif	/* HPUX */
 
+#ifdef SOLARIS
+void
+child_sound_init_solaris()
+{
+	struct audio_info audioi;
+	int	ret;
 
-#endif
+	g_audio_socket = open("/dev/audio", O_WRONLY, 0);
+	if(g_audio_socket < 0) {
+		printf("open /dev/audio failed, ret: %d, errno:%d\n",
+			g_audio_socket, errno);
+		exit(1);
+	}
+
+	ret = ioctl(g_audio_socket, AUDIO_GETINFO, &audioi);
+	if(ret < 0) {
+		printf("ioctl audio getinfo ret: %d, errno:%d\n", ret, errno);
+		exit(1);
+	}
+	audioi.play.sample_rate = g_preferred_rate;
+	audioi.play.encoding = AUDIO_ENCODING_LINEAR;
+	audioi.play.precision = 16;
+	audioi.play.channels = 2;
+	ret = ioctl(g_audio_socket, AUDIO_SETINFO, &audioi);
+	if(ret < 0) {
+		printf("ioctl audio setinfo ret: %d, errno:%d\n", ret, errno);
+		exit(1);
+	}
+}
+#endif /* SOLARIS */
 
 #if defined(__linux__) || defined(OSS)
 void

@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.58 2003-12-31 12:20:17-05 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.63 2004-03-23 18:46:25-05 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -16,8 +16,9 @@ const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.58 2003-12-31 12:20:17-05 kent
 
 extern int Verbose;
 extern word32 g_vbl_count;
+extern int g_num_lines_prev_superhires640;
+extern int g_num_lines_prev_superhires;
 extern int g_rom_version;
-extern int g_warp_pointer;
 extern int g_fast_disk_emul;
 extern int g_limit_speed;
 extern int g_swap_paddles;
@@ -25,6 +26,10 @@ extern int g_invert_paddles;
 extern int g_a2vid_palette;
 extern int g_config_control_panel;
 extern word32 g_cfg_vbl_count;
+
+extern byte *g_slow_memory_ptr;
+extern byte *g_memory_ptr;
+extern word32 g_mem_size_total;
 
 enum {
 	ADB_IDLE = 0,
@@ -75,20 +80,24 @@ byte	adb_memory[256];
 
 word32 g_adb_mode = 0;		/* mode set via set_modes, clear_modes */
 
-int a2_mouse_button = 0;
-
 int g_warp_pointer = 0;
-int g_mouse_cur_x = 0;
-int g_mouse_cur_y = 0;
-int g_mouse_moved = 0;
-int g_mouse_buttons = 0;
+int g_hide_pointer = 0;
+int g_unhide_pointer = 0;
 
-int g_mouse_delta_x = 0;
-int g_mouse_delta_y = 0;
-int g_mouse_overflow_x = 0;
-int g_mouse_overflow_y = 0;
-int g_mouse_overflow_button = 0;
-int g_mouse_overflow_valid = 0;
+
+int g_mouse_a2_x = 0;
+int g_mouse_a2_y = 0;
+int g_mouse_a2_button = 0;
+int g_mouse_fifo_pos = 0;
+
+#define ADB_MOUSE_FIFO		8
+
+int g_mouse_fifo_x[ADB_MOUSE_FIFO] = { 0 };
+int g_mouse_fifo_y[ADB_MOUSE_FIFO] = { 0 };
+int g_mouse_fifo_buttons[ADB_MOUSE_FIFO] = { 0 };
+
+int g_mouse_warp_x = 0;
+int g_mouse_warp_y = 0;
 
 int	g_adb_mouse_valid_data = 0;
 int	g_adb_mouse_coord = 0;
@@ -193,6 +202,7 @@ adb_reset()
 	g_kbd_reg0_pos = 0;
 	g_kbd_reg3_16bit = 0x602;
 }
+
 
 #define LEN_ADB_LOG	16
 STRUCT(Adb_log) {
@@ -321,7 +331,7 @@ adb_clear_mouse_int()
 	if(g_adb_mouse_int_sent) {
 		remove_irq();
 		g_adb_mouse_int_sent = 0;
-		/* printf("Mouse int clear, button: %d\n", a2_mouse_button); */
+		/* printf("Mouse int clear, button: %d\n", g_mouse_a2_button);*/
 	}
 }
 
@@ -500,6 +510,10 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 	}
 
 	tmp1 = val2 & 0xf;
+	if(g_rom_version >= 3) {
+		tmp1 = 9 - tmp1;
+	}
+
 	switch(tmp1) {
 	case 0:
 		g_adb_repeat_rate = 1;
@@ -543,7 +557,7 @@ void
 adb_set_new_mode(word32 val)
 {
 	if(val & 0x03) {
-		halt2_printf("Disabling keyboard/mouse:%02x!\n", val);
+		printf("Disabling keyboard/mouse:%02x!\n", val);
 	}
 
 	if(val & 0xa2) {
@@ -974,8 +988,11 @@ adb_read_c027()
 		ret |= ADB_C027_MOUSE_COORD;
 	}
 
+#if 0
 	adb_printf("Read c027: %02x, int_byte: %02x, d_pend: %d\n",
 		ret, g_adb_interrupt_byte, g_adb_data_pending);
+#endif
+
 #if 0
 	adb_log(0xc027, ret);
 #endif
@@ -1074,58 +1091,111 @@ int
 update_mouse(int x, int y, int button_states, int buttons_valid)
 {
 	int	button1_changed;
+	int	mouse_moved;
+	int	unhide;
+	int	pos;
+	int	i;
 
-	if((x == X_A2_WINDOW_WIDTH/2) && (y == X_A2_WINDOW_HEIGHT/2) &&
-							g_warp_pointer) {
-		/* Warping the point causes it to jump here...this is not */
-		/*  real motion, just update our info and get out */
-		g_mouse_cur_x = x;
-		g_mouse_cur_y = y;
-		g_mouse_moved = 0;
-	} else {
-		g_mouse_moved = 1;
+	unhide = 0;
+	if(x < 0) {
+		x = 0;
+		unhide = 1;
+	}
+	if(x >= 640) {
+		x = 639;
+		unhide = 1;
+	}
+	if(y < 0) {
+		y = 0;
+		unhide = 1;
+	}
+	if(y >= 400) {
+		y = 399;
+		unhide = 1;
 	}
 
-	g_mouse_delta_x += x - g_mouse_cur_x;
-	g_mouse_delta_y += y - g_mouse_cur_y;
-	g_mouse_cur_x = x;
-	g_mouse_cur_y = y;
-	if(g_mouse_delta_x < -500) { g_mouse_delta_x = -500; }
-	if(g_mouse_delta_y < -500) { g_mouse_delta_y = -500; }
-	if(g_mouse_delta_x > 500) { g_mouse_delta_x = 500; }
-	if(g_mouse_delta_y > 500) { g_mouse_delta_y = 500; }
 
-	button1_changed = ((button_states & 1) != (g_mouse_buttons & 1)) &&
-							(buttons_valid & 1);
+	g_unhide_pointer = unhide && !g_warp_pointer;
 
-	if((button_states & 4) && !(g_mouse_buttons & 4) &&
+	if(!g_warp_pointer) {
+		if(g_hide_pointer && g_unhide_pointer) {
+			/* cursor has left a2 window, show it */
+			g_hide_pointer = 0;
+			x_hide_pointer(0);
+		}
+		if((g_num_lines_prev_superhires == 200) &&
+				(g_num_lines_prev_superhires640 == 0) &&
+				((g_slow_memory_ptr[0x19d00] & 0x80) == 0)) {
+			// In 320-mode superhires, cut mouse range in half
+			x = x >> 1;
+		}
+		y = y >> 1;
+	}
+
+#if 0
+	printf("Update Mouse called with buttons:%d x,y:%d,%d, fifo:%d,%d, "
+		" a2: %d,%d\n", buttons_valid, x, y,
+		g_mouse_fifo_x[0], g_mouse_fifo_y[0],
+		g_mouse_a2_x, g_mouse_a2_y);
+#endif
+
+	if((buttons_valid < 0) && g_warp_pointer) {
+		/* Warping the pointer causes it to jump here...this is not */
+		/*  real motion, just update info and get out */
+		g_mouse_a2_x += (x - g_mouse_fifo_x[0]);
+		g_mouse_a2_y += (y - g_mouse_fifo_y[0]);
+		g_mouse_fifo_x[0] = x;
+		g_mouse_fifo_y[0] = y;
+		return 0;
+	}
+
+#if 0
+	printf("...real move, warp: %d, %d, new x: %d, %d, a2:%d,%d\n",
+		g_mouse_warp_x, g_mouse_warp_y, g_mouse_fifo_x[0],
+		g_mouse_fifo_y[0], g_mouse_a2_x, g_mouse_a2_y);
+#endif
+
+	mouse_moved = (g_mouse_fifo_x[0] != x) || (g_mouse_fifo_y[0] != y);
+
+	g_mouse_a2_x += g_mouse_warp_x;
+	g_mouse_a2_y += g_mouse_warp_y;
+	g_mouse_fifo_x[0] = x;
+	g_mouse_fifo_y[0] = y;
+	g_mouse_warp_x = 0;
+	g_mouse_warp_y = 0;
+
+	button1_changed = (buttons_valid & 1) &&
+			((button_states & 1) != (g_mouse_fifo_buttons[0] & 1));
+
+	if((button_states & 4) && !(g_mouse_fifo_buttons[0] & 4) &&
 							(buttons_valid & 4)) {
 		/* right button pressed */
 		adb_increment_speed();
 	}
-	if((button_states & 2) && !(g_mouse_buttons & 2) &&
+	if((button_states & 2) && !(g_mouse_fifo_buttons[0] & 2) &&
 							(buttons_valid & 2)) {
 		/* middle button pressed */
 		halt2_printf("Middle button pressed\n");
 	}
 
-	if(!g_mouse_overflow_valid && button1_changed) {
+	pos = g_mouse_fifo_pos;
+	if((pos < (ADB_MOUSE_FIFO - 2)) && button1_changed) {
 		/* copy delta to overflow, set overflow */
 		/* overflow ensures the mouse button state is precise at */
 		/*  button up/down times.  Using a mouse event list where */
 		/*  deltas accumulate until a button change would work, too */
-		g_mouse_overflow_x = g_mouse_delta_x;
-		g_mouse_overflow_y = g_mouse_delta_y;
-		g_mouse_overflow_button = g_mouse_buttons & 1;
-		g_mouse_overflow_valid = 1;
-		g_mouse_delta_x = 0;
-		g_mouse_delta_y = 0;
+		for(i = pos; i >= 0; i--) {
+			g_mouse_fifo_x[i + 1] = g_mouse_fifo_x[i];
+			g_mouse_fifo_y[i + 1] = g_mouse_fifo_y[i];
+			g_mouse_fifo_buttons[i + 1] = g_mouse_fifo_buttons[i]&1;
+		}
+		g_mouse_fifo_pos = pos + 1;
 	}
 
-	g_mouse_buttons = (button_states & buttons_valid) |
-				(g_mouse_buttons & ~buttons_valid);
+	g_mouse_fifo_buttons[0] = (button_states & buttons_valid) |
+				(g_mouse_fifo_buttons[0] & ~buttons_valid);
 
-	if(g_mouse_moved || button1_changed) {
+	if(mouse_moved || button1_changed) {
 		if( (g_mouse_ctl_addr == g_mouse_dev_addr) &&
 						((g_adb_mode & 0x2) == 0)) {
 			g_adb_mouse_valid_data = 1;
@@ -1133,16 +1203,21 @@ update_mouse(int x, int y, int button_states, int buttons_valid)
 		}
 	}
 
-	return g_mouse_moved;
+	return mouse_moved;
 }
 
-
 int
-mouse_read_c024()
+mouse_read_c024(double dcycs)
 {
-	int	delta;
 	word32	ret;
+	word32	tool_start;
+	int	em_active;
+	int	target_x, target_y;
+	int	delta_x, delta_y;
+	int	a2_x, a2_y;
 	int	mouse_button;
+	int	clamped;
+	int	pos;
 
 	if(((g_adb_mode & 0x2) != 0) || (g_mouse_dev_addr != g_mouse_ctl_addr)){
 		/* mouse is off, return 0, or mouse is not autopoll */
@@ -1151,70 +1226,139 @@ mouse_read_c024()
 		return 0;
 	}
 
-	if(g_adb_mouse_coord) {
-		/* y coord */
-		if(g_mouse_overflow_valid) {
-			delta = g_mouse_overflow_y;
-			if(delta > 0x3f) {
-				delta = 0x3f;
-			} else if(delta < (-0x3f)) {
-				delta = -0x3f;
-			}
-			g_mouse_overflow_y -= delta;
-			mouse_button = g_mouse_overflow_button;
-			if(g_mouse_overflow_y == 0 && g_mouse_overflow_x == 0) {
-				g_mouse_overflow_valid = 0;
-			}
-		} else {
-			delta = g_mouse_delta_y;
-			if(delta > 0x3f) {
-				delta = 0x3f;
-			} else if(delta < (-0x3f)) {
-				delta = -0x3f;
-			}
-			g_mouse_delta_y -= delta;
-			mouse_button = (g_mouse_buttons & 1);
-		}
-		ret = ((!mouse_button) << 7) + (delta & 0x7f);
+	pos = g_mouse_fifo_pos;
+	target_x = g_mouse_fifo_x[pos];
+	target_y = g_mouse_fifo_y[pos];
+	mouse_button = (g_mouse_fifo_buttons[pos] & 1);
+	delta_x = target_x - g_mouse_a2_x;
+	delta_y = target_y - g_mouse_a2_y;
 
-		irq_printf("Read c024, mouse y: %02x\n", ret);
-		a2_mouse_button = mouse_button;
-	} else {
-		/* x coord */
-		if(g_mouse_overflow_valid) {
-			delta = g_mouse_overflow_x;
-			if(delta > 0x3f) {
-				delta = 0x3f;
-			} else if(delta < (-0x3f)) {
-				delta = -0x3f;
-			}
-			g_mouse_overflow_x -= delta;
-			if(g_mouse_overflow_y == 0 && g_mouse_overflow_x == 0 &&
-				  (a2_mouse_button == g_mouse_overflow_button)){
-				g_mouse_overflow_valid = 0;
-			}
-		} else {
-			delta = g_mouse_delta_x;
-			if(delta > 0x3f) {
-				delta = 0x3f;
-			} else if(delta < (-0x3f)) {
-				delta = -0x3f;
-			}
-			g_mouse_delta_x -= delta;
-		}
-
-		ret = 0x80 | (delta & 0x7f);
-
-		irq_printf("Read c024, mouse x: %02x\n", ret);
+	clamped = 0;
+	if(delta_x > 0x3f) {
+		delta_x = 0x3f;
+		clamped = 1;
+	} else if(delta_x < -0x3f) {
+		delta_x = -0x3f;
+		clamped = 1;
+	}
+	if(delta_y > 0x3f) {
+		delta_y = 0x3f;
+		clamped = 1;
+	} else if(delta_y < -0x3f) {
+		delta_y = -0x3f;
+		clamped = 1;
 	}
 
-	if(!g_mouse_overflow_valid && !g_mouse_delta_x && !g_mouse_delta_y &&
-			((g_mouse_buttons & 1) == a2_mouse_button)) {
+	if(pos > 0) {
+		/* peek into next entry's button info if we are not clamped */
+		/*  and we're returning the y-coord */
+		if(!clamped && g_adb_mouse_coord) {
+			mouse_button = g_mouse_fifo_buttons[pos - 1] & 1;
+		}
+	}
+
+	if(g_adb_mouse_coord) {
+		/* y coord */
+		delta_x = 0;	/* clear unneeded x delta */
+	} else {
+		delta_y = 0;	/* clear unneeded y delta */
+	}
+
+
+	adb_printf(" pre a2_x:%02x,%02x,%02x,%02x\n",
+		g_slow_memory_ptr[0x100e9], g_slow_memory_ptr[0x100ea],
+		g_slow_memory_ptr[0x100eb], g_slow_memory_ptr[0x100ec]);
+	adb_printf(" pre a2_x:%02x,%02x,%02x,%02x\n",
+		g_slow_memory_ptr[0x10190], g_slow_memory_ptr[0x10192],
+		g_slow_memory_ptr[0x10191], g_slow_memory_ptr[0x10193]);
+
+	/* Update event manager internal state */
+	tool_start = (g_slow_memory_ptr[0x103ca] << 16) +
+			(g_slow_memory_ptr[0x103c9] << 8) +
+			g_slow_memory_ptr[0x103c8];
+
+	em_active = 0;
+	if((tool_start >= 0x20000) && (tool_start < (g_mem_size_total - 28)) ) {
+		/* seems to be valid ptr to addr of mem space for tools */
+		/* see if event manager appears to be active */
+		em_active = g_memory_ptr[tool_start + 6*4] +
+				(g_memory_ptr[tool_start + 6*4 + 1] << 8);
+		if(g_warp_pointer) {
+			em_active = 0;
+		}
+	}
+
+	a2_x = g_mouse_a2_x;
+	a2_y = g_mouse_a2_y;
+
+	if(em_active) {
+		if((!g_hide_pointer) && (g_num_lines_prev_superhires == 200) &&
+				!g_unhide_pointer) {
+			/* if super-hires and forcing tracking, then hide */
+			g_hide_pointer = 1;
+			x_hide_pointer(1);
+		}
+		if(g_adb_mouse_coord == 0) {
+			/* update x coord values */
+			g_slow_memory_ptr[0x47c] = a2_x & 0xff;
+			g_slow_memory_ptr[0x57c] = a2_x >> 8;
+			g_memory_ptr[0x47c] = a2_x & 0xff;
+			g_memory_ptr[0x57c] = a2_x >> 8;
+
+			g_slow_memory_ptr[0x10190] = a2_x & 0xff;
+			g_slow_memory_ptr[0x10192] = a2_x >> 8;
+		} else {
+			g_slow_memory_ptr[0x4fc] = a2_y & 0xff;
+			g_slow_memory_ptr[0x5fc] = a2_y >> 8;
+			g_memory_ptr[0x4fc] = a2_y & 0xff;
+			g_memory_ptr[0x5fc] = a2_y >> 8;
+
+			g_slow_memory_ptr[0x10191] = a2_y & 0xff;
+			g_slow_memory_ptr[0x10193] = a2_y >> 8;
+		}
+	} else {
+		if(g_hide_pointer && !g_warp_pointer) {
+			g_hide_pointer = 0;
+			x_hide_pointer(0);
+		}
+	}
+
+	ret = ((!mouse_button) << 7) + ((delta_x | delta_y) & 0x7f);
+	if(g_adb_mouse_coord) {
+		g_mouse_a2_button = mouse_button;	/* y coord has button*/
+	} else {
+		ret |= 0x80;	/* mouse button not down on x coord rd */
+	}
+
+	a2_x += delta_x;
+	a2_y += delta_y;
+	g_mouse_a2_x = a2_x;
+	g_mouse_a2_y = a2_y;
+	if(g_mouse_fifo_pos) {
+		if((target_x == a2_x) && (target_y == a2_y) &&
+					(g_mouse_a2_button == mouse_button)) {
+			g_mouse_fifo_pos--;
+		}
+	}
+
+
+	adb_printf("Read c024, mouse is_y:%d, %02x, vbl:%08x, dcyc:%f, em:%d\n",
+		g_adb_mouse_coord, ret, g_vbl_count, dcycs, em_active);
+	adb_printf("...mouse targ_x:%d,%d delta_x,y:%d,%d fifo:%d, a2:%d,%d\n",
+		target_x, target_y, delta_x, delta_y, g_mouse_fifo_pos,
+		a2_x, a2_y);
+	adb_printf("   post a2_x:%02x,%02x,%02x,%02x\n",
+		g_slow_memory_ptr[0x10190], g_slow_memory_ptr[0x10192],
+		g_slow_memory_ptr[0x10191], g_slow_memory_ptr[0x10193]);
+
+	if((g_mouse_fifo_pos == 0) && (g_mouse_fifo_x[0] == a2_x) &&
+			(g_mouse_fifo_y[0] == a2_y) &&
+			((g_mouse_fifo_buttons[0] & 1) == g_mouse_a2_button)) {
 		g_adb_mouse_valid_data = 0;
 		adb_clear_mouse_int();
 	}
 
-	g_adb_mouse_coord ^= 1;
+	g_adb_mouse_coord = !g_adb_mouse_coord;
 	return ret;
 }
 
@@ -1515,7 +1659,10 @@ adb_physical_key_update(int a2code, int is_up)
 			break;
 		case 0x08: /* F8 - warp pointer */
 			g_warp_pointer = !g_warp_pointer;
-			x_warp_pointer(g_warp_pointer);
+			if(g_hide_pointer != g_warp_pointer) {
+				g_hide_pointer = g_warp_pointer;
+				x_hide_pointer(g_hide_pointer);
+			}
 			break;
 		case 0x09: /* F9 - swap paddles */
 			if(SHIFT_DOWN) {
@@ -1548,6 +1695,10 @@ adb_physical_key_update(int a2code, int is_up)
 	if(g_kbd_dev_addr != g_kbd_ctl_addr) {
 		/* autopoll is off because ucontroller doesn't know kbd moved */
 		autopoll = 0;
+	}
+	if(g_config_control_panel) {
+		/* always do autopoll */
+		autopoll = 1;
 	}
 
 

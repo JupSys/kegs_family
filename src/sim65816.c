@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.345 2003-11-27 22:35:09-05 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.346 2004-03-23 17:26:10-05 kentd Exp $";
 
 #include <math.h>
 
@@ -105,7 +105,7 @@ int	g_raw_serial = 1;
 int	g_serial_out_masking = 0;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.85";
+const char g_kegs_version_str[] = "0.86";
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
