@@ -1,19 +1,21 @@
 
-KEGS: Kent's Emulated GS version 0.39
+KEGS: Kent's Emulated GS version 0.41
+http://www.crosswinds.net/san-jose/~kentd/kegs/
 
 What is this?
 -------------
 
 KEGS is an Apple //gs emulator for X windows, but optimized for HP
 workstations.  KEGS is now portable to other platforms--Linux on
-Intel x86, Linux on PowerPC machines, and OS/2.  KEGS was originally written
-for HP Unix workstations using a hand-coded assembly language
-interpreter loop.  To open KEGS up to a wider audience, I recoded the
-assembly parts into a C-only version, which can now be compiled and run
-on other platforms.  The Linux port was very easy since only a few dozen
-lines of code needed to change, so ports to other Unix-like systems
-should be easy.  If you do compile KEGS on a new platform, send me back
-any fixes, or just let me know that it worked.  See README.compile.
+Intel x86, Linux on PowerPC machines, Solaris, and OS/2.  KEGS was
+originally written for HP Unix workstations using a hand-coded assembly
+language interpreter loop.  To open KEGS up to a wider audience, I
+recoded the assembly parts into a C-only version, which can now be
+compiled and run on other platforms.  The Linux port was very easy since
+only a few dozen lines of code needed to change, so ports to other
+Unix-like systems should be easy.  If you do compile KEGS on a new
+platform, send me back any fixes, or just let me know that it worked.
+See README.compile.
 
 KEGS uses X-Windows for its display (you can send the display to another
 machine) and emulates all Apple //gs sounds accurately.  It supports
@@ -1045,6 +1047,5 @@ If you have any problems/questions/etc., just let me know.
 
 Kent Dickey
 kentd@cup.hp.com (my day job)
-kentd@mtnweb.com (my ISP)
 
 HP has nothing to do with this program

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.60 98/07/04 19:32:19 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.62 99/01/19 23:08:09 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -37,8 +37,12 @@ void U_STACK_TRACE();
 			(((a) >> 8) & 0xff00) + 		\
 			(((a) << 8) & 0xff0000) + 		\
 			(((a) << 24) & 0xff000000))
+# define GET_BE_WORD16(a)	((((a) >> 8) & 0xff) + (((a) << 8) & 0xff00))
+# define GET_BE_WORD32(a)	(BIGEND(a))
 #else
 # define BIGEND(a)	(a)
+# define GET_BE_WORD16(a)	(a)
+# define GET_BE_WORD32(a)	(a)
 #endif
 
 typedef float Cyc;
@@ -58,6 +62,10 @@ typedef float Cyc;
 #include <string.h>
 #ifdef HPUX
 # include <machine/inline.h>		/* for GET_ITIMER */
+#endif
+
+#ifdef SOLARIS
+# include <sys/filio.h>
 #endif
 
 #ifndef O_BINARY

@@ -1,4 +1,14 @@
 
+Changes in KEGS v0.41 since v0.40
+- Fixed bug where fill-line mode would not always redraw the screen correctly
+- Changed some // comments to /* */ to help David Wilson's Solaris port
+- Fixed little-endian bugs in smartport.c preventing mounting of
+   parititioned disks.  Fix submitted by Jonathan Stark.
+- Christopher Neufeld noted that fast space/delete option in the control
+   panel caused KEGS to hit breakpoints.  I fixed this and fast arrows and
+   fast mouse options (they are now just ignored).
+- Solaris port by David Wilson now provides a Makefile_solaris
+
 Changes in KEGS v0.40 since v0.39
 - 15 and 24 bit depth displays now supported (though somewhat slower than
 	8 bit displays).  But Super-hires displays now show 256

@@ -73,8 +73,8 @@ main(int argc, char **argv)
 	read_block(fd, buf, 0, block_size);
 
 	driver_desc_ptr = (Driver_desc *)buf;
-	sig = driver_desc_ptr->sig;
-	block_size = driver_desc_ptr->blk_size;
+	sig = GET_BE_WORD16(driver_desc_ptr->sig);
+	block_size = GET_BE_WORD16(driver_desc_ptr->blk_size);
 	if(long_form) {
 		printf("sig: %04x, blksize: %04x\n", sig, block_size);
 	}
@@ -87,7 +87,7 @@ main(int argc, char **argv)
 			printf("good!\n");
 		}
 	} else {
-		printf("bad!\n");
+		printf("bad sig:%04x or block_size:%04x!\n", sig, block_size);
 		exit(1);
 	}
 
@@ -96,12 +96,12 @@ main(int argc, char **argv)
 	while(cur < map_blocks) {
 		read_block(fd, buf, cur + 1, block_size);
 		part_map_ptr = (Part_map *)buf;
-		sig = part_map_ptr->sig;
-		map_blk_cnt = part_map_ptr->map_blk_cnt;
-		phys_part_start = part_map_ptr->phys_part_start;
-		part_blk_cnt = part_map_ptr->part_blk_cnt;
-		data_start = part_map_ptr->data_start;
-		data_cnt = part_map_ptr->data_cnt;
+		sig = GET_BE_WORD16(part_map_ptr->sig);
+		map_blk_cnt = GET_BE_WORD32(part_map_ptr->map_blk_cnt);
+		phys_part_start = GET_BE_WORD32(part_map_ptr->phys_part_start);
+		part_blk_cnt = GET_BE_WORD32(part_map_ptr->part_blk_cnt);
+		data_start = GET_BE_WORD32(part_map_ptr->data_start);
+		data_cnt = GET_BE_WORD32(part_map_ptr->data_cnt);
 
 		if(cur == 0) {
 			map_blocks = MIN(100, map_blk_cnt);
@@ -116,12 +116,12 @@ main(int argc, char **argv)
 				part_map_ptr->part_name,
 				part_map_ptr->part_type);
 			printf("  data_start:%08x, data_cnt:%08x status:%08x\n",
-				part_map_ptr->data_start,
-				part_map_ptr->data_cnt,
-				part_map_ptr->part_status);
+				GET_BE_WORD32(part_map_ptr->data_start),
+				GET_BE_WORD32(part_map_ptr->data_cnt),
+				GET_BE_WORD32(part_map_ptr->part_status));
 			printf("  processor: %s\n", part_map_ptr->processor);
 		} else {
-			dsize = (double)part_map_ptr->data_cnt;
+			dsize = (double)GET_BE_WORD32(part_map_ptr->data_cnt);
 			printf("%2d:%-20s  size=%6.2fMB type=%s\n", cur,
 				part_map_ptr->part_name,
 				(dsize/(1024.0*2.0)),

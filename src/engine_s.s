@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.134 98/05/26 00:08:32 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.135 99/01/18 00:18:10 kentd Exp $"
 
 	.code
 
@@ -276,6 +276,16 @@ get_memory24_c
 	b	leave_asm
 	nop
 
+#define GET_MEM8(upper16,lower8,ret0)		\
+	extru	arg0,23,16,arg3			! \
+	CYCLES_PLUS_1				! \
+	ldwx,s	arg3(page_info_ptr),scratch3	! \
+	copy	arg0,addr_latch			! \
+	copy	scratch3,scratch2		! \
+	dep	arg0,31,8,scratch3		! \
+	extru,=	scratch2,BANK_IO_BIT,1,0	! \
+	bl,n	get_memory_iocheck_stub_asm,link ! \
+	ldb	(scratch3),ret0
 
 	.align	32
 

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$Header: iwm.h,v 1.4 97/06/09 22:17:18 kentd Exp $";
+const char rcsid_iwm_h[] = "@(#)$Header: iwm.h,v 1.6 99/01/19 23:07:58 kentd Exp $";
 #endif
 
 #define MAX_TRACKS	(2*80)

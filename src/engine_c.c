@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.24 98/05/23 00:29:59 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.25 99/01/18 01:08:01 kentd Exp $";
 
 #include "defc.h"
 
@@ -804,7 +804,7 @@ enter_engine(Engine_reg *engine_ptr)
 	float	fplus_x_m1;
 	float	fcycles_tmp1;
 
-	int	opcode;
+	word32	opcode;
 	register word32	addr;
 	word32	addr_latch;
 	word32	tmp1, tmp2;

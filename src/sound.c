@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.73 98/07/25 22:41:58 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.76 99/01/18 01:00:55 kentd Exp $";
 
 #include "defc.h"
 
@@ -265,7 +265,7 @@ sound_init()
 				close(i);
 			}
 		}
-		close(g_pipe_fd[1]);		// make sure write pipe closed
+		close(g_pipe_fd[1]);		/*make sure write pipe closed*/
 		child_sound_loop(g_pipe_fd[0], g_sound_shm_addr);
 		exit(0);
 	case -1:
@@ -314,8 +314,9 @@ sound_shutdown()
 void
 sound_update(double dcycs)
 {
+	/* Called every VBL time to update sound status */
 
-	/* first, finish "playing" sounds for this vbl */
+	/* "play" sounds for this vbl */
 
 	sound_play(dcycs);
 
@@ -488,6 +489,8 @@ send_sound(int fd, int real_samps, int size)
 		tmp = size + 0xa1000000;
 	}
 
+	/* Although this looks like a big/little-endian issue, since the */
+	/*  child is also reading an int, it just works with no byte swap */
 	ret = write(fd, &tmp, 4);
 	if(ret != 4) {
 		printf("send_sound, write ret: %d, errno: %d\n", ret, errno);
@@ -568,6 +571,7 @@ sound_play(double dcycs)
 	int	num_running;
 	int	num_samps;
 	int	osc;
+	int	done;
 	int	i, j;
 
 
@@ -750,90 +754,97 @@ sound_play(double dcycs)
 	osc_active = 0;
 	for(j = 0; j < num_osc_en; j++) {
 		rptr = &(g_doc_regs[j]);
-		rptr->samps_to_do = num_samps;
+		rptr->samps_to_do = 0;
 		if(rptr->running && rptr->cur_inc) {
 			doc_active_num[osc_active] = j;
+			rptr->samps_to_do = num_samps;
 			osc_active++;
 		}
 	}
 
-	for(j = 0; j < osc_active; j++) {
-
-		osc = doc_active_num[j];
-		rptr = &(g_doc_regs[osc]);
-
-		if(!rptr->running || rptr->cur_inc == 0) {
-			doc_active_num[j] = doc_active_num[osc_active - 1];
-			osc_active--;
-			j--;
-			continue;
-		}
-
-		samps_to_do = rptr->samps_to_do;
-		samps_left = rptr->samps_left;
-		cur_ptr = rptr->cur_ptr;
-		cur_inc = rptr->cur_inc;
-		cur_end = rptr->cur_end;
-		ctl = rptr->ctl;
-
-		outptr = outptr_start + 2*(num_samps - samps_to_do);
-		if(ctl & 0x10) {
-			outptr += 1;
-		}
-
-		imul = (rptr->vol * g_doc_vol);
-		off = imul * 128;
-
-		if(imul == 0) {
-			/* produce no sound */
-			samps_left = samps_left - samps_to_do;
-			cur_ptr += cur_inc * samps_to_do;
-			rptr->samps_left = samps_left;
-			rptr->cur_ptr = cur_ptr;
-			DOC_LOG("nosnd", osc, dcycs, samps_to_do);
-			if(samps_left <= 0) {
-				doc_active_num[j] = doc_sound_end(osc,
-					-samps_left, dcycs, 1);
-				j--;
+	done = 0;
+	while(!done) {
+		done = 1;
+		for(j = 0; j < num_osc_en; j++) {
+			osc = j;
+			rptr = &(g_doc_regs[osc]);
+			samps_to_do = rptr->samps_to_do;
+			samps_left = rptr->samps_left;
+			cur_ptr = rptr->cur_ptr;
+			cur_inc = rptr->cur_inc;
+			cur_end = rptr->cur_end;
+			if(samps_to_do <= 0) {
+				continue;
 			}
-			continue;
-		}
+			if(!rptr->running || cur_inc == 0) {
+				continue;
+			}
 
-		if(snd_buf_init == 0) {
-			memset(outptr_start, 0,
-					2*sizeof(outptr_start[0])*num_samps);
-			snd_buf_init++;
-		}
-
-		val = 0;
-		for(i = (num_samps - samps_to_do); i < num_samps; i++) {
-			pos = cur_ptr >> SND_PTR_SHIFT;
-			cur_ptr += cur_inc;
-			val = doc_ram[pos];
-
-			val2 = (val * imul - off) >> 4;
-			if(val == 0 || cur_ptr >= cur_end) {
+			done = 0;
+			ctl = rptr->ctl;
+	
+			outptr = outptr_start + 2*(num_samps - samps_to_do);
+			if(ctl & 0x10) {
+				/* other channel */
+				outptr += 1;
+			}
+	
+			imul = (rptr->vol * g_doc_vol);
+			off = imul * 128;
+	
+			if(imul == 0) {
+				/* produce no sound */
+				samps_left = samps_left - samps_to_do;
+				cur_ptr += cur_inc * samps_to_do;
+				rptr->samps_left = samps_left;
+				rptr->samps_to_do = 0;
 				rptr->cur_ptr = cur_ptr;
-				doc_active_num[j] = doc_sound_end(osc,
-						(num_samps - i), dcycs, val);
-				j--;
-				val = 0;
-				break;
+				DOC_LOG("nosnd", osc, dcycs, samps_to_do);
+				if(samps_left <= 0) {
+					doc_active_num[j] = doc_sound_end(osc,
+						-samps_left, dcycs, 1);
+					j--;
+				}
+				continue;
 			}
-
-			val2 = outptr[0] + val2;
-
-			samps_left--;
-			*outptr = val2;
-			outptr += 2;
+	
+			if(snd_buf_init == 0) {
+				memset(outptr_start, 0,
+					2*sizeof(outptr_start[0])*num_samps);
+				snd_buf_init++;
+			}
+	
+			val = 0;
+			for(i = (num_samps - samps_to_do); i < num_samps; i++) {
+				pos = cur_ptr >> SND_PTR_SHIFT;
+				cur_ptr += cur_inc;
+				val = doc_ram[pos];
+	
+				val2 = (val * imul - off) >> 4;
+				if(val == 0 || cur_ptr >= cur_end) {
+					rptr->cur_ptr = cur_ptr;
+					rptr->samps_to_do = 0;
+					doc_active_num[j] = doc_sound_end(osc,
+						(num_samps - i), dcycs, val);
+					val = 0;
+					break;
+				}
+	
+				val2 = outptr[0] + val2;
+	
+				samps_left--;
+				*outptr = val2;
+				outptr += 2;
+			}
+	
+			if(val != 0) {
+				rptr->cur_ptr = cur_ptr;
+				rptr->samps_left = samps_left;
+				rptr->samps_to_do = 0;
+			}
+	
+			samps_played += (i - (num_samps - samps_to_do));
 		}
-
-		if(val != 0) {
-			rptr->cur_ptr = cur_ptr;
-			rptr->samps_left = samps_left;
-		}
-
-		samps_played += (i - (num_samps - samps_to_do));
 	}
 
 	GET_ITIMER(end_time2);
@@ -1026,7 +1037,8 @@ doc_sound_end(int osc, int samps_to_do, double dcycs, int can_repeat)
 				osc, dcyc_ev, rptr->dcyc_ev2);
 			printf("It's now: %f, 3:%f 4:%f\n", dcycs,
 				rptr->dcyc_ev3, rptr->dcyc_ev4);
-			printf("dcycs_per_samp: %f\n", g_dcycs_per_samp);
+			printf("dcycs_per_samp: %f, samps_to_do: %d\n",
+				g_dcycs_per_samp, samps_to_do);
 			set_halt(1);
 		}
 	}
@@ -1202,7 +1214,7 @@ start_sound(int osc, double dcycs, int samps_to_do)
 
 	if((mode == 2) && ((osc & 1) == 0)) {
 		printf("Sync mode osc %d starting!\n", osc);
-		set_halt(1);
+		/* set_halt(1); */
 
 		/* see if we should start our odd partner */
 		if((rptr[1].ctl & 7) == 5) {
@@ -1212,7 +1224,7 @@ start_sound(int osc, double dcycs, int samps_to_do)
 		} else {
 			printf("Osc %d starting sync, but osc %d ctl: %02x\n",
 				osc, osc+1, rptr[1].ctl);
-			set_halt(1);
+			/* set_halt(1) */
 		}
 	}
 

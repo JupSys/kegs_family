@@ -69,6 +69,23 @@ Audio is currently disabled by default, but you can try turning it on
 by runnning "kegs -audio 1".  It sounds horrible to me, but sounds do
 come out.
 
+Solaris build instructions:
+--------------------------
+
+Use the Makefile_solaris makefile by:
+
+rm Makefile; ln -s Makefile_solaris Makefile
+make
+
+KEGS assumes perl is in /usr/local/bin/perl.  If it is somewhere else, you
+need to edit the first line of make_inst and make_size to point to the
+correct place.  Or add a symbolic link in /usr/local/bin/perl to
+/usr/bin/perl.
+
+Audio is currently disabled by default, but you can try turning it on
+by runnning "kegs -audio 1".
+
+
 IBM OS/2 Warp + XFREE86-OS2 3.3.2 build instructions :
 ------------------------------------------------------
 

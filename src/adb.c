@@ -11,7 +11,9 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.27 98/05/03 17:23:28 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.28 99/01/18 01:04:47 kentd Exp $";
+
+/* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
 #include "adb.h"
 
@@ -579,7 +581,7 @@ adb_set_new_mode(word32 val)
 		printf("Disabling keyboard/mouse:%02x!\n", val);
 	}
 
-	if(val != 0 && val != 0x10 && val != 0x01 && val != 0x11) {
+	if(val & 0xe2) {
 		printf("ADB set mode: %02x!\n", val);
 		adb_error();
 		set_halt(1);
@@ -948,7 +950,7 @@ do_adb_cmd()
 					dev, g_adb_cmd_data[0]);
 				adb_error();
 			}
-			if(g_adb_cmd_data[1] != 1) {
+			if(g_adb_cmd_data[1] != 1 && g_adb_cmd_data[1] != 2) {
 				/* see what new device handler id is */
 				printf("MOUS listen to dev %x reg 3: 1:%02x\n",
 					dev, g_adb_cmd_data[1]);

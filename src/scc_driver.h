@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_driver_h[] = "@(#)$Header: scc_driver.h,v 1.1 98/08/23 22:49:54 kentd Exp $";
+const char rcsid_scc_driver_h[] = "@(#)$Header: scc_driver.h,v 1.2 99/01/18 01:04:22 kentd Exp $";
 
 /* This file contains the Unix socket calls */
 
@@ -115,7 +115,7 @@ scc_try_fill_readbuf(int port)
 
 	scc_ptr = &(scc_stat[port]);
 
-	// Accept socket if not already open
+	/* Accept socket if not already open */
 	scc_accept_socket(port);
 
 	rdwrfd = scc_ptr->rdwrfd;
@@ -123,12 +123,12 @@ scc_try_fill_readbuf(int port)
 		return;
 	}
 
-	// Try reading some bytes
+	/* Try reading some bytes */
 	ret = read(rdwrfd, tmp_buf, 256);
 	if(ret > 0) {
 		for(i = 0; i < ret; i++) {
 			if(tmp_buf[i] == 0) {
-				// Skip null chars
+				/* Skip null chars */
 				continue;
 			}
 			scc_add_to_readbuf(port, tmp_buf[i]);
@@ -157,7 +157,7 @@ scc_try_to_empty_writebuf(int port)
 		return;
 	}
 
-	// Try writing some bytes
+	/* Try writing some bytes */
 	done = 0;
 	while(!done) {
 		rdptr = scc_ptr->out_rdptr;

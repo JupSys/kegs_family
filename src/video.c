@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.90 98/10/12 23:16:36 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.91 98/11/15 15:47:55 kentd Exp $";
 
 #include <time.h>
 
@@ -2271,12 +2271,17 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 			continue;
 		}
 
+		type = ((scan & 0xa0) >> 5) +
+				(((scan & 0xf) == a2vid_palette) << 1);
+		if(type & 1) {
+			/* fill mode--redraw whole line */
+			this_check = -1;
+		}
+
 		all_checks |= this_check;
 
 		a2_screen_buffer_changed |= line_mask;
 
-		type = ((scan & 0xa0) >> 5) +
-				(((scan & 0xf) == a2vid_palette) << 1);
 
 		switch(type) {
 		case 0:	/* no_a2vid, 320, nofill */

@@ -16,7 +16,7 @@
 	.data
 	.export rcsdif_defs_instr_h,data
 rcsdif_defs_instr_h
-	.stringz "@(#)$Header: defs_instr.h,v 1.48 98/05/17 16:21:52 kentd Exp $"
+	.stringz "@(#)$Header: defs_instr.h,v 1.49 99/01/18 00:17:51 kentd Exp $"
 	.code
 # endif
 
@@ -105,9 +105,16 @@ defs_instr_start_16	.word	0
 	extru,=	direct,31,8,0			! \
 	CYCLES_PLUS_1				! \
 	addi	2,pc,pc				! \
-	add	direct,arg0,arg0		! \
-	bl	get_mem_b0_8,link		! \
-	extru	arg0,31,16,arg0
+	add	direct,arg0,addr_latch		! \
+	extru	addr_latch,23,16,arg3		! \
+	CYCLES_PLUS_1				! \
+	ldwx,s	arg3(page_info_ptr),scratch2	! \
+	extru	addr_latch,31,8,scratch4	! \
+	extru	addr_latch,31,16,addr_latch	! \
+	ldbx	scratch4(scratch2),ret0		! \
+	extru,=	scratch2,BANK_IO_BIT,1,0	! \
+	bl	get_memory_iocheck_stub_asm,link ! \
+	copy	addr_latch,arg0
 # else
 #  define GET_DLOC_RD()				\
 	ldb	1(scratch1),arg0		! \
@@ -203,13 +210,18 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_ABS_RD()				\
-	ldb	1(scratch1),arg0		! \
-	CYCLES_PLUS_1				! \
-	ldb	2(scratch1),scratch2		! \
+	ldb	2(scratch1),arg3		! \
+	CYCLES_PLUS_2				! \
+	ldb	1(scratch1),addr_latch		! \
 	addi	3,pc,pc				! \
-	dep	dbank,15,16,arg0		! \
-	bl	get_mem_long_8,link		! \
-	dep	scratch2,23,8,arg0
+	dep	dbank,23,24,arg3		! \
+	ldwx,s	arg3(page_info_ptr),scratch2	! \
+	copy	addr_latch,scratch4		! \
+	dep	arg3,23,24,addr_latch		! \
+	ldbx	scratch4(scratch2),ret0		! \
+	extru,= scratch2,BANK_IO_BIT,1,0	! \
+	bl	get_memory_iocheck_stub_asm,link ! \
+	copy	addr_latch,arg0
 # else
 #  define GET_ABS_RD()				\
 	ldb	1(scratch1),arg0		! \

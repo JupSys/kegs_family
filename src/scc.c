@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.23 98/08/23 22:50:32 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.24 99/01/18 01:01:03 kentd Exp $";
 
 #include "defc.h"
 
@@ -153,7 +153,7 @@ scc_read_reg(int port, double dcycs)
 	/* port 0 is channel A, port 1 is channel B */
 	switch(regnum) {
 	case 0:
-		ret = 0x6c;	// 0x44 = no dcd, no cts, 0x6c = dcd ok, cts ok
+		ret = 0x6c;	/* 0x44 = no dcd, no cts,0x6c = dcd ok, cts ok*/
 		if(scc_ptr->in_rdptr != scc_ptr->in_wrptr) {
 			ret |= 0x01;
 		}
@@ -623,8 +623,6 @@ scc_write_data(int port, word32 val, double dcycs)
 		val = val & 0x7f;
 		scc_add_to_writebuf(port, val);
 		scc_try_to_empty_writebuf(port);
-		//printf("Wrote to SCC data, port %d, val: %02x\n", port, val);
-		//set_halt(1);
 	}
 
 }

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.9 98/07/04 19:32:25 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.10 99/01/18 01:01:18 kentd Exp $";
 
 #include "defc.h"
 
@@ -94,8 +94,8 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 	read_partition_block(fd, part_blk_buf, 0, block_size);
 
 	driver_desc_ptr = (Driver_desc *)part_blk_buf;
-	sig = driver_desc_ptr->sig;
-	block_size = driver_desc_ptr->blk_size;
+	sig = GET_BE_WORD16(driver_desc_ptr->sig);
+	block_size = GET_BE_WORD16(driver_desc_ptr->blk_size);
 	if(block_size == 0) {
 		block_size = 512;
 	}
@@ -109,9 +109,10 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 	while(cur_blk < map_blks) {
 		read_partition_block(fd, part_blk_buf, cur_blk + 1, block_size);
 		part_map_ptr = (Part_map *)part_blk_buf;
-		sig = part_map_ptr->sig;
+		sig = GET_BE_WORD16(part_map_ptr->sig);
 		if(cur_blk == 0) {
-			map_blks = MIN(100, part_map_ptr->map_blk_cnt);
+			map_blks = MIN(100,
+				GET_BE_WORD16(part_map_ptr->map_blk_cnt));
 		}
 		if(sig != 0x504d) {
 			printf("Partition entry %d bad sig\n", cur_blk);
@@ -121,10 +122,10 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 		if((strncmp(name, part_map_ptr->part_name, 32) == 0) ||
 						(cur_blk == match_number)) {
 			/* found it, check for consistency */
-			start = part_map_ptr->phys_part_start;
-			len = part_map_ptr->part_blk_cnt;
-			data_off = part_map_ptr->data_start;
-			data_len = part_map_ptr->data_cnt;
+			start = GET_BE_WORD32(part_map_ptr->phys_part_start);
+			len = GET_BE_WORD32(part_map_ptr->part_blk_cnt);
+			data_off = GET_BE_WORD32(part_map_ptr->data_start);
+			data_len = GET_BE_WORD32(part_map_ptr->data_cnt);
 			if(data_off + data_len > len) {
 				printf("Poorly formed entry\n");
 				return -1;
