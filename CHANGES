@@ -1,4 +1,14 @@
 
+Changes in KEGS v0.50 since v0.49
+- Added Linux joystick support with code provided by Jonathan Stark.
+	Activate with "-joystick" command line option.
+- Small improvements in s7 device handling.  If you have no s7 devices or no
+	bootable devices, KEGS launches Applesoft.
+- Bug fix in scan-line interrupts--they were occurring at the wrong time
+	previously.
+- Rewrote double-hires color routines.  They're still not quite right,
+	but it's a lot better than it used to be.
+
 Changes in KEGS v0.49 since v0.48
 - Fixed a key-repeat bug in v0.48 caused usually with shift-key sequences.
 - Fixed bug where GNO would not work with ROM 03.  ROM area at $C071-$C07F

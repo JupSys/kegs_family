@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.280 99/05/05 00:03:12 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.282 99/05/30 22:34:08 kentd Exp $";
 
 #include <math.h>
 
@@ -160,7 +160,7 @@ int kbd_in_end = 0;
 byte kbd_in_buf[LEN_KBD_BUF];
 
 
-#define PC_LOG_LEN	(16*1024)
+#define PC_LOG_LEN	(32*1024)
 
 Pc_log pc_log_array[PC_LOG_LEN + 2];
 
@@ -1559,7 +1559,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.49j");
+		update_status_line(6, "KEGS v0.50");
 
 		g_status_refresh_needed = 1;
 
@@ -1798,14 +1798,8 @@ check_scan_line_int(double dcycs, int cur_video_line)
 		start = 0;
 	}
 	
-	for(line = start; line < 262; line++) {
-		i = line + 192;
-		if(i >= 200) {
-			i -= 262;
-			if(i < 0) {
-				continue;
-			}
-		}
+	for(line = start; line < 200; line++) {
+		i = line;
 
 		if(i < 0 || i >= 200) {
 			printf("check_new_scan_int: i:%d, line:%d, start:%d\n",

@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.48
+KEGS: Kent's Emulated GS version 0.50
 http://www.crosswinds.net/san-jose/~kentd/kegs/
 
 What is this?
@@ -57,10 +57,6 @@ KEGS is so accurate, even the built-in ROM selftests pass (you must be in
 
 Release info:
 ------------
-
-This release is bundled as a shar file for convenience.
-It's a little bigger to download, but a little easier to handle since it's
-all text.
 
 Included files:
 	CHANGES		- Description of changes since last release
@@ -141,12 +137,16 @@ as a "debug" window.  I've reduced the debug info it prints,
 but you may catch some I forgot to remove.  Let me know what you were
 running, and what it was saying, and I will fix it.
 
-KEGS requires an 8-bit graphics plane to operate correctly.  On HP
+KEGS requires an 8-bit graphics plane to operate efficiently.  On HP
 workstations, this is always available, even if you have a 24-bit
 graphics card.  On Linux, it seems as if you must run the server in
 8-bit mode.  On Linux, moving the cursor into the KEGS window causes the
 rest of the screen to go "technicolor" due to KEGS needing the
 whole colormap to operate.
+
+KEGS can run in 15-bit, 16-bit and 24-bit display modes at a performance
+penalty.  Just say "-15", "-16", or "-24" on the command-line when
+starting KEGS.
 
 KEGS also forks off a subprocess to help handle the sound if audio is
 active.  If KEGS crashes in a unusual way (a coredump, for instance),
@@ -276,10 +276,7 @@ brw-r--r--   1 root     sys        7 0x201200 Jun 10 00:01 /dev/dsk/c201d2s0
 
 Running KEGS as root is NOT recommended.
 
-If you do not have any disk mounted in s7d1, KEGS will hit a breakpoint
-and stop running.  Just hit "g" in the debug window, and it will jump
-you into the monitor.  "E000g" in the Apple //gs monitor will put you
-in BASIC.
+If you do not have any disk mounted in s7d1, KEGS will jump into BASIC.
 
 KEGS cannot determine what size /dev/rfloppy is, so you must give it a
 hint.  To tell KEGS you want to mount a 1440K floppy at /dev/rfloppy/c20Ad1s0,
@@ -394,6 +391,9 @@ so that the mouse will be moving like the paddle on the screen.  "Little
 Brick Out" is on the DOS 3.3 master disk.  The joystick does not work
 properly if the pointer is constrained in the window.
 
+If you have a real joystick on Linux, start KEGS with "-joystick" and 
+you should be able to use it.
+
 The left mouse button is the mouse button for KEGS.  The middle mouse
 button toggles between three speed modes.  Mode 0 means run as fast as
 possible.  Mode 1 means run at 1.024MHz.  Mode 2 means run at 2.5MHz.
@@ -432,6 +432,10 @@ KEGS command-line option summary:
 	addresses without printing any warnings.  Useful for running
 	extremely buggy programs so you don't have to see all the warning
 	messages scroll by.
+-15:	KEGS will look for a 15-bit X display.
+-16:	KEGS will look for a 16-bit X display (not tested, probably
+	 will get red colors wrong).
+-24:	KEGS will look for a 24-bit X display.
 -hpdev:	KEGS will try to open /dev/audio directly, instead of using the
 	Aserver.
 -skip:	KEGS will "skip" that many screen redraws between refreshes.
@@ -449,8 +453,11 @@ KEGS command-line option summary:
 	not fork the background audio process, but Ensoniq emulation
 	is still 100% accurate, just the sound is not sent to the
 	workstation speaker.  Audio defaults off on Linux for now.
+-arate {num}: Forces audio sample rate to {num}.  44100 and 48000 are
+	usual, you can try 22050 to reduce KEGS's overhead.
 -display {machine:0.0}: Same as setting the environment variable DISPLAY.
 	Sends X display to {machine:0.0}.
+-joystick: Will use /dev/js0 as the joystick.
 
 
 Command/Option keys:

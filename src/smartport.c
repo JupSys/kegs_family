@@ -11,13 +11,14 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.12 99/04/11 22:49:14 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.15 99/05/30 22:35:16 kentd Exp $";
 
 #include "defc.h"
 
 extern int Verbose;
 extern int g_rom_version;
 extern int g_io_amt;
+extern int g_highest_smartport_unit;
 
 int g_cycs_in_io_read = 0;
 
@@ -316,7 +317,7 @@ do_c70d(word32 arg0)
 			unit, status_ptr, status_code);
 		if(unit == 0 && status_code == 0) {
 			/* Smartport driver status */
-			set_memory_c(status_ptr, MAX_C7_DISKS, 0);
+			set_memory_c(status_ptr, g_highest_smartport_unit+1, 0);
 			len = MIN(7, MAX_C7_DISKS);
 			for(i = 0; i < len; i++) {
 				/* dev vendor id */
@@ -697,7 +698,7 @@ do_read_c7(int unit_num, word32 buf, int blk)
 	image_size = iwm.smartport[unit_num].image_size;
 	if(fd < 0) {
 		printf("c7_fd == %d!\n", fd);
-		if(blk != 2) {
+		if(blk != 2 && blk != 0) {
 			/* don't print error if only reading directory */
 			smartport_error();
 			set_halt(1);
@@ -757,6 +758,7 @@ int
 do_write_c7(int unit_num, word32 buf, int blk)
 {
 	word32	local_buf[0x200/4];
+	Disk	*dsk;
 	word32	*ptr;
 	word32	val1, val2;
 	word32	val;
@@ -774,9 +776,10 @@ do_write_c7(int unit_num, word32 buf, int blk)
 		return 0x28;
 	}
 
-	fd = iwm.smartport[unit_num].fd;
-	image_start = iwm.smartport[unit_num].image_start;
-	image_size = iwm.smartport[unit_num].image_size;
+	dsk = &(iwm.smartport[unit_num]);
+	fd = dsk->fd;
+	image_start = dsk->image_start;
+	image_size = dsk->image_size;
 	if(fd < 0) {
 		printf("c7_fd == %d!\n", fd);
 		smartport_error();
@@ -813,6 +816,17 @@ do_write_c7(int unit_num, word32 buf, int blk)
 		return 0x27;
 	}
 
+	if(dsk->write_prot) {
+		printf("Write, but %s is write protected!\n", dsk->name_ptr);
+		return 0x2b;
+	}
+
+	if(dsk->write_through_to_unix == 0) {
+		printf("Write to %s, but not write_through!\n", dsk->name_ptr);
+		set_halt(1);
+		return 0x00;
+	}
+
 	len = write(fd, (byte *)&local_buf[0], 0x200);
 	if(len != 0x200) {
 		printf("write returned %08x bytes, errno: %d\n", len, errno);
@@ -831,6 +845,7 @@ int
 do_format_c7(int unit_num)
 {
 	byte	local_buf[0x1000];
+	Disk	*dsk;
 	int	len;
 	int	ret;
 	int	sum;
@@ -848,9 +863,10 @@ do_format_c7(int unit_num)
 		return 0x28;
 	}
 
-	fd = iwm.smartport[unit_num].fd;
-	image_start = iwm.smartport[unit_num].image_start;
-	image_size = iwm.smartport[unit_num].image_size;
+	dsk = &(iwm.smartport[unit_num]);
+	fd = dsk->fd;
+	image_start = dsk->image_start;
+	image_size = dsk->image_size;
 	if(fd < 0) {
 		printf("c7_fd == %d!\n", fd);
 		smartport_error();
@@ -868,6 +884,15 @@ do_format_c7(int unit_num)
 		smartport_error();
 		set_halt(1);
 		return 0x27;
+	}
+
+	if(dsk->write_through_to_unix == 0) {
+		printf("Format of %s ignored\n", dsk->name_ptr);
+		return 0x00;
+	}
+	if(dsk->write_prot) {
+		printf("Format, but %s is write protected!\n", dsk->name_ptr);
+		return 0x2b;
 	}
 
 
@@ -894,10 +919,9 @@ do_format_c7(int unit_num)
 void
 do_c700(word32 ret)
 {
-
 	disk_printf("do_c700 called, ret: %08x\n", ret);
 
-	(void)do_read_c7(0, 0x800, 0);
+	ret = do_read_c7(0, 0x800, 0);
 
 	set_memory_c(0x7f8, 7, 0);
 	set_memory_c(0x42, 0x01, 0);
@@ -908,5 +932,11 @@ do_c700(word32 ret)
 	set_memory_c(0x47, 0x0, 0);
 	engine.xreg = 0x70;
 	engine.pc = 0x801;
+
+	if(ret != 0) {
+		printf("Failure reading boot disk in s7d1!\n");
+		engine.pc = 0xe000;
+		engine.kbank = 0;
+	}
 }
 

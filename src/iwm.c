@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.90 99/04/11 22:48:56 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.92 99/05/30 22:33:50 kentd Exp $";
 
 #include "defc.h"
 
@@ -92,6 +92,8 @@ int	g_iwm_motor_on = 0;
 int	g_check_nibblization = 0;
 
 time_t	g_disk_conf_mtime = 0;
+int	g_reparse_delay = 0;
+int	g_highest_smartport_unit = -1;
 
 /* prototypes for IWM special routs */
 int iwm_read_data_35(Disk *dsk, int fast_disk_emul, double dcycs);
@@ -308,7 +310,10 @@ int g_iwm_vbl_count = 0;
 void
 iwm_vbl_update()
 {
+	struct stat stat_buf;
 	Disk	*dsk;
+	time_t	mtime;
+	int	ret;
 	int	i;
 
 	if(iwm.motor_on && iwm.motor_off) {
@@ -340,8 +345,24 @@ iwm_vbl_update()
 		g_iwm_vbl_count = IWM_VBL_COUNT;
 
 		/* Also see if disk_conf has changed */
-		maybe_parse_disk_conf_file();
 
+		ret = stat(DISK_CONF_FILE, &stat_buf);
+		if(ret != 0) {
+			printf("IWM: stat of disk_conf ret: %d, errno: %d\n",
+				ret, errno);
+			set_halt(1);
+		} else {
+			mtime = stat_buf.st_mtime;
+			if(mtime > g_disk_conf_mtime) {
+				iwm_printf("%s has changed\n", DISK_CONF_FILE);
+				if(g_disk_conf_mtime != 0) {
+					g_reparse_delay = 1;	/* 1 * 1/3 sec*/
+				}
+				g_disk_conf_mtime = mtime;
+			}
+		}
+
+		maybe_parse_disk_conf_file();
 	}
 }
 
@@ -2359,12 +2380,11 @@ void
 maybe_parse_disk_conf_file()
 {
 	char	buf[CONF_BUF_LEN];
-	struct stat stat_buf;
-	time_t	mtime;
 	FILE	*fconf;
 	char	*ptr;
 	char	*name_ptr;
 	Disk	*dsk;
+	int	reparse_delay;
 	int	virtual_image;
 	int	line;
 	int	pos;
@@ -2376,23 +2396,19 @@ maybe_parse_disk_conf_file()
 	int	ret;
 	int	i;
 
-
-	ret = stat(DISK_CONF_FILE, &stat_buf);
-	if(ret != 0) {
-		printf("IWM: stat of disk_conf ret: %d, errno: %d\n",
-			ret, errno);
-		set_halt(1);
-	} else {
-		mtime = stat_buf.st_mtime;
-		if(mtime > g_disk_conf_mtime) {
-			iwm_printf("You've changed %s\n", DISK_CONF_FILE);
-			g_disk_conf_mtime = mtime;
-		} else {
-			return;
-		}
+	reparse_delay = g_reparse_delay;
+	if(reparse_delay < 0) {
+		return;
+	}
+	if(reparse_delay > 0) {
+		g_reparse_delay = reparse_delay - 1;
+		return;
 	}
 
 	printf("Parsing disk_conf_file\n");
+	g_reparse_delay = -1;
+
+	g_highest_smartport_unit = -1;
 
 	/* First, mark all drives as being in just_ejected | 0x80 state */
 	for(i = 0; i < MAX_C7_DISKS; i++) {
@@ -2498,6 +2514,8 @@ maybe_parse_disk_conf_file()
 
 		/* Get filename */
 		if(smartport) {
+			g_highest_smartport_unit = MAX(drive,
+						g_highest_smartport_unit);
 			dsk = &(iwm.smartport[drive]);
 		} else if(disk_525) {
 			dsk = &(iwm.drive525[drive]);
@@ -2973,5 +2991,5 @@ eject_disk_by_num(int slot, int drive)
 	(void)unlink(tmp_buf2);			/* "rm -f tmp_buf2" */
 
 	/* and make sure it gets reparsed */
-	g_disk_conf_mtime = 0;
+	g_reparse_delay = 0;
 }

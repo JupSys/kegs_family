@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_paddles_c[] = "@(#)$Header: paddles.c,v 1.1 99/05/04 23:37:25 kentd Exp $";
+const char rcsid_paddles_c[] = "@(#)$Header: paddles.c,v 1.2 99/05/10 00:33:49 kentd Exp $";
 
 #include "defc.h"
 
@@ -79,6 +79,8 @@ paddle_trigger_mouse(double dcycs)
 	g_paddle_val[1] = val_y;
 	g_paddle_val[2] = 255;
 	g_paddle_val[3] = 255;
+	g_paddle_button[2] = 1;
+	g_paddle_button[3] = 1;
 }
 
 int

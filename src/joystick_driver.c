@@ -15,7 +15,7 @@
 /*								*/
 /****************************************************************/
 
-const char rcsid_joystick_driver_c[] = "@(#)$Header: joystick_driver.c,v 1.1 99/05/04 23:36:39 kentd Exp $";
+const char rcsid_joystick_driver_c[] = "@(#)$Header: joystick_driver.c,v 1.2 99/05/10 00:33:26 kentd Exp $";
 
 #include "defc.h"
 #include <sys/time.h>
@@ -67,6 +67,10 @@ joystick_init()
 
 	g_joystick_type = JOYSTICK_LINUX;
 	g_joystick_fd = fd;
+	for(i = 0; i < 4; i++) {
+		g_paddle_val[i] = 280;
+		g_paddle_button[i] = 1;
+	}
 }
 
 /* joystick_update_linux() called from paddles.c.  Update g_paddle_val[] */

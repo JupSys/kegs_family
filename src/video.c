@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.93 99/03/02 00:08:00 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.94 99/05/25 00:39:48 kentd Exp $";
 
 #include <time.h>
 
@@ -125,23 +125,26 @@ const int dbhires_colors[] = {
 		0xfff		/* 0xf white */
 };
 
-const word32 dhires_convert[] = {
-		0x00000000,	/* 0x0 black */
-		0x02020202,	/* 0x1 dark blue */
-		0x04040404,	/* 0x2 dark green */
-		0x06060606,	/* 0x3 medium blue */
-		0x08080808,	/* 0x4 brown */
-		0x0a0a0a0a,	/* 0x5 light gray */
-		0x0c0c0c0c,	/* 0x6 green */
-		0x0e0e0e0e,	/* 0x7 aquamarine */
-		0x01010101,	/* 0x8 deep red */
-		0x03030303,	/* 0x9 purple */
-		0x05050505,	/* 0xa dark gray */
-		0x07070707,	/* 0xb light blue */
-		0x09090909,	/* 0xc orange */
-		0x0b0b0b0b,	/* 0xd pink */
-		0x0d0d0d0d,	/* 0xe yellow */
-		0x0f0f0f0f	/* 0xf white */
+word32 g_dhires_convert[4096];	/* look up table of 7 bits (concat): */
+				/* { 4 bits, |3 prev bits| } */
+
+const byte g_dhires_colors_16[] = {
+		0x00,	/* 0x0 black */
+		0x02,	/* 0x1 dark blue */
+		0x04,	/* 0x2 dark green */
+		0x06,	/* 0x3 medium blue */
+		0x08,	/* 0x4 brown */
+		0x0a,	/* 0x5 light gray */
+		0x0c,	/* 0x6 green */
+		0x0e,	/* 0x7 aquamarine */
+		0x01,	/* 0x8 deep red */
+		0x03,	/* 0x9 purple */
+		0x05,	/* 0xa dark gray */
+		0x07,	/* 0xb light blue */
+		0x09,	/* 0xc orange */
+		0x0b,	/* 0xd pink */
+		0x0d,	/* 0xe yellow */
+		0x0f/* 0xf white */
 };
 
 const int lores_colors[] = {
@@ -280,9 +283,12 @@ const word32 hires_convert[64] = {
 void
 video_init()
 {
+	word32	col[4];
 	word32	*ptr;
+	word32	val0, val1, val2, val3;
+	word32	prev_col, match_col;
+	word32	val;
 	int	total;
-	int	val;
 	int	i, j;
 /* Initialize video system */
 
@@ -363,6 +369,34 @@ video_init()
 
 		val = (lores_colors[i] >> 8) & 0xf;
 		g_expanded_col_2[i] = val;
+	}
+
+	/* create g_dhires_convert[] array */
+	for(i = 0; i < 4096; i++) {
+		match_col = i & 0xf;
+		prev_col = i & 0xf;
+		for(j = 0; j < 4; j++) {
+			val0 = match_col & 1;
+			val1 = (i >> (4 + j)) & 1;
+			if(val0 == val1) {
+				col[j] = prev_col;
+				match_col = match_col >> 1;
+			} else {
+				col[j] = (i >> (4 + j)) & 0xf;
+				prev_col = col[j];
+				match_col = col[j] >> 1;
+			}
+		}
+		val0 = g_dhires_colors_16[col[0] & 0xf];
+		val1 = g_dhires_colors_16[col[1] & 0xf];
+		val2 = g_dhires_colors_16[col[2] & 0xf];
+		val3 = g_dhires_colors_16[col[3] & 0xf];
+#ifdef KEGS_LITTLE_ENDIAN
+		val = (val3 << 24) + (val2 << 16) + (val1 << 8) + val0;
+#else
+		val = (val0 << 24) + (val1 << 16) + (val2 << 8) + val3;
+#endif
+		g_dhires_convert[i] = val;
 	}
 
 	change_display_mode(g_cur_dcycs);
@@ -1895,6 +1929,7 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 	word32	val0, val1, val2, val3;
 	word32	tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6;
 	word32	val_whole;
+	word32	prev_val;
 	word32	line_mask;
 	word32	palette_add;
 	int	y;
@@ -1931,6 +1966,12 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 		if(ch_mask == 0) {
 			continue;
 		}
+
+		/* dbl-hires also depends on adjacent bits, so reparse */
+		/*  adjacent regions so that if bits on the edge change, */
+		/*  redrawing is correct */
+		ch_mask = ch_mask | (ch_mask >> 1) | (ch_mask << 1);
+		ch_mask = -1;
 	
 		shift_per = (1 << SHIFT_PER_CHANGE);
 	
@@ -1953,26 +1994,32 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 				val1 = slow_mem_ptr[0];
 				val2 = slow_mem_ptr[0x10001];
 				val3 = slow_mem_ptr[1];
-				slow_mem_ptr += 2;
 
-				val_whole = ((val3 & 0x7f) << 21) +
-						((val2 & 0x7f) << 14) +
-						((val1 & 0x7f) << 7) +
-						(val0 & 0x7f);
+				prev_val = 0;
+				if((x1 + x2) > 0) {
+					prev_val = (slow_mem_ptr[-1] >> 3) &0xf;
+				}
+				val_whole = ((val3 & 0x7f) << 25) +
+						((val2 & 0x7f) << 18) +
+						((val1 & 0x7f) << 11) +
+						((val0 & 0x7f) << 4) + prev_val;
 
-				tmp0 = dhires_convert[val_whole & 0xf];
+				tmp0 = g_dhires_convert[val_whole & 0xfff];
 				val_whole = val_whole >> 4;
-				tmp1 = dhires_convert[val_whole & 0xf];
+				tmp1 = g_dhires_convert[val_whole & 0xfff];
 				val_whole = val_whole >> 4;
-				tmp2 = dhires_convert[val_whole & 0xf];
+				tmp2 = g_dhires_convert[val_whole & 0xfff];
 				val_whole = val_whole >> 4;
-				tmp3 = dhires_convert[val_whole & 0xf];
+				tmp3 = g_dhires_convert[val_whole & 0xfff];
 				val_whole = val_whole >> 4;
-				tmp4 = dhires_convert[val_whole & 0xf];
+				tmp4 = g_dhires_convert[val_whole & 0xfff];
 				val_whole = val_whole >> 4;
-				tmp5 = dhires_convert[val_whole & 0xf];
+				tmp5 = g_dhires_convert[val_whole & 0xfff];
 				val_whole = val_whole >> 4;
-				tmp6 = dhires_convert[val_whole & 0xf];
+				if((x1 + x2 + 2) < 40) {
+					val_whole += (slow_mem_ptr[0x10002]<<8);
+				}
+				tmp6 = g_dhires_convert[val_whole & 0xfff];
 
 				img_ptr[0] = tmp0 + palette_add;
 				img_ptr[1] = tmp1 + palette_add;
@@ -1990,6 +2037,7 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 				img_ptr2[5] = tmp5 + palette_add;
 				img_ptr2[6] = tmp6 + palette_add;
 
+				slow_mem_ptr += 2;
 				img_ptr += 7;
 				img_ptr2 += 7;
 			}
