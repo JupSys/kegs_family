@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.35 99/07/12 23:51:14 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.36 99/09/06 20:47:54 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -64,8 +64,7 @@ int bogus[] = {
 
 #define	LOG_PC_MACRO()							\
 		tmp_pc_ptr = log_pc_ptr++;				\
-		tmp_pc_ptr->dbank_kbank_pc = (dbank << 24) +		\
-				(kbank << 16) + (pc & 0xffff);		\
+		tmp_pc_ptr->dbank_kpc = (dbank << 24) + kpc;		\
 		tmp_pc_ptr->instr = (opcode << 24) + arg_ptr[1] +	\
 			(arg_ptr[2] << 8) + (arg_ptr[3] << 16);		\
 		tmp_pc_ptr->psr_acc = ((psr & ~(0x82)) << 16) + acc +	\
@@ -307,8 +306,7 @@ check_breakpoints(word32 addr)
 	count = g_num_breakpoints;
 	for(i = 0; i < count; i++) {
 		if(g_breakpts[i] == addr) {
-			printf("Hit breakpoint at %06x\n", addr);
-			set_halt(1);
+			halt_printf("Hit breakpoint at %06x\n", addr);
 		}
 	}
 }
@@ -738,8 +736,7 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 }
 
 #define FETCH_OPCODE							\
-	pc = pc & 0xffff;						\
-	addr = (kbank << 16) + pc;					\
+	addr = kpc;							\
 	CYCLES_PLUS_2;							\
 	stat = GET_PAGE_INFO_RD(((addr) >> 8) & 0xffff);		\
 	ptr = (byte *)((stat & 0xffffff00) | ((addr) & 0xff));		\
@@ -780,8 +777,7 @@ enter_engine(Engine_reg *engine_ptr)
 	byte	*arg_ptr;
 	Pc_log	*tmp_pc_ptr;
 	word32	arg;
-	word32	kbank;
-	register word32	pc;
+	register word32	kpc;
 	register word32	acc;
 	register word32	xreg;
 	register word32	yreg;
@@ -812,8 +808,7 @@ enter_engine(Engine_reg *engine_ptr)
 
 	tmp_pc_ptr = 0;
 
-	kbank = engine_ptr->kbank;
-	pc = engine_ptr->pc;
+	kpc = engine_ptr->kpc;
 	acc = engine_ptr->acc;
 	xreg = engine_ptr->xreg;
 	yreg = engine_ptr->yreg;
@@ -838,8 +833,7 @@ recalc_accsize:
 		while(fcycles <= g_fcycles_stop) {
 #if 0
 			if((neg & ~1) || (psr & (~0x1ff))) {
-				printf("psr = %04x\n", psr);
-				set_halt(1);
+				halt_printf("psr = %04x\n", psr);
 			}
 #endif
 
@@ -851,8 +845,7 @@ recalc_accsize:
 
 			switch(opcode) {
 			default:
-				printf("acc8 unk op: %02x\n", opcode);
-				set_halt(1);
+				halt_printf("acc8 unk op: %02x\n", opcode);
 				arg = 9
 #define ACC8
 #include "defs_instr.h"
@@ -871,8 +864,7 @@ recalc_accsize:
 
 			switch(opcode) {
 			default:
-				printf("acc16 unk op: %02x\n", opcode);
-				set_halt(1);
+				halt_printf("acc16 unk op: %02x\n", opcode);
 				arg = 9
 #undef ACC8
 #include "defs_instr.h"
@@ -885,8 +877,7 @@ recalc_accsize:
 	}
 
 finish:
-	engine_ptr->kbank = kbank;
-	engine_ptr->pc = (pc & 0xffff);
+	engine_ptr->kpc = kpc;
 	engine_ptr->acc = acc;
 	engine_ptr->xreg = xreg;
 	engine_ptr->yreg = yreg;

@@ -11,10 +11,11 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.72 99/06/22 22:38:54 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.74 99/09/06 20:47:27 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
+#include <stdarg.h>
 
 #include "disas.h"
 
@@ -48,10 +49,9 @@ char w_buff[W_BUF_LEN];
 
 int g_stepping = 0;
 
-int list_pc;
-int list_pcbank;
-int hex_line_len;
-word32 a1,a2,a3,a4;
+word32	list_kpc;
+int	hex_line_len;
+word32	a1,a2,a3,a4;
 int a1bank, a2bank, a3bank, a4bank;
 char *line_ptr;
 int mode,old_mode;
@@ -108,8 +108,7 @@ do_debug_intfc()
 	hex_line_len = 0x10;
 	a1 = 0; a2 = 0; a3 = 0; a4 = 0;
 	a1bank = 0; a2bank = 0; a3bank = 0; a4bank = 0;
-	list_pc = engine.pc;
-	list_pcbank = engine.kbank;
+	list_kpc = engine.kpc;
 	g_stepping = 0;
 	mode = 0; old_mode = 0;
 	done = 0;
@@ -183,8 +182,7 @@ do_debug_intfc()
 				break;
 			case 'r':
 				do_reset();
-				list_pc = engine.pc;
-				list_pcbank = engine.kbank;
+				list_kpc = engine.kpc;
 				break;
 			case 'm':
 				if(old_mode == '=') {
@@ -246,12 +244,10 @@ do_debug_intfc()
 			case 's':
 				g_stepping = 1;
 				if(got_num) {
-					engine.pc = a2;
-					engine.kbank = a2bank;
+					engine.kpc = (a2bank<<16) + (a2&0xffff);
 				}
 				mode = 's';
-				list_pc = engine.pc;
-				list_pcbank = engine.kbank;
+				list_kpc = engine.kpc;
 				break;
 			case 'B':
 				if(got_num) {
@@ -272,16 +268,14 @@ do_debug_intfc()
 				printf("Going..\n");
 				g_stepping = 0;
 				if(got_num) {
-					engine.pc = a2;
-					engine.kbank = a2bank;
+					engine.kpc = (a2bank<<16) + (a2&0xffff);
 				}
 				if(ret_val == 'G' && g_testing_enabled) {
 					do_gen_test(got_num, a2);
 				} else {
 					do_go();
 				}
-				list_pc = engine.pc;
-				list_pcbank = engine.kbank;
+				list_kpc = engine.kpc;
 				break;
 			case 'q':
 			case 'Q':
@@ -478,15 +472,14 @@ do_blank()
 		tmp = a2;
 		if(tmp == 0) tmp = 1;
 		enter_debug = 0;
-		for(i=0;i < tmp;i++) {
+		for(i = 0; i < tmp; i++) {
 			g_stepping = 1;
 			do_step();
 			if(enter_debug || halt_sim != 0) {
 				break;
 			}
 		}
-		list_pc = engine.pc;
-		list_pcbank = engine.kbank;
+		list_kpc = engine.kpc;
 		refresh_screen();
 		break;
 	case ':':
@@ -543,8 +536,7 @@ do_step()
 	if(engine.psr & 0x10) {
 		size_x_imm = 1;
 	}
-	size = do_dis(stdout, engine.kbank,engine.pc, size_mem_imm,
-		size_x_imm, 0, 0);
+	size = do_dis(stdout, engine.kpc, size_mem_imm, size_x_imm, 0, 0);
 }
 
 void
@@ -627,8 +619,7 @@ do_debug_list()
 	int size_mem_imm, size_x_imm;
 
 	if(got_num) {
-		list_pc = a2;
-		list_pcbank = a2bank;
+		list_kpc = (a2bank << 16) + (a2 & 0xffff);
 	}
 	printf("%d=m %d=x %d=LCBANK\n", (engine.psr >> 5)&1,
 		(engine.psr >> 4) & 1, (statereg & 0x4) >> 2);
@@ -642,10 +633,9 @@ do_debug_list()
 		size_x_imm = 1;
 	}
 	for(i=0;i<20;i++) {
-		size = do_dis(stdout, list_pcbank, list_pc, size_mem_imm,
+		size = do_dis(stdout, list_kpc, size_mem_imm,
 			size_x_imm, 0, 0);
-		list_pc += size;
-		list_pc &= 0xffff;
+		list_kpc += size;
 	}
 }
 
@@ -838,7 +828,7 @@ do_debug_load()
 
 
 int
-do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize,
+do_dis(FILE *outfile, word32 kpc, int accsize, int xsize,
 	int op_provided, word32 instr)
 {
 	char	buffer[150];
@@ -846,18 +836,18 @@ do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize,
 	int	args, type;
 	int	opcode;
 	word32	val;
-	word32	oldpc;
+	word32	oldkpc;
 	word32	dtype;
 	int	signed_val;
 
-	oldpc = pc;
+	oldkpc = kpc;
 	if(op_provided) {
 		opcode = (instr >> 24) & 0xff;
 	} else {
-		opcode = (int)get_memory_c((bank <<16) + pc, 0) & 0xff;
+		opcode = (int)get_memory_c(kpc, 0) & 0xff;
 	}
 
-	pc++;
+	kpc++;
 
 	dtype = disas_types[opcode];
 	out = disas_opcodes[opcode];
@@ -881,21 +871,21 @@ do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize,
 		if(op_provided) {
 			val = instr & 0xff;
 		} else {
-			val = get_memory_c((bank << 16) + pc, 0);
+			val = get_memory_c(kpc, 0);
 		}
 		break;
 	case 2:
 		if(op_provided) {
 			val = instr & 0xffff;
 		} else {
-			val = get_memory16_c((bank << 16) + pc, 0);
+			val = get_memory16_c(kpc, 0);
 		}
 		break;
 	case 3:
 		if(op_provided) {
 			val = instr & 0xffffff;
 		} else {
-			val = get_memory24_c((bank << 16) + pc, 0);
+			val = get_memory24_c(kpc, 0);
 		}
 		break;
 	default:
@@ -903,7 +893,7 @@ do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize,
 			args, opcode);
 		break;
 	}
-	pc += args;
+	kpc += args;
 
 	if(!op_provided) {
 		instr = (opcode << 24) | (val & 0xffffff);
@@ -915,56 +905,56 @@ do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize,
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%04x",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSX:
 		if(args != 2) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%04x,X",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSY:
 		if(args != 2) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%04x,Y",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSLONG:
 		if(args != 3) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%06x",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSIND:
 		if(args != 2) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%04x)",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSXIND:
 		if(args != 2) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%04x,X)",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case IMPLY:
 		if(args != 0) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s",out);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ACCUM:
 		if(args != 0) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s",out);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case IMMED:
 		if(args == 1) {
@@ -974,121 +964,122 @@ do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize,
 		} else {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case JUST8:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOC:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCX:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x,X",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCY:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x,Y",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case LONG:
 		if(args != 3) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%06x",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case LONGX:
 		if(args != 3) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%06x,X",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCIND:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%02x)",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCINDY:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%02x),Y",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCXIND:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%02x,X)",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCBRAK:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t[$%02x]",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCBRAKY:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t[$%02x],y",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DISP8:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		signed_val = (signed char)val;
-		sprintf(buffer,"%s\t$%04x",out,(word32)(pc+(signed_val)));
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		sprintf(buffer,"%s\t$%04x",out,
+				(word32)(kpc+(signed_val)) & 0xffff);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DISP8S:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x,S",out,(word32)(byte)(val));
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DISP8SINDY:
 		if(args != 1) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%02x,S),Y",out,(word32)(byte)(val));
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DISP16:
 		if(args != 2) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%04x", out,
-				(word32)(pc+(signed)(word16)(val)) & 0xffff);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+				(word32)(kpc+(signed)(word16)(val)) & 0xffff);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case MVPMVN:
 		if(args != 2) {
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x,$%02x",out,val&0xff,val>>8);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case SEPVAL:
 	case REPVAL:
@@ -1096,7 +1087,7 @@ do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize,
 			printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t#$%02x",out,val);
-		show_line(outfile, bank,oldpc,instr,args+1,buffer);
+		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	default:
 		printf("argument type: %d unexpected\n", type);
@@ -1107,13 +1098,13 @@ do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize,
 }
 
 void
-show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size,
+show_line(FILE *outfile, word32 kaddr, word32 operand, int size,
 	char *string)
 {
 	int i;
 	int opcode;
 
-	fprintf(outfile, "%02x/%04x: ", bank, addr);
+	fprintf(outfile, "%02x/%04x: ", kaddr >> 16, kaddr & 0xffff);
 	opcode = (operand >> 24) & 0xff;
 	fprintf(outfile,"%02x ", opcode);
 
@@ -1127,4 +1118,14 @@ show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size,
 	fprintf(outfile,"%s\n", string);
 }
 
+void
+halt_printf(const char *fmt, ...)
+{
+	va_list args;
 
+	va_start(args, fmt);
+	vprintf(fmt, args);
+	va_end(args);
+
+	set_halt(1);
+}

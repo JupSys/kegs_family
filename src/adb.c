@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.35 99/07/25 01:10:18 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.38 99/10/11 01:30:41 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -118,8 +118,8 @@ word32	g_virtual_key_up[4];
 #define SHIFT_DOWN	( (g_c025_val & 0x01) )
 #define CTRL_DOWN	( (g_c025_val & 0x02) )
 #define CAPS_LOCK_DOWN	( (g_c025_val & 0x04) )
-#define CMD_DOWN	( (g_c025_val & 0x80) )
 #define OPTION_DOWN	( (g_c025_val & 0x40) )
+#define CMD_DOWN	( (g_c025_val & 0x80) )
 
 
 #define MAX_ADB_KBD_REG3	16
@@ -139,8 +139,7 @@ adb_init()
 	int	keycode;
 
 	if(g_adb_init) {
-		printf("g_adb_init = %d!\n", g_adb_init);
-		set_halt(1);
+		halt_printf("g_adb_init = %d!\n", g_adb_init);
 	}
 	g_adb_init = 1;
 
@@ -278,7 +277,7 @@ show_adb_log(void)
 void
 adb_error(void)
 {
-	set_halt(1);
+	halt_printf("Adb Error\n");
 
 	show_adb_log();
 }
@@ -363,8 +362,7 @@ adb_send_bytes(int num_bytes, word32 val0, word32 val1, word32 val2)
 	int	i;
 
 	if((num_bytes >= 12) || (num_bytes >= MAX_ADB_DATA_PEND))  {
-		printf("adb_send_bytes: %d is too many!\n", num_bytes);
-		set_halt(1);
+		halt_printf("adb_send_bytes: %d is too many!\n", num_bytes);
 	}
 
 	g_adb_state = ADB_SENDING_DATA;
@@ -392,8 +390,7 @@ adb_send_1byte(word32 val)
 {
 
 	if(g_adb_data_pending != 0) {
-		printf("g_adb_data_pending: %d\n", g_adb_data_pending);
-		set_halt(1);
+		halt_printf("g_adb_data_pending: %d\n", g_adb_data_pending);
 	}
 
 	adb_send_bytes(1, val << 24, 0, 0);
@@ -406,9 +403,8 @@ adb_response_packet(int num_bytes, word32 val)
 {
 
 	if(g_adb_data_pending != 0) {
-		printf("adb_response_packet, but pending: %d\n",
+		halt_printf("adb_response_packet, but pending: %d\n",
 			g_adb_data_pending);
-		set_halt(1);
 	}
 
 	g_adb_state = ADB_IDLE;
@@ -435,8 +431,7 @@ adb_kbd_reg0_data(int a2code, int is_up)
 {
 	if(g_kbd_reg0_pos >= MAX_ADB_KBD_REG3) {
 		/* too many keys, toss */
-		printf("Had to toss key: %02x, %d\n", a2code, is_up);
-		set_halt(1);
+		halt_printf("Had to toss key: %02x, %d\n", a2code, is_up);
 		return;
 	}
 
@@ -529,8 +524,7 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 	} else if(tmp1 < 4) {
 		g_adb_repeat_delay = (tmp1 + 1) * 15;
 	} else {
-		printf("Bad ADB repeat delay: %02x\n", tmp1);
-		set_halt(1);
+		halt_printf("Bad ADB repeat delay: %02x\n", tmp1);
 	}
 
 	tmp1 = val2 & 0xf;
@@ -567,8 +561,7 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 		/* I don't know what this should be, ROM 03 uses it */
 		g_adb_repeat_rate = 60;
 	default:
-		printf("Bad repeat rate: %02x\n", tmp1);
-		set_halt(1);
+		halt_printf("Bad repeat rate: %02x\n", tmp1);
 	}
 
 }
@@ -581,9 +574,8 @@ adb_set_new_mode(word32 val)
 	}
 
 	if(val & 0xe2) {
-		printf("ADB set mode: %02x!\n", val);
+		halt_printf("ADB set mode: %02x!\n", val);
 		adb_error();
-		set_halt(1);
 	}
 
 	g_adb_mode = val;
@@ -606,9 +598,8 @@ adb_read_c026()
 		}
 		if(g_adb_data_pending == 0) {
 			if(ret & 0x80) {
-				printf("read_c026: ret:%02x, pend:%d\n",
+				halt_printf("read_c026: ret:%02x, pend:%d\n",
 					ret, g_adb_data_pending);
-				set_halt(1);
 			}
 			adb_clear_data_int();
 		}
@@ -634,8 +625,7 @@ adb_read_c026()
 		}
 		break;
 	default:
-		printf("Bad ADB state: %d!\n", g_adb_state);
-		set_halt(1);
+		halt_printf("Bad ADB state: %d!\n", g_adb_state);
 		adb_clear_data_int();
 		break;
 	}
@@ -986,13 +976,11 @@ adb_read_c027()
 	word32	ret;
 
 	if(halt_on_all_c027) {
-		printf("halting on all c027 reads!\n");
-		set_halt(1);
+		halt_printf("halting on all c027 reads!\n");
 	}
 
 	if(g_c027_val & (~ADB_C027_NEG_MASK)) {
-		printf("read_c027: g_c027_val: %02x\n", g_c027_val);
-		set_halt(1);
+		halt_printf("read_c027: g_c027_val: %02x\n", g_c027_val);
 	}
 
 	ret = (g_c027_val & ADB_C027_NEG_MASK);
@@ -1049,8 +1037,7 @@ adb_write_c027(int val)
 	}
 
 	if(g_c027_val & ADB_C027_KBD_INT) {
-		printf("Can't support kbd interrupts!\n");
-		set_halt(1);
+		halt_printf("Can't support kbd interrupts!\n");
 	}
 
 	return;
@@ -1079,6 +1066,17 @@ read_adb_ram(word32 addr)
 		}
 	} else {
 		val = adb_memory[addr];
+		if((addr == 0xb) && (g_rom_version == 1)) {
+			// read special key state byte for Out of This World
+			val = (g_c025_val >> 1) & 0x43;
+			val |= (g_c025_val << 2) & 0x4;
+			val |= (g_c025_val >> 2) & 0x10;
+		}
+		if((addr == 0xc) && (g_rom_version >= 3)) {
+			// read special key state byte for Out of This World
+			val = g_c025_val & 0xc7;
+			printf("val is %02x\n", val);
+		}
 	}
 
 	adb_printf("adb_ram returning %02x\n", val);
@@ -1244,8 +1242,7 @@ adb_key_event(int a2code, int is_up)
 	}
 
 	if(a2code < 0 || a2code > 0x7f) {
-		printf("add_key_event: a2code: %04x!\n", a2code);
-		set_halt(1);
+		halt_printf("add_key_event: a2code: %04x!\n", a2code);
 		return;
 	}
 
@@ -1426,8 +1423,7 @@ adb_physical_key_update(int a2code, int is_up)
 	adb_printf("Handle a2code: %02x, is_up: %d\n", a2code, is_up);
 
 	if(a2code < 0 || a2code > 0x7f) {
-		printf("a2code: %04x!\n", a2code);
-		set_halt(1);
+		halt_printf("a2code: %04x!\n", a2code);
 		return;
 	}
 
@@ -1471,8 +1467,7 @@ adb_virtual_key_update(int a2code, int is_up)
 	adb_printf("Virtual handle a2code: %02x, is_up: %d\n", a2code, is_up);
 
 	if(a2code < 0 || a2code > 0x7f) {
-		printf("a2code: %04x!\n", a2code);
-		set_halt(1);
+		halt_printf("a2code: %04x!\n", a2code);
 		return;
 	}
 

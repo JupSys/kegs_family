@@ -16,7 +16,7 @@
 	.data
 	.export rcsdif_defs_instr_h,data
 rcsdif_defs_instr_h
-	.stringz "@(#)$Header: defs_instr.h,v 1.50 99/01/31 22:16:06 kentd Exp $"
+	.stringz "@(#)$Header: defs_instr.h,v 1.52 99/09/13 22:12:10 kentd Exp $"
 	.code
 # endif
 
@@ -104,7 +104,7 @@ defs_instr_start_16	.word	0
 	ldb	1(scratch1),arg0		! \
 	extru,=	direct,31,8,0			! \
 	CYCLES_PLUS_1				! \
-	addi	2,pc,pc				! \
+	addi	2,kpc,kpc			! \
 	add	direct,arg0,addr_latch		! \
 	extru	addr_latch,23,16,arg3		! \
 	CYCLES_PLUS_1				! \
@@ -120,7 +120,7 @@ defs_instr_start_16	.word	0
 	ldb	1(scratch1),arg0		! \
 	extru,=	direct,31,8,0			! \
 	CYCLES_PLUS_1				! \
-	addi	2,pc,pc				! \
+	addi	2,kpc,kpc			! \
 	add	direct,arg0,arg0		! \
 	bl	get_mem_b0_16,link		! \
 	extru	arg0,31,16,arg0
@@ -132,7 +132,7 @@ defs_instr_start_16	.word	0
 	if(direct & 0xff) {			\
 		CYCLES_PLUS_1;			\
 	}					\
-	pc += 2;				\
+	kpc += 2;				\
 	GET_MEMORY8((direct + arg) & 0xffff, arg);
 # else
 #  define GET_DLOC_RD()				\
@@ -140,7 +140,7 @@ defs_instr_start_16	.word	0
 	if(direct & 0xff) {			\
 		CYCLES_PLUS_1;			\
 	}					\
-	pc += 2;				\
+	kpc += 2;				\
 	GET_MEMORY16((direct + arg) & 0xffff, arg);
 # endif
 #endif
@@ -182,25 +182,25 @@ defs_instr_start_16	.word	0
 # ifdef ACC8
 #  define GET_IMM_MEM()				\
 	ldb	1(scratch1),ret0		! \
-	addi	2,pc,pc
+	addi	2,kpc,kpc
 # else
 #  define GET_IMM_MEM()				\
 	ldb	2(scratch1),scratch2		! \
-	CYCLES_PLUS_1				! \
+	addi	3,kpc,kpc			! \
 	ldb	1(scratch1),ret0		! \
-	addi	3,pc,pc				! \
+	CYCLES_PLUS_1				! \
 	dep	scratch2,23,8,ret0
 # endif
 #else
 # ifdef ACC8
 #  define GET_IMM_MEM()				\
 	GET_1BYTE_ARG;				\
-	pc += 2;
+	kpc += 2;
 # else
 #  define GET_IMM_MEM()				\
 	GET_2BYTE_ARG;				\
 	CYCLES_PLUS_1;				\
-	pc += 3;
+	kpc += 3;
 # endif
 #endif
 
@@ -211,9 +211,9 @@ defs_instr_start_16	.word	0
 # ifdef ACC8
 #  define GET_ABS_RD()				\
 	ldb	2(scratch1),arg3		! \
-	CYCLES_PLUS_2				! \
+	addi	3,kpc,kpc			! \
 	ldb	1(scratch1),addr_latch		! \
-	addi	3,pc,pc				! \
+	CYCLES_PLUS_2				! \
 	dep	dbank,23,24,arg3		! \
 	ldwx,s	arg3(page_info_ptr),scratch2	! \
 	copy	addr_latch,scratch4		! \
@@ -227,7 +227,7 @@ defs_instr_start_16	.word	0
 	ldb	1(scratch1),arg0		! \
 	CYCLES_PLUS_1				! \
 	ldb	2(scratch1),scratch2		! \
-	addi	3,pc,pc				! \
+	addi	3,kpc,kpc			! \
 	dep	dbank,15,16,arg0		! \
 	bl	get_mem_long_16,link		! \
 	dep	scratch2,23,8,arg0
@@ -238,13 +238,13 @@ defs_instr_start_16	.word	0
 	GET_2BYTE_ARG;				\
 	GET_MEMORY8((dbank << 16) + arg, arg);	\
 	CYCLES_PLUS_1;				\
-	pc += 3;
+	kpc += 3;
 # else
 #  define GET_ABS_RD()				\
 	GET_2BYTE_ARG;				\
 	GET_MEMORY16((dbank << 16) + arg, arg);	\
 	CYCLES_PLUS_1;				\
-	pc += 3;
+	kpc += 3;
 # endif
 #endif
 
@@ -256,9 +256,9 @@ defs_instr_start_16	.word	0
 # ifdef ACC8
 #  define GET_LONG_RD()				\
 	ldb	1(scratch1),arg0		! \
-	CYCLES_PLUS_2				! \
+	addi	4,kpc,kpc			! \
 	ldb	2(scratch1),scratch2		! \
-	addi	4,pc,pc				! \
+	CYCLES_PLUS_2				! \
 	ldb	3(scratch1),scratch1		! \
 	dep	scratch2,23,8,arg0		! \
 	bl	get_mem_long_8,link		! \
@@ -266,9 +266,9 @@ defs_instr_start_16	.word	0
 # else
 #  define GET_LONG_RD()				\
 	ldb	1(scratch1),arg0		! \
-	CYCLES_PLUS_2				! \
+	addi	4,kpc,kpc			! \
 	ldb	2(scratch1),scratch2		! \
-	addi	4,pc,pc				! \
+	CYCLES_PLUS_2				! \
 	ldb	3(scratch1),scratch1		! \
 	dep	scratch2,23,8,arg0		! \
 	bl	get_mem_long_16,link		! \
@@ -280,13 +280,13 @@ defs_instr_start_16	.word	0
 	GET_3BYTE_ARG;				\
 	GET_MEMORY8(arg, arg);			\
 	CYCLES_PLUS_2;				\
-	pc += 4;
+	kpc += 4;
 # else
 #  define GET_LONG_RD()				\
 	GET_3BYTE_ARG;				\
 	GET_MEMORY16(arg, arg);			\
 	CYCLES_PLUS_2;				\
-	pc += 4;
+	kpc += 4;
 # endif
 #endif
 
@@ -318,7 +318,7 @@ defs_instr_start_16	.word	0
 	extru,=	scratch1,23,8,0			! \
 	CYCLES_PLUS_1				! \
 	bl	get_mem_long_8,link		! \
-	addi	2,pc,pc
+	addi	2,kpc,kpc
 # else
 #  define GET_DLOC_IND_Y_RD()			\
 	ldb	1(scratch1),arg0		! \
@@ -328,7 +328,7 @@ defs_instr_start_16	.word	0
 	extru,=	scratch1,23,8,0			! \
 	CYCLES_PLUS_1				! \
 	bl	get_mem_long_16,link		! \
-	addi	2,pc,pc
+	addi	2,kpc,kpc
 # endif
 #else /* C */
 # ifdef ACC8
@@ -343,7 +343,7 @@ defs_instr_start_16	.word	0
 	if(((psr & 0x10) == 0) || ((tmp1 ^ tmp2) & 0xff00)) {		\
 		CYCLES_PLUS_1;						\
 	}								\
-	pc += 2;							\
+	kpc += 2;							\
 	GET_MEMORY8(tmp2, arg);
 # else
 #  define GET_DLOC_IND_Y_RD()			\
@@ -357,7 +357,7 @@ defs_instr_start_16	.word	0
 	if(((psr & 0x10) == 0) || ((tmp1 ^ tmp2) & 0xff00)) {		\
 		CYCLES_PLUS_1;						\
 	}								\
-	pc += 2;							\
+	kpc += 2;							\
 	GET_MEMORY16(tmp2, arg);
 # endif
 #endif
@@ -371,7 +371,7 @@ defs_instr_start_16	.word	0
 	ldb	1(scratch1),arg0		! \
 	extru,=	direct,31,8,0			! \
 	CYCLES_PLUS_1				! \
-	addi	2,pc,pc				! \
+	addi	2,kpc,kpc			! \
 	add	direct,arg0,arg0		! \
 	bl	get_mem_b0_direct_page_16,link	! \
 	extru	arg0,31,16,arg0			! \
@@ -383,7 +383,7 @@ defs_instr_start_16	.word	0
 	ldb	1(scratch1),arg0		! \
 	extru,=	direct,31,8,0			! \
 	CYCLES_PLUS_1				! \
-	addi	2,pc,pc				! \
+	addi	2,kpc,kpc			! \
 	add	direct,arg0,arg0		! \
 	bl	get_mem_b0_direct_page_16,link	! \
 	extru	arg0,31,16,arg0			! \
@@ -395,7 +395,7 @@ defs_instr_start_16	.word	0
 # ifdef ACC8
 #  define GET_DLOC_IND_RD()				\
 	GET_1BYTE_ARG;					\
-	pc += 2;					\
+	kpc += 2;					\
 	if(direct & 0xff) {				\
 		CYCLES_PLUS_1;				\
 	}						\
@@ -404,7 +404,7 @@ defs_instr_start_16	.word	0
 # else
 #  define GET_DLOC_IND_RD()				\
 	GET_1BYTE_ARG;					\
-	pc += 2;					\
+	kpc += 2;					\
 	if(direct & 0xff) {				\
 		CYCLES_PLUS_1;				\
 	}						\
@@ -438,7 +438,7 @@ defs_instr_start_16	.word	0
 	if(direct & 0xff) {						\
 		CYCLES_PLUS_1;						\
 	}								\
-	pc += 2;							\
+	kpc += 2;							\
 	arg = (arg + xreg + direct) & 0xffff;				\
 	if(psr & 0x100) {						\
 		if((direct & 0xff) == 0) {				\
@@ -453,7 +453,7 @@ defs_instr_start_16	.word	0
 	if(direct & 0xff) {						\
 		CYCLES_PLUS_1;						\
 	}								\
-	pc += 2;							\
+	kpc += 2;							\
 	arg = (arg + xreg + direct) & 0xffff;				\
 	if(psr & 0x100) {						\
 		if((direct & 0xff) == 0) {				\
@@ -538,7 +538,7 @@ defs_instr_start_16	.word	0
 	CYCLES_PLUS_1				! \
 	ldb	2(scratch1),scratch1		! \
 	dep	dbank,15,16,ret0		! \
-	addi	3,pc,pc				! \
+	addi	3,kpc,kpc			! \
 	dep	scratch1,23,8,ret0		! \
 	add	ret0,index_reg,arg0		! \
 	xor	arg0,ret0,scratch1		! \
@@ -549,7 +549,7 @@ defs_instr_start_16	.word	0
 #  define GET_ABS_INDEX_ADDR_FOR_RD(index_reg)			\
 	GET_2BYTE_ARG;						\
 	CYCLES_PLUS_1;						\
-	pc += 3;						\
+	kpc += 3;						\
 	tmp1 = (dbank << 16) + arg;				\
 	arg = tmp1 + index_reg;					\
 	if(((psr & 0x10) == 0) || ((tmp1 ^ arg) & 0xff00)) {	\
@@ -598,7 +598,7 @@ defs_instr_start_16	.word	0
 
 #  define GET_ABS_X_RD_WR()			\
 	ldb	1(scratch1),ret0		! \
-	addi	3,pc,pc				! \
+	addi	3,kpc,kpc			! \
 	ldb	2(scratch1),scratch1		! \
 	dep	dbank,15,16,ret0		! \
 	CYCLES_PLUS_2				! \
@@ -614,7 +614,7 @@ defs_instr_start_16	.word	0
 
 #  define GET_ABS_X_RD_WR()			\
 	ldb	1(scratch1),ret0		! \
-	addi	3,pc,pc				! \
+	addi	3,kpc,kpc			! \
 	ldb	2(scratch1),scratch1		! \
 	dep	dbank,15,16,ret0		! \
 	CYCLES_PLUS_2				! \
@@ -631,7 +631,7 @@ defs_instr_start_16	.word	0
 
 #  define GET_ABS_X_RD_WR()					\
 	GET_2BYTE_ARG;						\
-	pc += 3;						\
+	kpc += 3;						\
 	CYCLES_PLUS_2;						\
 	arg = (dbank << 16) + ((arg + xreg) & 0xffff);		\
 	GET_MEMORY8(arg, arg);
@@ -642,7 +642,7 @@ defs_instr_start_16	.word	0
 
 #  define GET_ABS_X_RD_WR()					\
 	GET_2BYTE_ARG;						\
-	pc += 3;						\
+	kpc += 3;						\
 	CYCLES_PLUS_2;						\
 	arg = (dbank << 16) + ((arg + xreg) & 0xffff);		\
 	GET_MEMORY16(arg, arg);
@@ -659,7 +659,7 @@ defs_instr_start_16	.word	0
 	ldb	2(scratch1),scratch2		! \
 	CYCLES_PLUS_2				! \
 	ldb	3(scratch1),scratch1		! \
-	addi	4,pc,pc				! \
+	addi	4,kpc,kpc			! \
 	dep	scratch2,23,8,ret0		! \
 	dep	scratch1,15,8,ret0		! \
 	add	ret0,xreg,arg0			! \
@@ -671,7 +671,7 @@ defs_instr_start_16	.word	0
 	ldb	2(scratch1),scratch2		! \
 	CYCLES_PLUS_2				! \
 	ldb	3(scratch1),scratch1		! \
-	addi	4,pc,pc				! \
+	addi	4,kpc,kpc			! \
 	dep	scratch2,23,8,ret0		! \
 	dep	scratch1,15,8,ret0		! \
 	add	ret0,xreg,arg0			! \
@@ -683,14 +683,14 @@ defs_instr_start_16	.word	0
 #  define GET_LONG_X_RD()			\
 	GET_3BYTE_ARG;				\
 	arg = (arg + xreg) & 0xffffff;		\
-	pc += 4;				\
+	kpc += 4;				\
 	CYCLES_PLUS_2;				\
 	GET_MEMORY8(arg, arg);
 # else
 #  define GET_LONG_X_RD()			\
 	GET_3BYTE_ARG;				\
 	arg = (arg + xreg) & 0xffffff;		\
-	pc += 4;				\
+	kpc += 4;				\
 	CYCLES_PLUS_2;				\
 	GET_MEMORY16(arg, arg);
 # endif
@@ -1330,9 +1330,9 @@ defs_instr_start_16	.word	0
 # ifdef ACC8
 #  define DEC_INST()				! \
 	addi	-1,ret0,ret0			! \
-	CYCLES_PLUS_1				! \
-	extru	ret0,24,1,neg			! \
 	copy	addr_latch,arg0			! \
+	extru	ret0,24,1,neg			! \
+	CYCLES_PLUS_1				! \
 	extru	ret0,31,8,zero			! \
 	ldil	l%dispatch,link			! \
 	copy	zero,arg1			! \
@@ -1341,9 +1341,9 @@ defs_instr_start_16	.word	0
 # else
 #  define DEC_INST()				! \
 	addi	-1,ret0,ret0			! \
-	CYCLES_PLUS_1				! \
-	extru	ret0,16,1,neg			! \
 	copy	addr_latch,arg0			! \
+	extru	ret0,16,1,neg			! \
+	CYCLES_PLUS_1				! \
 	extru	ret0,31,16,zero			! \
 	ldil	l%dispatch,link			! \
 	copy	zero,arg1			! \
@@ -1373,9 +1373,9 @@ defs_instr_start_16	.word	0
 # ifdef ACC8
 #  define INC_INST()				! \
 	addi	1,ret0,ret0			! \
-	CYCLES_PLUS_1				! \
-	extru	ret0,24,1,neg			! \
 	copy	addr_latch,arg0			! \
+	extru	ret0,24,1,neg			! \
+	CYCLES_PLUS_1				! \
 	extru	ret0,31,8,zero			! \
 	ldil	l%dispatch,link			! \
 	copy	zero,arg1			! \
@@ -1384,9 +1384,9 @@ defs_instr_start_16	.word	0
 # else
 #  define INC_INST()				! \
 	addi	1,ret0,ret0			! \
-	CYCLES_PLUS_1				! \
-	extru	ret0,16,1,neg			! \
 	copy	addr_latch,arg0			! \
+	extru	ret0,16,1,neg			! \
+	CYCLES_PLUS_1				! \
 	extru	ret0,31,16,zero			! \
 	ldil	l%dispatch,link			! \
 	copy	zero,arg1			! \
@@ -1444,16 +1444,16 @@ defs_instr_start_16	.word	0
 # define COND_BR1			\
 	ldb	1(scratch1),arg0
 
-/* be careful about modifying pc as first instr of COND_Br2 since it */
+/* be careful about modifying kpc as first instr of COND_Br2 since it */
 /*  is in the delay slot of a branch! */
 # define COND_BR2			\
-	addi	2,pc,scratch3		! \
+	addi	2,kpc,scratch3		! \
 	ldi	0x100,scratch4		! \
 	extrs	arg0,31,8,ret0		! \
 	and	scratch4,psr,scratch4	! \
-	add	scratch3,ret0,pc	! \
+	add	scratch3,ret0,kpc	! \
 	CYCLES_PLUS_1			! \
-	xor	scratch3,pc,scratch3	! \
+	xor	scratch3,kpc,scratch3	! \
 	and,=	scratch4,scratch3,0	! \
 	CYCLES_PLUS_1			! \
 	b	dispatch		! \
@@ -1462,16 +1462,16 @@ defs_instr_start_16	.word	0
 
 # define COND_BR_UNTAKEN		\
 	b	dispatch		! \
-	addi	2,pc,pc
+	addi	2,kpc,kpc
 #else /* C */
 # define BRANCH_DISP8(cond)					\
 	GET_1BYTE_ARG;						\
-	pc += 2;						\
-	tmp1 = pc;						\
+	kpc += 2;						\
+	tmp1 = kpc;						\
 	if(cond) {						\
-		pc = pc + arg - ((arg & 0x80) << 1);		\
+		kpc = kpc + arg - ((arg & 0x80) << 1);		\
 		CYCLES_PLUS_1;					\
-		if((tmp1 ^ pc) & psr & 0x100) {			\
+		if((tmp1 ^ kpc) & psr & 0x100) {		\
 			CYCLES_PLUS_1;				\
 		}						\
 	}
@@ -1565,22 +1565,22 @@ defs_instr_start_16	.word	0
 	CP_INDEX_LOAD(yreg);
 
 # define C_CPX_IMM()		\
-	pc += 2;		\
+	kpc += 2;		\
 	if((psr & 0x10) == 0) {	\
 		GET_2BYTE_ARG;	\
 		CYCLES_PLUS_1;	\
-		pc++;		\
+		kpc++;		\
 	} else {		\
 		GET_1BYTE_ARG;	\
 	}			\
 	CP_INDEX_VAL(xreg);
 
 # define C_CPY_IMM()		\
-	pc += 2;		\
+	kpc += 2;		\
 	if((psr & 0x10) == 0) {	\
 		GET_2BYTE_ARG;	\
 		CYCLES_PLUS_1;	\
-		pc++;		\
+		kpc++;		\
 	} else {		\
 		GET_1BYTE_ARG;	\
 	}			\

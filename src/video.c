@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.98 99/08/03 22:55:51 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.99 99/09/06 20:50:22 kentd Exp $";
 
 #include <time.h>
 
@@ -507,8 +507,7 @@ change_display_mode(double dcycs)
 	line = ((get_lines_since_vbl(dcycs) + 0xff) >> 8);
 	if(line < 0) {
 		line = 0;
-		printf("Line < 0!\n");
-		set_halt(1);
+		halt_printf("Line < 0!\n");
 	}
 	line = line >> 3;
 	if(line > 24) {
@@ -632,8 +631,7 @@ update_a2_ptrs(int line, int new_stat)
 		mode_ptr = &(mode_border[0]);
 		break;
 	default:
-		printf("update_a2_ptrs: mode: %d unknown!\n", mode);
-		set_halt(1);
+		halt_printf("update_a2_ptrs: mode: %d unknown!\n", mode);
 		return;
 	}
 
@@ -785,8 +783,7 @@ change_border_color(double dcycs, int val)
 	g_num_border_changes = pos;
 
 	if(pos >= MAX_BORDER_CHANGES) {
-		printf("num border changes: %d\n", pos);
-		set_halt(1);
+		halt_printf("num border changes: %d\n", pos);
 		g_num_border_changes = 0;
 	}
 }
@@ -868,8 +865,7 @@ update_border_line(int line_in, int color)
 
 	if(line_in >= 200) {
 		if(line_in >= 262) {
-			printf("line_in: %d out of range!\n", line_in);
-			set_halt(1);
+			halt_printf("line_in: %d out of range!\n", line_in);
 			line_in = 200;
 		}
 		line = (line_in - 200) >> 1;
@@ -981,8 +977,7 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 	line_mask = 1 << (y);
 	mem_ptr = 0x400 + screen_index[y] + start_offset;
 	if(mem_ptr < 0x400 || mem_ptr >= 0xc00) {
-		printf("redraw_changed_text: mem_ptr: %08x\n", mem_ptr);
-		set_halt(1);
+		halt_printf("redraw_changed_text: mem_ptr: %08x\n", mem_ptr);
 	}
 
 	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
@@ -1145,8 +1140,7 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 	line_mask = 1 << (y);
 	mem_ptr = 0x400 + screen_index[y] + start_offset;
 	if(mem_ptr < 0x400 || mem_ptr >= 0xc00) {
-		printf("redraw_changed_text: mem_ptr: %08x\n", mem_ptr);
-		set_halt(1);
+		halt_printf("redraw_changed_text: mem_ptr: %08x\n", mem_ptr);
 	}
 
 	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
@@ -2284,8 +2278,7 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 	}
 	
 	if(SHIFT_PER_CHANGE != 3) {
-		printf("SHIFT_PER_CHANGE must be 3!\n");
-		set_halt(1);
+		halt_printf("SHIFT_PER_CHANGE must be 3!\n");
 		return;
 	}
 
@@ -2372,8 +2365,7 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 				screen_data, y, scan, this_check);
 			break;
 		default:
-			printf("type: %d bad!\n", type);
-			set_halt(1);
+			halt_printf("type: %d bad!\n", type);
 		}
 	}
 
@@ -2397,7 +2389,7 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 	if((a2_screen_buffer_changed & (1 << start_line)) != 0) {
 		if(((g_full_refresh_needed & (1 << start_line)) == 0) &&
 							left >= right) {
-			printf("shr: line: %d, left: %d, right:%d\n",
+			halt_printf("shr: line: %d, left: %d, right:%d\n",
 				start_line, left, right);
 			printf("mask_per_line: %08x, all_checks: %08x\n",
 				mask_per_line, all_checks);
@@ -2411,7 +2403,6 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 #ifdef HPUX
 			U_STACK_TRACE();
 #endif
-			set_halt(1);
 		}
 	}
 
@@ -2558,8 +2549,7 @@ refresh_line(int line)
 	case MODE_BORDER:
 		g_num_lines_a2vid++;
 		if(line != 24) {
-			printf("Border line not 24!\n");
-			set_halt(1);
+			halt_printf("Border line not 24!\n");
 		}
 		a2_line_full_left_edge[line] = 0;
 		a2_line_left_edge[line] = 0;
@@ -2571,8 +2561,7 @@ refresh_line(int line)
 		}
 		break;
 	default:
-		printf("refresh screen: mode: 0x%02x unknown!\n", mode);
-		set_halt(1);
+		halt_printf("refresh screen: mode: 0x%02x unknown!\n", mode);
 		exit(7);
 	}
 

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.149 99/07/19 00:58:28 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.150 99/09/06 20:48:41 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -288,8 +288,7 @@ update_color_array(int col_num, int a2_color)
 	int	full;
 
 	if(col_num >= 256 || col_num < 0) {
-		printf("update_color_array called: col: %03x\n", col_num);
-		set_halt(1);
+		halt_printf("update_color_array called: col: %03x\n", col_num);
 		return;
 	}
 
@@ -1191,7 +1190,7 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 	int	srcy;
 
 	if(left_pix >= right_pix || left_pix < 0 || right_pix <= 0) {
-		printf("x_refresh_lines: lines %d to %d, pix %d to %d\n",
+		halt_printf("x_refresh_lines: lines %d to %d, pix %d to %d\n",
 			start_line, end_line, left_pix, right_pix);
 		printf("a2_screen_buf_ch:%08x, g_full_refr:%08x\n",
 			a2_screen_buffer_changed, g_full_refresh_needed);
@@ -1199,7 +1198,6 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 #ifdef HPUX
 		U_STACK_TRACE();
 #endif
-		set_halt(1);
 	}
 
 	srcy = 16*start_line;
@@ -1546,8 +1544,9 @@ check_input_events()
 				}
 			} else {
 				/* Re-enable kbd repeat for X */
+				halt_printf("ev.xbutton.button: %d\n",
+						ev.xbutton.button);
 				x_auto_repeat_on(0);
-				set_halt(1);
 				fflush(stdout);
 			}
 			break;

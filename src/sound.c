@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.85 99/05/31 20:56:14 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.86 99/09/06 20:50:59 kentd Exp $";
 
 #include "defc.h"
 
@@ -329,9 +329,8 @@ sound_reset(double dcycs)
 		doc_write_ctl_reg(i, g_doc_regs[i].ctl | 1, dsamps);
 		doc_reg_e0 = 0xff;
 		if(g_doc_regs[i].has_irq_pending) {
-			printf("reset: has_irq[%02x] = %d\n", i,
+			halt_printf("reset: has_irq[%02x] = %d\n", i,
 				g_doc_regs[i].has_irq_pending);
-			set_halt(1);
 		}
 	}
 
@@ -436,8 +435,8 @@ check_for_range(word32 *addr, int num_samps, int offset)
 	max = -32768;
 
 	if(num_samps > SOUND_SHM_SAMP_SIZE) {
-		printf("num_samps: %d > %d!\n", num_samps, SOUND_SHM_SAMP_SIZE);
-		set_halt(1);
+		halt_printf("num_samps: %d > %d!\n", num_samps,
+							SOUND_SHM_SAMP_SIZE);
 	}
 
 	for(i = 0; i < num_samps; i++) {
@@ -445,10 +444,9 @@ check_for_range(word32 *addr, int num_samps, int offset)
 		left = shortptr[0];
 		right = shortptr[1];
 		if((left > 0x3000) || (right > 0x3000)) {
-			printf("Sample %d of %d at snd_buf: %08x is: %d/%d\n",
-				i + offset, num_samps, (word32)(addr+i),
-				left, right);
-			set_halt(1);
+			halt_printf("Sample %d of %d at snd_buf: %08x is: "
+				"%d/%d\n", i + offset, num_samps,
+				(word32)(addr+i), left, right);
 			return;
 		}
 
@@ -476,8 +474,7 @@ send_sound_to_file(word32 *addr, int cur_pos, int num_samps)
 
 		ret = write(g_sound_file_fd, &(addr[cur_pos]), 4*size);
 		if(ret != 4*size) {
-			printf("wrote %d not %d\n", ret, 4*size);
-			set_halt(1);
+			halt_printf("wrote %d not %d\n", ret, 4*size);
 		}
 
 		if(g_doc_vol < 3) {
@@ -494,8 +491,7 @@ send_sound_to_file(word32 *addr, int cur_pos, int num_samps)
 
 	ret = write(g_sound_file_fd, &(addr[cur_pos]), 4*num_samps);
 	if(ret != 4*num_samps) {
-		printf("wrote %d not %d\n", ret, 4*num_samps);
-		set_halt(1);
+		halt_printf("wrote %d not %d\n", ret, 4*num_samps);
 	}
 
 	if(g_doc_vol < 3) {
@@ -528,8 +524,7 @@ send_sound(int fd, int real_samps, int size)
 	/*  child is also reading an int, it just works with no byte swap */
 	ret = write(fd, &tmp, 4);
 	if(ret != 4) {
-		printf("send_sound, write ret: %d, errno: %d\n", ret, errno);
-		set_halt(1);
+		halt_printf("send_sound, wr ret: %d, errno: %d\n", ret, errno);
 	}
 }
 
@@ -612,8 +607,7 @@ sound_play(double dsamps)
 
 	g_num_snd_plays++;
 	if(g_sound_play_depth) {
-		printf("Nested sound_play!\n");
-		set_halt(1);
+		halt_printf("Nested sound_play!\n");
 	}
 
 	g_sound_play_depth++;
@@ -696,9 +690,8 @@ sound_play(double dsamps)
 			next_fsampnum = c030_fsamps[i+1];
 			next_sampnum = (int)next_fsampnum;
 			if(sampnum < 0 || sampnum > num_samps) {
-				printf("play c030: [%d]:%f is %d, > %d\n",
+				halt_printf("play c030: [%d]:%f is %d, > %d\n",
 					i, fsampnum, sampnum, num_samps);
-				set_halt(1);
 				break;
 			}
 
@@ -741,9 +734,8 @@ sound_play(double dsamps)
 			}
 
 			if((fpercent < (float)0.0) || (fpercent > (float)1.0)) {
-				printf("fpercent: %d = %f\n", i, fpercent);
+				halt_printf("fpercent: %d = %f\n", i, fpercent);
 				show_c030_samps(outptr_start, num_samps);
-				set_halt(1);
 				break;
 			}
 
@@ -1060,11 +1052,10 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 	/* check to make sure osc is running */
 	if(ctl & 0x01) {
 		/* Oscillator already stopped. */
-		printf("Osc %d interrupt, but it was already stopped!\n",osc);
+		halt_printf("Osc %d interrupt, but it was already stop!\n",osc);
 #ifdef HPUX
 		U_STACK_TRACE();
 #endif
-		set_halt(1);
 		return;
 	}
 
@@ -1075,8 +1066,7 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 	}
 
 	if(!rptr->running) {
-		printf("Doc event for osc %d, but ! running\n", osc);
-		set_halt(1);
+		halt_printf("Doc event for osc %d, but ! running\n", osc);
 	}
 
 	rptr->running = 0;
@@ -1116,9 +1106,8 @@ void
 add_sound_irq(int osc)
 {
 	if(g_doc_regs[osc].has_irq_pending) {
-		printf("Adding sound_irq for %02x, but irq_p: %d\n", osc,
+		halt_printf("Adding sound_irq for %02x, but irq_p: %d\n", osc,
 			g_doc_regs[osc].has_irq_pending);
-		set_halt(1);
 	}
 
 	g_doc_regs[osc].has_irq_pending = 1;
@@ -1151,9 +1140,8 @@ remove_sound_irq(int osc)
 #if 0
 		/* make sure no int pending */
 		if(doc_reg_e0 != 0xff) {
-			printf("remove_sound_irq[%02x] = 0, but e0: %02x\n",
+			halt_printf("remove_sound_irq[%02x]=0, but e0: %02x\n",
 				osc, doc_reg_e0);
-			set_halt(1);
 		}
 #endif
 	}
@@ -1161,9 +1149,8 @@ remove_sound_irq(int osc)
 	if(doc_reg_e0 & 0x80) {
 		for(i = 0; i < 0x20; i++) {
 			if(g_doc_regs[i].has_irq_pending) {
-				printf("remove_sound_irq[%02x], but [%02x]!\n",
-					osc, i);
-				set_halt(1);
+				halt_printf("remove_sound_irq[%02x], but "
+					"[%02x]!\n", osc, i);
 			}
 		}
 	}
@@ -1182,8 +1169,7 @@ start_sound(int osc, double eff_dsamps, double dsamps)
 	word32	wave_size;
 
 	if(osc < 0 || osc > 31) {
-		printf("start_sound: osc: %02x!\n", osc);
-		set_halt(1);
+		halt_printf("start_sound: osc: %02x!\n", osc);
 	}
 
 	g_num_start_sounds++;
@@ -1207,13 +1193,11 @@ start_sound(int osc, double eff_dsamps, double dsamps)
 	size = 1 << sz;
 
 	if(size < 0x100) {
-		printf("size: %08x is too small, sz: %08x!\n", size, sz);
-		set_halt(1);
+		halt_printf("size: %08x is too small, sz: %08x!\n", size, sz);
 	}
 
 	if(rptr->running) {
-		printf("start_sound osc: %d, already running!\n", osc);
-		set_halt(1);
+		halt_printf("start_sound osc: %d, already running!\n", osc);
 	}
 
 	rptr->running = 1;
@@ -1236,7 +1220,6 @@ start_sound(int osc, double eff_dsamps, double dsamps)
 		} else {
 			printf("Osc %d starting sync, but osc %d ctl: %02x\n",
 				osc, osc+1, rptr[1].ctl);
-			/* set_halt(1) */
 		}
 	}
 
@@ -1352,9 +1335,8 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 	int	mode;
 
 	if(osc < 0 || osc >= 0x20) {
-		printf("doc_write_ctl_reg: osc: %02x, val: %02x\n",
+		halt_printf("doc_write_ctl_reg: osc: %02x, val: %02x\n",
 			osc, val);
-		set_halt(1);
 		return;
 	}
 
@@ -1399,10 +1381,9 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 		if(old_halt == 0) {
 			/* it was playing, finish it up */
 #if 0
-			printf("Aborted osc %d at eff_dsamps: %f, ctl: %02x, "
-				"oldctl: %02x\n",
-				osc, eff_dsamps, val, old_val);
-			set_halt(1);
+			halt_printf("Aborted osc %d at eff_dsamps: %f, ctl: "
+				"%02x, oldctl: %02x\n", osc, eff_dsamps,
+				val, old_val);
 #endif
 			/* sound_play(eff_dsamps); */
 		}
@@ -1478,8 +1459,7 @@ doc_read_c030(double dcycs)
 
 	num = g_num_c030_fsamps;
 	if(num >= MAX_C030_TIMES) {
-		printf("Too many clicks per vbl: %d\n", num);
-		set_halt(1);
+		halt_printf("Too many clicks per vbl: %d\n", num);
 		return 0;
 	}
 
@@ -1562,23 +1542,20 @@ doc_read_c03d(double dcycs)
 			case 0x02:	/* 0xe2 */
 				doc_saved_val = 0x80;
 #if 0
-				printf("Reading doc 0xe2, ret: %02x\n",
+				halt_printf("Reading doc 0xe2, ret: %02x\n",
 								doc_saved_val);
-				set_halt(1);
 #endif
 				break;
 			default:
 				doc_saved_val = 0;
-				printf("Reading bad doc_reg[%04x]: %02x\n",
+				halt_printf("Reading bad doc_reg[%04x]: %02x\n",
 							doc_ptr, doc_saved_val);
-				set_halt(1);
 			}
 			break;
 		default:
 			doc_saved_val = 0;
-			printf("Reading bad doc_reg[%04x]: %02x\n",
+			halt_printf("Reading bad doc_reg[%04x]: %02x\n",
 						doc_ptr, doc_saved_val);
-			set_halt(1);
 		}
 	}
 
@@ -1647,10 +1624,9 @@ doc_write_c03d(int val, double dcycs)
 #if 0
 		if((ctl & 1) == 0) {
 			if(type < 2 || type == 4 || type == 6) {
-				printf("Osc %d is running, old ctl: %02x, "
+				halt_printf("Osc %d is running, old ctl: %02x, "
 					"but write reg %02x=%02x\n",
 					osc, ctl, doc_ptr & 0xff, val);
-				set_halt(1);
 			}
 		}
 #endif
@@ -1689,9 +1665,8 @@ doc_write_c03d(int val, double dcycs)
 				DOC_LOG("vol_sound_play", osc, dsamps, val);
 				sound_play(dsamps);
 #if 0
-				printf("vol_sound_play at %.1f osc:%d val:%d\n",
-					dsamps, osc, val);
-				set_halt(1);
+				halt_printf("vol_sound_play at %.1f osc:%d "
+					"val:%d\n", dsamps, osc, val);
 #endif
 			}
 			rptr->vol = val;
@@ -1740,11 +1715,13 @@ doc_write_c03d(int val, double dcycs)
 			case 0x00:	/* 0xe0 */
 				doc_printf("writing doc 0xe0 with %02x, "
 					"was:%02x\n", val, doc_reg_e0);
-				if(val != doc_reg_e0) {
 #if 0
-					set_halt(1);
-#endif
+				if(val != doc_reg_e0) {
+					halt_printf("writing doc 0xe0 with "
+						"%02x, was:%02x\n", val,
+						doc_reg_e0);
 				}
+#endif
 				break;
 			case 0x01:	/* 0xe1 */
 				doc_printf("Writing doc 0xe1 with %02x\n", val);
@@ -1754,8 +1731,7 @@ doc_write_c03d(int val, double dcycs)
 					tmp = 1;
 				}
 				if(tmp > 32) {
-					printf("doc 0xe1: %02x!\n", val);
-					set_halt(1);
+					halt_printf("doc 0xe1: %02x!\n", val);
 					tmp = 32;
 				}
 				g_doc_num_osc_en = tmp;
@@ -1776,15 +1752,13 @@ doc_write_c03d(int val, double dcycs)
 				/* set_halt(1); */
 				break;
 			default:
-				printf("Writing %02x into bad doc_reg[%04x]\n",
+				halt_printf("Wr %02x into bad doc_reg[%04x]\n",
 					val, doc_ptr);
-				set_halt(1);
 			}
 			break;
 		default:
-			printf("Writing %02x into bad doc_reg[%04x]\n",
+			halt_printf("Writing %02x into bad doc_reg[%04x]\n",
 				val, doc_ptr);
-			set_halt(1);
 		}
 	}
 

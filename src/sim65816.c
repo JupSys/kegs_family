@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.291 99/07/18 22:35:13 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.294 99/09/13 22:12:36 kentd Exp $";
 
 #include <math.h>
 
@@ -168,8 +168,8 @@ show_pc_log()
 	word32	psr;
 	word32	acc, xreg, yreg;
 	word32	stack, direct;
-	word32	kbank, dbank;
-	word32	pc;
+	word32	dbank;
+	word32	kpc;
 	FILE *pcfile;
 
 	pcfile = fopen("pc_log_out", "wt");
@@ -182,9 +182,8 @@ show_pc_log()
 		(word32)log_pc_end_ptr);
 
 	for(i = 0; i < PC_LOG_LEN; i++) {
-		dbank = (log_pc_ptr->dbank_kbank_pc >> 24) & 0xff;
-		kbank = (log_pc_ptr->dbank_kbank_pc >> 16) & 0xff;
-		pc = log_pc_ptr->dbank_kbank_pc & 0xffff;
+		dbank = (log_pc_ptr->dbank_kpc >> 24) & 0xff;
+		kpc = log_pc_ptr->dbank_kpc & 0xffffff;
 		instr = log_pc_ptr->instr;
 		psr = (log_pc_ptr->psr_acc >> 16) & 0xffff;;
 		acc = log_pc_ptr->psr_acc & 0xffff;;
@@ -208,7 +207,7 @@ show_pc_log()
 			"S:%04x D:%04x B:%02x ", i,
 			acc, xreg, yreg, psr, stack, direct, dbank);
 
-		do_dis(pcfile, kbank, pc, accsize, xsize, 1, instr);
+		do_dis(pcfile, kpc, accsize, xsize, 1, instr);
 		log_pc_ptr++;
 		if(log_pc_ptr >= log_pc_end_ptr) {
 			log_pc_ptr = log_pc_start_ptr;
@@ -326,8 +325,7 @@ get_memory_io(word32 loc, double *cyc_ptr)
 	int	tmp;
 
 	if(loc > 0xffffff) {
-		printf("get_memory_io:%08x out of range==out of here!\n", loc);
-		set_halt(1);
+		halt_printf("get_memory_io:%08x out of range==halt!\n", loc);
 		return 0;
 	}
 
@@ -411,8 +409,7 @@ set_memory(word32 loc, int val, int diff_cycles)
 	if((loc & 0xfef000) == 0xe0c000) {
 		printf("set_memory_special: non-io for addr %08x, %02x, %d\n",
 			loc, val, diff_cycles);
-		printf("tmp: %08x\n", tmp);
-		set_halt(1);
+		halt_printf("tmp: %08x\n", tmp);
 	}
 
 	ptr = (byte *)(tmp & (~0xff));
@@ -486,8 +483,7 @@ set_memory_io(word32 loc, int val, double *cyc_ptr)
 		return;
 	}
 
-	printf("set_memory %06x = %02x, stopping\n", loc, val);
-	set_halt(1);
+	halt_printf("set_memory %06x = %02x, stopping\n", loc, val);
 
 	return;
 }
@@ -506,8 +502,7 @@ check_breakpoints_c(word32 loc)
 	if(count) {
 		for(i = 0; i < count; i++) {
 			if(loc == breakpoints[index].addrs[i]) {
-				printf("Write hit breakpoint %d!\n", i);
-				set_halt(1);
+				halt_printf("Write hit breakpoint %d!\n", i);
 			}
 		}
 	}
@@ -519,13 +514,11 @@ void
 show_regs_act(Engine_reg *eptr)
 {
 	int	tmp_acc, tmp_x, tmp_y, tmp_psw;
-	int	pcbank;
-	int	pc;
+	int	kpc;
 	int	direct_page, dbank;
 	int	stack;
 	
-	pcbank = eptr->kbank;
-	pc = eptr->pc;
+	kpc = eptr->kpc;
 	tmp_acc = eptr->acc;
 	direct_page = eptr->direct;
 	dbank = eptr->dbank;
@@ -537,7 +530,7 @@ show_regs_act(Engine_reg *eptr)
 	tmp_psw = eptr->psr;
 
 	printf("  PC=%02x.%04x A=%04x X=%04x Y=%04x P=%03x",
-		pcbank,pc,tmp_acc,tmp_x,tmp_y,tmp_psw);
+		kpc>>16, kpc & 0xffff ,tmp_acc,tmp_x,tmp_y,tmp_psw);
 	printf(" S=%04x D=%04x B=%02x,cyc:%.3f\n", stack, direct_page,
 		dbank, g_cur_dcycs);
 }
@@ -578,7 +571,6 @@ do_reset()
 
 	engine.psr = (engine.psr | 0x134) & ~(0x08);
 	engine.stack = 0x100 + (engine.stack & 0xff);
-	engine.kbank = 0;
 	engine.dbank = 0;
 	engine.direct = 0;
 	engine.xreg &= 0xff;
@@ -594,7 +586,7 @@ do_reset()
 	setup_pageinfo();
 	change_display_mode(g_cur_dcycs);
 
-	engine.pc = get_memory16_c(0x00fffc, 0);
+	engine.kpc = get_memory16_c(0x00fffc, 0);
 
 	g_stepping = 0;
 
@@ -632,11 +624,10 @@ check_engine_asm_defines()
 	CHECK(eptr, eptr->dbank, ENGINE_REG_DBANK, val1, val2);
 	CHECK(eptr, eptr->direct, ENGINE_REG_DIRECT, val1, val2);
 	CHECK(eptr, eptr->psr, ENGINE_REG_PSR, val1, val2);
-	CHECK(eptr, eptr->pc, ENGINE_REG_PC, val1, val2);
-	CHECK(eptr, eptr->kbank, ENGINE_REG_KBANK, val1, val2);
+	CHECK(eptr, eptr->kpc, ENGINE_REG_KPC, val1, val2);
 
 	pcptr = &pclog;
-	CHECK(pcptr, pcptr->dbank_kbank_pc, LOG_PC_DBANK_KBANK_PC, val1, val2);
+	CHECK(pcptr, pcptr->dbank_kpc, LOG_PC_DBANK_KPC, val1, val2);
 	CHECK(pcptr, pcptr->instr, LOG_PC_INSTR, val1, val2);
 	CHECK(pcptr, pcptr->psr_acc, LOG_PC_PSR_ACC, val1, val2);
 	CHECK(pcptr, pcptr->xreg_yreg, LOG_PC_XREG_YREG, val1, val2);
@@ -883,10 +874,9 @@ check_for_one_event_type(int type)
 		if(ptr->type == type) {
 			count++;
 			if(count != 1) {
-				printf("in check_for_1, type %d found at "
+				halt_printf("in check_for_1, type %d found at "
 					"depth: %d, count: %d, at %f\n",
 					type, depth, count, ptr->dcycs);
-				set_halt(1);
 			}
 		}
 		ptr = ptr->next;
@@ -903,9 +893,8 @@ add_event_entry(double dcycs, int type)
 
 	this_event = g_event_free.next;
 	if(this_event == 0) {
-		printf("Out of queue entries!\n");
+		halt_printf("Out of queue entries!\n");
 		show_all_events();
-		set_halt(1);
 		return;
 	}
 	g_event_free.next = this_event->next;
@@ -914,10 +903,9 @@ add_event_entry(double dcycs, int type)
 	
 	if((dcycs < 0.0) || (dcycs > (g_cur_dcycs + 50*1000*1000.0)) ||
 			((dcycs < g_cur_dcycs) && (type != EV_SCAN_INT))) {
-		printf("add_event: dcycs: %f, type: %05x, cur_dcycs: %f!\n",
+		halt_printf("add_event: dcycs: %f, type:%05x, cur_dcycs: %f!\n",
 			dcycs, type, g_cur_dcycs);
 		dcycs = g_cur_dcycs + 1000.0;
-		set_halt(1);
 	}
 
 	ptr = g_event_start.next;
@@ -980,14 +968,13 @@ remove_event_entry(int type)
 		ptr = ptr->next;
 	}
 
-	printf("remove event_entry: %08x, but not found!\n", type);
+	halt_printf("remove event_entry: %08x, but not found!\n", type);
 	if((type & 0xff) == EV_DOC_INT) {
 		printf("DOC, g_doc_saved_ctl = %02x\n", g_doc_saved_ctl);
 	}
 #ifdef HPUX
 	U_STACK_TRACE();
 #endif
-	set_halt(1);
 	show_all_events();
 
 	return 0.0;
@@ -1005,9 +992,8 @@ add_event_doc(double dcycs, int osc)
 	if(dcycs < g_cur_dcycs) {
 		dcycs = g_cur_dcycs;
 #if 0
-		printf("add_event_doc: dcycs: %f, cur_dcycs: %f\n",
+		halt_printf("add_event_doc: dcycs: %f, cur_dcycs: %f\n",
 			dcycs, g_cur_dcycs);
-		set_halt(1);
 #endif
 	}
 
@@ -1226,14 +1212,13 @@ run_prog()
 
 #if 0
 		if(!g_testing && run_cycles < -2000000) {
-			printf("run_cycles: %d, cycles: %d\n", run_cycles,
+			halt_printf("run_cycles: %d, cycles: %d\n", run_cycles,
 								cycles);
 			printf("this_type: %05x\n", this_type);
 			printf("duff_cycles: %d\n", duff_cycles);
 			printf("start.next->rel_time: %d, type: %05x\n",
 				g_event_start.next->rel_time,
 				g_event_start.next->type);
-			set_halt(1);
 		}
 #endif
 
@@ -1254,8 +1239,7 @@ run_prog()
 				printf("next: %08x, dcycs: %f\n",
 					(word32)g_event_start.next, dcycs);
 				db1 = g_event_start.next;
-				printf("next.dcycs: %f\n", db1->dcycs);
-				set_halt(1);
+				halt_printf("next.dcycs: %f\n", db1->dcycs);
 				break;
 			case EV_SCAN_INT:
 				g_engine_scan_int++;
@@ -1282,19 +1266,17 @@ run_prog()
 		}
 
 		if(g_event_start.next == 0) {
-			printf("MAJOR ERROR...in run_prog, event_start.n=0!\n");
-			set_halt(1);
+			halt_printf("ERROR...run_prog, event_start.n=0!\n");
 		}
 
 #if 0
 		if(!g_testing && g_event_start.next->rel_time > 2000000) {
 			printf("Z:start.next->rel_time: %d, duff_cycles: %d\n",
 				g_event_start.next->rel_time, duff_cycles);
-			printf("Zrun_cycles:%d, cycles:%d\n", run_cycles,
+			halt_printf("Zrun_cycles:%d, cycles:%d\n", run_cycles,
 						cycles);
 
 			show_all_events();
-			set_halt(1);
 		}
 #endif
 
@@ -1307,7 +1289,7 @@ run_prog()
 	}
 
 	if(!g_testing) {
-		printf("leaving run_prog\n");
+		printf("leaving run_prog, halt_sim:%d\n", halt_sim);
 	}
 
 	x_auto_repeat_on(0);
@@ -1325,38 +1307,37 @@ remove_irq()
 {
 	g_irq_pending--;
 	if(g_irq_pending < 0) {
-		printf("remove_irq: g_irq_pending: %d\n", g_irq_pending);
-		set_halt(1);
+		halt_printf("remove_irq: g_irq_pending: %d\n", g_irq_pending);
 	}
 }
 
 void
 take_irq(int is_it_brk)
 {
-	int	new_pc;
+	word32	new_kpc;
 	word32	va;
 
 	irq_printf("Taking irq, at: %02x/%04x, psw: %02x, dcycs: %f\n",
-			engine.kbank, engine.pc, engine.psr, g_cur_dcycs);
+			engine.kpc>>16, engine.kpc & 0xffff, engine.psr,
+			g_cur_dcycs);
 
 	g_num_irq++;
 	if(g_wait_pending) {
 		/* step over WAI instruction */
-		engine.pc = (engine.pc + 1) & 0xffff;
+		engine.kpc++;
 		g_wait_pending = 0;
 	}
 
 	if(g_irq_pending < 0) {
-		printf("g_irq_pending: %d!\n", g_irq_pending);
-		set_halt(1);
+		halt_printf("g_irq_pending: %d!\n", g_irq_pending);
 	}
 
 	if(engine.psr & 0x100) {
 		/* Emulation */
-		set_memory_c(engine.stack, (engine.pc >> 8) & 0xff, 0);
+		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff, 0);
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
-		set_memory_c(engine.stack, engine.pc & 0xff, 0);
+		set_memory_c(engine.stack, engine.kpc & 0xff, 0);
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
 		set_memory_c(engine.stack,
@@ -1372,13 +1353,13 @@ take_irq(int is_it_brk)
 
 	} else {
 		/* native */
-		set_memory_c(engine.stack, (engine.kbank) & 0xff, 0);
+		set_memory_c(engine.stack, (engine.kpc >> 16) & 0xff, 0);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		set_memory_c(engine.stack, (engine.pc >> 8) & 0xff, 0);
+		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff, 0);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		set_memory_c(engine.stack, engine.pc & 0xff, 0);
+		set_memory_c(engine.stack, engine.kpc & 0xff, 0);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
 		set_memory_c(engine.stack, engine.psr & 0xff, 0);
@@ -1400,13 +1381,12 @@ take_irq(int is_it_brk)
 
 	}
 
-	new_pc = get_memory_c(va, 0);
-	new_pc = new_pc + (get_memory_c(va+1, 0) << 8);
+	new_kpc = get_memory_c(va, 0);
+	new_kpc = new_kpc + (get_memory_c(va+1, 0) << 8);
 
 	engine.psr = ((engine.psr & 0x1f3) | 0x4);
-	engine.kbank = 0;
 
-	engine.pc = new_pc;
+	engine.kpc = new_kpc;
 	HALT_ON(HALT_ON_IRQ, "Halting on IRQ\n");
 
 }
@@ -1593,7 +1573,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.53");
+		update_status_line(6, "KEGS v0.54");
 
 		g_status_refresh_needed = 1;
 
@@ -1765,8 +1745,8 @@ do_scan_int()
 	g_scan_int_events = 0;
 
 	if(c023_scan_int) {
-		printf("took scan int, but c023_scan_int: %d\n", c023_scan_int);
-		set_halt(1);
+		halt_printf("took scan int, but c023_scan_int: %d\n",
+							c023_scan_int);
 	} else {
 		c023_scan_int = 1;
 		c023_vgc_int = 1;
@@ -1801,9 +1781,8 @@ check_scan_line_int(double dcycs, int cur_video_line)
 
 	start = cur_video_line;
 	if(start < 0) {
-		printf("check_scan_line_int: cur_video_line: %d\n",
+		halt_printf("check_scan_line_int: cur_video_line: %d\n",
 			cur_video_line);
-		set_halt(1);
 		start = 0;
 	}
 	
@@ -1811,9 +1790,8 @@ check_scan_line_int(double dcycs, int cur_video_line)
 		i = line;
 
 		if(i < 0 || i >= 200) {
-			printf("check_new_scan_int: i:%d, line:%d, start:%d\n",
+			halt_printf("check_new_scan_int:i:%d, line:%d, st:%d\n",
 				i, line, start);
-			set_halt(1);
 			i = 0;
 		}
 		if(g_slow_memory_ptr[0x19d00+i] & 0x40) {
@@ -1890,8 +1868,7 @@ handle_action(word32 ret)
 			g_irq_pending);
 		break;
 	default:
-		set_halt(1);
-		printf("Unknown special action: %08x!\n", ret);
+		halt_printf("Unknown special action: %08x!\n", ret);
 	}
 
 }
@@ -1900,16 +1877,13 @@ handle_action(word32 ret)
 void
 do_add_dec_8(word32 ret)
 {
-	printf("do_add_dec_8 called, ret: %08x\n", ret);
-	set_halt(halt_on_decimal_ops);
+	halt_printf("do_add_dec_8 called, ret: %08x\n", ret);
 }
 
 void
 do_add_dec_16(word32 ret)
 {
-	printf("do_add_dec_16 called, ret: %08x\n", ret);
-	set_halt(halt_on_decimal_ops);
-	set_halt(1);
+	halt_printf("do_add_dec_16 called, ret: %08x\n", ret);
 }
 #endif
 
@@ -1918,18 +1892,17 @@ do_break(word32 ret)
 {
 	if(!g_testing) {
 		printf("I think I got a break, second byte: %02x!\n", ret);
-		printf("pcbank: %x, pc: %x\n", engine.kbank, engine.pc);
+		printf("kpc: %06x\n", engine.kpc);
 	}
 
-	set_halt(1);
+	halt_printf("do_break, kpc: %06x\n", engine.kpc);
 	enter_debug = 1;
 }
 
 void
 do_cop(word32 ret)
 {
-	printf("COP instr %02x!\n", ret);
-	set_halt(1);
+	halt_printf("COP instr %02x!\n", ret);
 	fflush(stdout);
 }
 
@@ -1943,16 +1916,14 @@ do_mvn(word32 banks)
 	int	i;
 	int	val;
 
-	set_halt(1);
-	printf("In MVN...just quitting\n");
+	halt_printf("In MVN...just quitting\n");
 	return;
 	printf("MVN instr with %04x, cycles: %08x\n", banks, engine.cycles);
 	src_bank = banks >> 8;
 	dest_bank = banks & 0xff;
 	printf("psr: %03x\n", engine.psr);
 	if((engine.psr & 0x30) != 0) {
-		printf("MVN in non-native mode unimplemented!\n");
-		set_halt(1);
+		halt_printf("MVN in non-native mode unimplemented!\n");
 	}
 
 	dest = dest_bank << 16 | engine.yreg;
@@ -1970,8 +1941,8 @@ do_mvn(word32 banks)
 	engine.acc = 0xffff;
 	engine.yreg = dest & 0xffff;
 	engine.xreg = src & 0xffff;
-	engine.pc = (engine.pc + 3) & 0xffff;
-	printf("move done. dbank: %02x, acc: %04x, y: %04x, x: %04x, num: %08x\n",
+	engine.kpc = (engine.kpc + 3);
+	printf("move done. db: %02x, acc: %04x, y: %04x, x: %04x, num: %08x\n",
 		engine.dbank, engine.acc, engine.yreg, engine.xreg, num);
 }
 #endif
@@ -1979,30 +1950,24 @@ do_mvn(word32 banks)
 void
 do_wdm()
 {
-	printf("do_wdm!\n");
-	set_halt(1);
+	halt_printf("do_wdm!\n");
 }
 
 void
 do_wai()
 {
-	printf("do_wai!\n");
-	set_halt(1);
+	halt_printf("do_wai!\n");
 }
 
 void
 do_stp()
 {
-	printf("Hit do_stp at addr: %02x.%04x\n", engine.kbank, engine.pc);
-	set_halt(1);
+	halt_printf("Hit do_stp at addr: %06x\n", engine.kpc);
 }
-
-
 
 void
 size_fail(int val, word32 v1, word32 v2)
 {
-	printf("Size failure, val: %08x, %08x %08x\n", val, v1, v2);
-	set_halt(1);
+	halt_printf("Size failure, val: %08x, %08x %08x\n", val, v1, v2);
 }
 

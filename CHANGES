@@ -1,4 +1,19 @@
 
+Changes in KEGS v0.54 since v0.53 (10/10/99)
+- Add support for Out Of This World's direct reading of ADB RAM loc 0xb to
+	get key status.  This lets shift/control work in OOTW.
+- Code simplification to get rid of most set_halt() calls and use halt_printf.
+- Speed improvement: track kpc (merged kbank and pc in one 32 bit variable)
+	which makes the inner loop faster.  This does make KEGS not
+	accurately model a 65816 code crossing bank boundaries, but just
+	about every other emulator gets it wrong, and the speed improvement
+	is 5-10%.  And I don't know of any code which relies on it
+	working correctly.
+- Fix to allow better GS/OS compatibility: after each smartport call,
+	set 0x7f8 = 0xc7.
+- Fixed ZipGS emulation bug where KEGS was not re-locking Zip at the right
+	time, which made double-hires not work after booting GS/OS.
+
 Changes in KEGS v0.53 since v0.52 (8/3/99)
 - Move all the "fcycles" timing calculations to use double instead of float.
 - Fix display shadowing bug reported by "phoenyx" which caused the text

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.92 99/05/30 22:33:50 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.93 99/09/06 20:49:09 kentd Exp $";
 
 #include "defc.h"
 
@@ -164,8 +164,7 @@ iwm_init()
 		}
 		from_disk_byte_valid = 1;
 	} else {
-		printf("iwm_init called twice!\n");
-		set_halt(1);
+		halt_printf("iwm_init called twice!\n");
 	}
 
 	iwm_reset();
@@ -253,9 +252,8 @@ iwm_flush_disk_to_unix(Disk *dsk)
 		if(ret != 1 && ret != 0) {
 			printf("iwm_flush_disk_to_unix ret: %d, cannot write "
 				"image to unix\n", ret);
-			printf("Adjusting image not to write through!\n");
+			halt_printf("Adjusting image not to write through!\n");
 			dsk->write_through_to_unix = 0;
-			set_halt(1);
 			break;
 		}
 
@@ -264,9 +262,7 @@ iwm_flush_disk_to_unix(Disk *dsk)
 			continue;
 		}
 		if((j & 3) != 0 && dsk->disk_525) {
-			printf("Valid data on a non-whole track: %03x\n",
-				j);
-			set_halt(1);
+			halt_printf("Valid data on a non-whole trk: %03x\n", j);
 			continue;
 		}
 
@@ -276,16 +272,14 @@ iwm_flush_disk_to_unix(Disk *dsk)
 		unix_pos = dsk->tracks[j].unix_pos;
 		unix_len = dsk->tracks[j].unix_len;
 		if(unix_pos < 0 || unix_len < 0x1000) {
-			printf("Disk: %s trk: %d, unix_pos: %08x, len: %08x\n",
+			halt_printf("Disk:%s trk:%d, unix_pos:%08x, len:%08x\n",
 				dsk->name_ptr, j, unix_pos, unix_len);
-			set_halt(1);
 			break;
 		}
 
 		ret = lseek(dsk->fd, unix_pos, SEEK_SET);
 		if(ret != unix_pos) {
-			printf("lseek 525: %08x, errno: %d\n", ret, errno);
-			set_halt(1);
+			halt_printf("lseek 525: %08x, errno: %d\n", ret, errno);
 		}
 
 		ret = write(dsk->fd, &(buffer[0]), unix_len);
@@ -296,9 +290,8 @@ iwm_flush_disk_to_unix(Disk *dsk)
 	}
 
 	if(num_dirty == 0) {
-		printf("Drive %s was dirty, but no track was dirty!\n",
+		halt_printf("Drive %s was dirty, but no track was dirty!\n",
 			dsk->name_ptr);
-		set_halt(1);
 	}
 
 }
@@ -348,9 +341,8 @@ iwm_vbl_update()
 
 		ret = stat(DISK_CONF_FILE, &stat_buf);
 		if(ret != 0) {
-			printf("IWM: stat of disk_conf ret: %d, errno: %d\n",
+			halt_printf("IWM: stat of disk_conf ret:%d, errno:%d\n",
 				ret, errno);
-			set_halt(1);
 		} else {
 			mtime = stat_buf.st_mtime;
 			if(mtime > g_disk_conf_mtime) {
@@ -590,8 +582,7 @@ iwm525_phase_change(int drive, int phase)
 	if((qtr_track & 7) == 0) {
 		/* check for just access phase 0 */
 		if(last_phase != 0 ) {
-			printf("last_phase: %d!\n", last_phase);
-			set_halt(1);
+			halt_printf("last_phase: %d!\n", last_phase);
 		}
 	}
 }
@@ -682,8 +673,7 @@ iwm_read_status35(double dcycs)
 		case 0x0d:	/* false read when ejecting disk */
 			return 1;
 		case 0x0e:	/* tachometer */
-			printf("Reading tachometer!\n");
-			set_halt(1);
+			halt_printf("Reading tachometer!\n");
 			return (((int)dcycs) & 1);
 			break;
 		case 0x0f:	/* drive installed? */
@@ -695,8 +685,7 @@ iwm_read_status35(double dcycs)
 			return 0;
 			break;
 		default:
-			printf("Read 3.5 status, state: %02x\n", state);
-			set_halt(1);
+			halt_printf("Read 3.5 status, state: %02x\n", state);
 			return 1;
 		}
 	} else {
@@ -760,13 +749,11 @@ iwm_do_action35(double dcycs)
 		case 0x0b: /* hacks to allow AE 1.6MB driver to not crash me */
 			break;
 		default:
-			printf("Do 3.5 action, state: %02x\n", state);
-			set_halt(1);
+			halt_printf("Do 3.5 action, state: %02x\n", state);
 			return;
 		}
 	} else {
-		printf("Set 3.5 status with drive off!\n");
-		set_halt(1);
+		halt_printf("Set 3.5 status with drive off!\n");
 		return;
 	}
 }
@@ -896,16 +883,14 @@ read_iwm(int loc, double dcycs)
 			}
 			break;
 		case 0x03:	/* q7 = 1, q6 = 1 */
-			printf("read iwm state 3!\n");
-			set_halt(1);
+			halt_printf("read iwm state 3!\n");
 			return 0;
 		break;
 		}
 		
 	}
-	printf("Got to end of read_iwm, loc: %02x!\n", loc);
+	halt_printf("Got to end of read_iwm, loc: %02x!\n", loc);
 
-	set_halt(1);
 	return 0;
 }
 
@@ -950,8 +935,7 @@ write_iwm(int loc, int val, double dcycs)
 				iwm.iwm_mode = val;
 				if(val != 0 && val != 0x0f && val != 0x07 &&
 						val != 0x04 && val != 0x0b) {
-					printf("set iwm_mode: %02x!\n", val);
-					set_halt(1);
+					halt_printf("set iwm_mode:%02x!\n",val);
 				}
 			}
 		} else {
@@ -974,9 +958,8 @@ write_iwm(int loc, int val, double dcycs)
 		return;
 	}
 
-	printf("Got to end of write_iwm, loc: %02x, val: %02x\n", loc, val);
+	halt_printf("Got to end of write_iwm, loc:%02x, val: %02x\n", loc, val);
 
-	set_halt(1);
 	return;
 
 }
@@ -1678,10 +1661,9 @@ disk_track_to_unix(Disk *dsk, int qtr_track, byte *outbuf)
 	trk->track_dirty = 0;
 
 	if((qtr_track & 3) && disk_525) {
-		printf("You wrote to phase %02x!  Can't write back to unix!\n",
+		halt_printf("You wrote to phase %02x!  Can't wr bk to unix!\n",
 			qtr_track);
 		dsk->write_through_to_unix = 0;
-		set_halt(1);
 		return -1;
 	}
 
@@ -2261,16 +2243,14 @@ disk_nib_out(Disk *dsk, byte val, int size)
 			pos = 0;
 		}
 	} else if(overflow_size < -64) {
-		printf("overflow_size: %03x, pos: %02x\n", overflow_size, pos);
-		set_halt(1);
+		halt_printf("overflow_size:%03x, pos:%02x\n",overflow_size,pos);
 	}
 
 	trk->dsk->nib_pos = pos;
 	trk->overflow_size = overflow_size;
 
 	if((val & 0x80) == 0 || size < 8) {
-		printf("disk_nib_out, wrote %02x, size: %d\n", val, size);
-		set_halt(1);
+		halt_printf("disk_nib_out, wrote %02x, size: %d\n", val, size);
 	}
 }
 
@@ -2863,8 +2843,7 @@ eject_disk(Disk *dsk)
 	int	i;
 
 	if(iwm.motor_on) {
-		printf("Trying eject dsk: %s, but motor_on!\n", dsk->name_ptr);
-		set_halt(1);
+		halt_printf("Try eject dsk:%s, but motor_on!\n", dsk->name_ptr);
 	}
 
 	iwm_flush_disk_to_unix(dsk);

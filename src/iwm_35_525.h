@@ -1,6 +1,6 @@
 
 #ifdef INCLUDE_IWM_RCSID_C
-const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.7 99/02/08 23:50:34 kentd Exp $";
+const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.8 99/09/06 20:49:43 kentd Exp $";
 #endif
 
 int
@@ -140,9 +140,8 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 		size = trk->nib_area[pos];
 		dcycs_passed = dcycs - dcycs_last_read;
 		if(dcycs_passed < 0.0 || dcycs_passed > 64.0) {
-			printf("skip, last_read:%f, dcycs:%f, dcycs_pass:%f\n",
+			halt_printf("skip, last_read:%f, dcycs:%f, dcyc_p:%f\n",
 				dcycs_last_read, dcycs, dcycs_passed);
-			set_halt(1);
 		}
 
 		while(size == 0) {
@@ -167,10 +166,9 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 		shift = (cycs_passed) >> (1 + IWM_DISK_525);
 		ret = trk->nib_area[pos+1] >> (size - shift);
 		if(ret & 0x80) {
-			printf("Bad shift in partial read: %02x, but "
+			halt_printf("Bad shift in partial read: %02x, but "
 				"c_pass:%f, this_nib:%f, shift: %d, size: %d\n",
 				ret, dcycs_passed, dcycs_this_nib, shift, size);
-			set_halt(1);
 		}
 	} else {
 		/* whole thing */
@@ -186,8 +184,7 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 
 	dsk->nib_pos = pos;
 	if(pos < 0 || pos > track_len) {
-		printf("I just set nib_pos: %d!\n", pos);
-		set_halt(1);
+		halt_printf("I just set nib_pos: %d!\n", pos);
 	}
 
 #if 0
@@ -211,9 +208,8 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 	int	prev_bits;
 
 	if(dsk->fd < 0) {
-		printf("Tried to write to type: %d, drive: %d, fd: %d!\n",
+		halt_printf("Tried to write to type: %d, drive: %d, fd: %d!\n",
 			IWM_DISK_525, dsk->drive, dsk->fd);
-		set_halt(1);
 		return;
 	}
 
@@ -301,9 +297,8 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 	iwm.previous_write_val = val;
 	iwm.previous_write_bits = bits_read;
 	if(bits_read < 0) {
-		printf("iwm, bits_read:%d, val:%08x, prev:%02x, prevbit:%d\n",
+		halt_printf("iwm, bits_rd:%d, val:%08x, prev:%02x, prevb:%d\n",
 			bits_read, val, prev_val, prev_bits);
-		set_halt(1);
 	}
 
 	sdiff = dcycs - dcycs_last_read;

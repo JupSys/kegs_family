@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.27 99/05/03 22:06:21 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.28 99/09/06 20:49:51 kentd Exp $";
 
 #include "defc.h"
 
@@ -233,8 +233,7 @@ do_scc_event(int type, double dcycs)
 		scc_ptr->rx_event_pending = 0;
 		scc_maybe_rx_event(port, dcycs);
 	} else {
-		printf("do_scc_event: %08x!\n", type);
-		set_halt(1);
+		halt_printf("do_scc_event: %08x!\n", type);
 	}
 	return;
 }
@@ -365,8 +364,7 @@ scc_read_reg(int port, double dcycs)
 			ret = scc_ptr->reg[2];
 		} else {
 
-			printf("Read of RR2B...stopping\n");
-			set_halt(1);
+			halt_printf("Read of RR2B...stopping\n");
 			ret = 0;
 #if 0
 			ret = scc_stat[0].reg[2];
@@ -410,10 +408,9 @@ scc_read_reg(int port, double dcycs)
 		ret = scc_ptr->reg[12];
 		break;
 	default:
-		printf("Tried reading c03%x with regnum: %d!\n", 8+port,
+		halt_printf("Tried reading c03%x with regnum: %d!\n", 8+port,
 			regnum);
 		ret = 0;
-		set_halt(1);
 	}
 
 	scc_ptr->reg_ptr = 0;
@@ -486,9 +483,8 @@ scc_write_reg(int port, word32 val, double dcycs)
 			break;
 		case 0x4:	/* enable int on next rx char */
 		default:
-			printf("Write c03%x to wr0 of %02x, bad cmd code:%x!\n",
+			halt_printf("Wr c03%x to wr0 of %02x, bad cmd cd:%x!\n",
 				8+port, val, tmp1);
-			set_halt(1);
 		}
 		tmp1 = (val >> 6) & 0x3;
 		switch(tmp1) {
@@ -496,8 +492,7 @@ scc_write_reg(int port, word32 val, double dcycs)
 			break;
 		case 0x1:	/* reset rx crc */
 		case 0x2:	/* reset tx crc */
-			printf("Write c03%x to wr0 of %02x!\n", 8+port, val);
-			set_halt(1);
+			halt_printf("Wr c03%x to wr0 of %02x!\n", 8+port, val);
 			break;
 		case 0x3:	/* reset tx underrun/eom latch */
 			/* if no extern status pending, or being reset now */
@@ -519,40 +514,35 @@ scc_write_reg(int port, word32 val, double dcycs)
 	case 3:
 		/* wr3 */
 		if((val & 0xde) != 0xc0) {
-			printf("Write c03%x to wr3 of %02x!\n", 8+port, val);
-			set_halt(1);
+			halt_printf("Wr c03%x to wr3 of %02x!\n", 8+port, val);
 		}
 		scc_ptr->reg[regnum] = val;
 		return;
 	case 4:
 		/* wr4 */
 		if((val & 0x30) != 0x00 || (val & 0x0c) == 0) {
-			printf("Write c03%x to wr4 of %02x!\n", 8+port, val);
-			set_halt(1);
+			halt_printf("Wr c03%x to wr4 of %02x!\n", 8+port, val);
 		}
 		scc_ptr->reg[regnum] = val;
 		return;
 	case 5:
 		/* wr5 */
 		if((val & 0x75) != 0x60) {
-			printf("Write c03%x to wr5 of %02x!\n", 8+port, val);
-			set_halt(1);
+			halt_printf("Wr c03%x to wr5 of %02x!\n", 8+port, val);
 		}
 		scc_ptr->reg[regnum] = val;
 		return;
 	case 6:
 		/* wr6 */
 		if(val != 0) {
-			printf("Write c03%x to wr6 of %02x!\n", 8+port, val);
-			set_halt(1);
+			halt_printf("Wr c03%x to wr6 of %02x!\n", 8+port, val);
 		}
 		scc_ptr->reg[regnum] = val;
 		return;
 	case 7:
 		/* wr7 */
 		if(val != 0) {
-			printf("Write c03%x to wr7 of %02x!\n", 8+port, val);
-			set_halt(1);
+			halt_printf("Wr c03%x to wr7 of %02x!\n", 8+port, val);
 		}
 		scc_ptr->reg[regnum] = val;
 		return;
@@ -572,8 +562,7 @@ scc_write_reg(int port, word32 val, double dcycs)
 		}
 		if((val & 0x35) != 0x00) {
 			printf("Write c03%x to wr9 of %02x!\n", 8+port, val);
-			printf("val & 0x35: %02x\n", (val & 0x35));
-			set_halt(1);
+			halt_printf("val & 0x35: %02x\n", (val & 0x35));
 		}
 		old_val = scc_stat[0].reg[9];
 		scc_stat[0].reg[regnum] = val;
@@ -583,8 +572,7 @@ scc_write_reg(int port, word32 val, double dcycs)
 	case 10:
 		/* wr10 */
 		if((val & 0xff) != 0x00) {
-			printf("Write c03%x to wr10 of %02x!\n", 8+port, val);
-			set_halt(1);
+			halt_printf("Wr c03%x to wr10 of %02x!\n", 8+port, val);
 		}
 		scc_ptr->reg[regnum] = val;
 		return;
@@ -614,13 +602,11 @@ scc_write_reg(int port, word32 val, double dcycs)
 			val |= SCC_R14_DPLL_SOURCE_BRG;
 			break;
 		default:
-			printf("Write c03%x to wr14 of %02x, bad dpll code!\n",
+			halt_printf("Wr c03%x to wr14 of %02x, bad dpll cd!\n",
 				8+port, val);
-			set_halt(1);
 		}
 		if((val & 0x0c) != 0x0) {
-			printf("Write c03%x to wr14 of %02x!\n", 8+port, val);
-			set_halt(1);
+			halt_printf("Wr c03%x to wr14 of %02x!\n", 8+port, val);
 		}
 		scc_ptr->reg[regnum] = val;
 		scc_regen_clocks(port);
@@ -642,8 +628,7 @@ scc_write_reg(int port, word32 val, double dcycs)
 		scc_evaluate_ints(port);
 		return;
 	default:
-		printf("Write c03%x to wr%d of %02x!\n", 8+port, regnum, val);
-		set_halt(1);
+		halt_printf("Wr c03%x to wr%d of %02x!\n", 8+port, regnum, val);
 		return;
 	}
 }
@@ -666,8 +651,7 @@ scc_maybe_br_event(int port, double dcycs)
 
 	br_dcycs = scc_ptr->br_dcycs;
 	if(br_dcycs < 1.0) {
-		printf("br_dcycs: %f!\n", br_dcycs);
-		set_halt(1);
+		halt_printf("br_dcycs: %f!\n", br_dcycs);
 	}
 
 	scc_ptr->br_event_pending = 1;
@@ -860,8 +844,7 @@ scc_add_to_readbuf(int port, word32 val, double dcycs)
 				scc_ptr->port, val,
 				in_wrptr, in_wrptr_next, in_rdptr);
 	} else {
-		printf("scc inbuf overflow port %d\n", scc_ptr->port);
-		set_halt(1);
+		halt_printf("scc inbuf overflow port %d\n", scc_ptr->port);
 	}
 
 	scc_maybe_rx_event(port, dcycs);
@@ -898,8 +881,7 @@ scc_add_to_writebuf(int port, word32 val, double dcycs)
 		scc_printf("scc wrbuf port %d had char 0x%02x added\n",
 			scc_ptr->port, val);
 	} else {
-		printf("scc outbuf overflow port %d\n", scc_ptr->port);
-		set_halt(1);
+		halt_printf("scc outbuf overflow port %d\n", scc_ptr->port);
 	}
 }
 

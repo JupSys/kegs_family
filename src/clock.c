@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.17 99/05/03 22:02:10 kentd Exp $";
+const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.18 99/09/06 20:47:18 kentd Exp $";
 
 #include "defc.h"
 #include <time.h>
@@ -80,8 +80,7 @@ micro_sleep(double dtime)
 		return 0;
 	}
 	if(dtime >= 1.0) {
-		printf("micro_sleep called with %f!!\n", dtime);
-		set_halt(1);
+		halt_printf("micro_sleep called with %f!!\n", dtime);
 		return -1;
 	}
 
@@ -262,9 +261,8 @@ do_clock_data()
 				g_clk_reg1 = (c033_data >> 2) & 0xf;
 				break;
 			default:
-				printf("Bad c033_data in CLK_IDLE: %02x\n",
+				halt_printf("Bad c033_data in CLK_IDLE: %02x\n",
 					c033_data);
-				set_halt(1);
 			}
 		} else {
 			printf("clk read from IDLE mode!\n");
@@ -280,15 +278,13 @@ do_clock_data()
 				g_clk_reg1 |= ((c033_data >> 2) & 0x1f);
 				g_clk_mode = CLK_BRAM1;
 			} else {
-				printf("CLK_BRAM2: c033_data: %02x!\n",
+				halt_printf("CLK_BRAM2: c033_data: %02x!\n",
 						c033_data);
 				g_clk_mode = CLK_IDLE;
-				set_halt(1);
 			}
 		} else {
-			printf("CLK_BRAM2: clock read!\n");
+			halt_printf("CLK_BRAM2: clock read!\n");
 			g_clk_mode = CLK_IDLE;
-			set_halt(1);
 		}
 		break;
 	case CLK_BRAM1:
@@ -300,13 +296,11 @@ do_clock_data()
 				clk_printf("Reading BRAM loc %02x: %02x\n",
 					g_clk_reg1, c033_data);
 			} else {
-				printf("CLK_BRAM1: said write, now reading\n");
-				set_halt(1);
+				halt_printf("CLK_BRAM1: said wr, now read\n");
 			}
 		} else {
 			if(g_clk_read) {
-				printf("CLK_BRAM1: said read, now writing\n");
-				set_halt(1);
+				halt_printf("CLK_BRAM1: said rd, now write\n");
 			} else {
 				/* Yup, write */
 				clk_printf("Writing BRAM loc %02x with %02x\n",
@@ -321,9 +315,8 @@ do_clock_data()
 					}
 					len = write(bram_fd, bram, 256);
 					if(len != 256) {
-						printf("bram wr fail! %d %d\n",
-							len, errno);
-						set_halt(1);
+						halt_printf("bram wr fail! %d "
+							"%d\n", len, errno);
 					}
 				}
 			}
@@ -333,8 +326,7 @@ do_clock_data()
 	case CLK_TIME:
 		if(read) {
 			if(g_clk_read == 0) {
-				printf("Reading time, but in set mode!\n");
-				set_halt(1);
+				halt_printf("Reading time, but in set mode!\n");
 			}
 			c033_data = (g_clk_cur_time >> (g_clk_reg1 * 8)) & 0xff;
 			clk_printf("Returning time byte %d: %02x\n",
@@ -342,8 +334,7 @@ do_clock_data()
 		} else {
 			/* Write */
 			if(g_clk_read) {
-				printf("Write time, but in read mode!\n");
-				set_halt(1);
+				halt_printf("Write time, but in read mode!\n");
 			}
 			clk_printf("Writing TIME loc %d with %02x\n",
 				g_clk_reg1, c033_data);
@@ -377,16 +368,14 @@ do_clock_data()
 				}
 				break;
 			default:
-				printf("Writing internal reg: %02x with %02x\n",
+				halt_printf("Writing int reg: %02x with %02x\n",
 					g_clk_reg1, c033_data);
-				set_halt(1);
 			}
 		}
 		g_clk_mode = CLK_IDLE;
 		break;
 	default:
-		printf("clk mode: %d unknown!\n", g_clk_mode);
-		set_halt(1);
+		halt_printf("clk mode: %d unknown!\n", g_clk_mode);
 		g_clk_mode = CLK_IDLE;
 		break;
 	}

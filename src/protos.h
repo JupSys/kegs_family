@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.129 99/07/12 23:51:02 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.131 99/09/06 20:49:32 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -133,8 +133,9 @@ void do_debug_list(void);
 void load_roms(void);
 void do_debug_unix(void);
 void do_debug_load(void);
-int do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize, int op_provided, word32 instr);
-void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, char *string);
+int do_dis(FILE *outfile, word32 kpc, int accsize, int xsize, int op_provided, word32 instr);
+void show_line(FILE *outfile, word32 kaddr, word32 operand, int size, char *string);
+void halt_printf(const char *fmt, ...);
 
 /* scc.c */
 void scc_init(void);

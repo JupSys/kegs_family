@@ -15,7 +15,7 @@
 	.data
 	.export rcsdif_defs_h,data
 rcsdif_defs_h
-	.stringz "@(#)$Header: defs.h,v 1.17 99/07/12 23:49:54 kentd Exp $"
+	.stringz "@(#)$Header: defs.h,v 1.19 99/09/13 21:39:42 kentd Exp $"
 	.code
 #endif
 
@@ -31,12 +31,14 @@ direct		.reg	%r8
 neg		.reg	%r9
 zero		.reg	%r10
 psr		.reg	%r11
-pc		.reg	%r12
+kpc		.reg	%r12
+const_fd	.reg	%r13
+instr		.reg	%r14
 #if 0
 cycles		.reg	%r13
+kbank		.reg	%r14
 #endif
 
-kbank		.reg	%r14
 page_info_ptr	.reg	%r15
 inst_tab_ptr	.reg	%r16
 fcycles_stop_ptr .reg	%r17
@@ -46,7 +48,7 @@ scratch1	.reg	%r19
 scratch2	.reg	%r20
 scratch3	.reg	%r21
 scratch4	.reg	%r22
-instr		.reg	%r23		; arg3
+;instr		.reg	%r23		; arg3
 
 fcycles		.reg	%fr12
 fr_plus_1	.reg	%fr13

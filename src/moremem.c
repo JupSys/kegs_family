@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.205 99/07/19 00:44:38 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.207 99/09/18 11:35:41 kentd Exp $";
 
 #include "defc.h"
 
@@ -126,13 +126,11 @@ int	c046_system_irq_status = 0;
 
 
 #define UNIMPL_READ	\
-	printf("UNIMP READ to addr %08x\n", loc);	\
-	set_halt(1);	\
+	halt_printf("UNIMP READ to addr %08x\n", loc);	\
 	return 0;
 
 #define UNIMPL_WRITE	\
-	printf("UNIMP WRITE to addr %08x, val: %04x\n", loc, val);	\
-	set_halt(1);	\
+	halt_printf("UNIMP WRITE to addr %08x, val: %04x\n", loc, val);	\
 	return;
 
 void
@@ -508,8 +506,7 @@ fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 				/*   just map in ROM */
 				SET_PAGE_INFO_RD(j, rom_inc);
 #if 0
-				printf("c8000-cfff space not map!\n");
-				set_halt(1);
+				halt_printf("c8000-cfff space not map!\n");
 #endif
 			}
 		}
@@ -933,8 +930,7 @@ set_statereg(double dcycs, int val)
 	}
 
 	if(xor & 0x02) {
-		printf("just set rombank = %d\n", ROMB);
-		set_halt(1);
+		halt_printf("just set rombank = %d\n", ROMB);
 	}
 
 	if(xor & 0x01) {
@@ -1067,8 +1063,7 @@ update_shadow_reg(int val)
 	/* eddy@cs.ucdavis.edu has a demo which write bit 7, but just */
 	/*  ignore it */
 	if((val & 0x80) != 0) {
-		printf("shadow_reg: %02x is illegal!\n", val);
-		set_halt(1);
+		halt_printf("shadow_reg: %02x is illegal!\n", val);
 	}
 #endif
 
@@ -1255,7 +1250,6 @@ io_read(word32 loc, double *cyc_ptr)
 #if 0
 			printf("Reading c02a...returning 0\n");
 #endif
-			set_halt(halt_on_c02a);
 			return 0;
 		case 0x2b: /* 0xc02b */
 			return c02b_val;
@@ -1323,8 +1317,7 @@ io_read(word32 loc, double *cyc_ptr)
 				(c041_en_move_ints << 1) + (c041_en_mouse) );
 			return tmp;
 		case 0x45: /* 0xc045 */
-			printf("Mega II mouse read: c045\n");
-			set_halt(1);
+			halt_printf("Mega II mouse read: c045\n");
 			return 0;
 		case 0x46: /* 0xc046 */
 			tmp = c046_mouse_last;
@@ -1445,16 +1438,14 @@ io_read(word32 loc, double *cyc_ptr)
 			return 0;
 		case 0x5d: /* 0xc05d */
 			if(g_zipgs_unlock >= 4) {
-				printf("Reading ZipGS $c05d!\n");
-				set_halt(1);
+				halt_printf("Reading ZipGS $c05d!\n");
 			} else {
 				annunc_2 = 1;
 			}
 			return 0;
 		case 0x5e: /* 0xc05e */
 			if(g_zipgs_unlock >= 4) {
-				printf("Reading ZipGS $c05e!\n");
-				set_halt(1);
+				halt_printf("Reading ZipGS $c05e!\n");
 			} else if(g_cur_a2_stat & ALL_STAT_ANNUNC3) {
 				g_cur_a2_stat &= (~ALL_STAT_ANNUNC3);
 				change_display_mode(dcycs);
@@ -1462,8 +1453,7 @@ io_read(word32 loc, double *cyc_ptr)
 			return 0;
 		case 0x5f: /* 0xc05f */
 			if(g_zipgs_unlock >= 4) {
-				printf("Reading ZipGS $c05f!\n");
-				set_halt(1);
+				halt_printf("Reading ZipGS $c05f!\n");
 			} else if((g_cur_a2_stat & ALL_STAT_ANNUNC3) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_ANNUNC3);
 				change_display_mode(dcycs);
@@ -1625,8 +1615,7 @@ io_read(word32 loc, double *cyc_ptr)
 		UNIMPL_READ;
 	}
 
-	printf("io_read: hit end, loc: %06x\n", loc);
-	set_halt(1);
+	halt_printf("io_read: hit end, loc: %06x\n", loc);
 
 	return 0xff;
 }
@@ -1756,8 +1745,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			return;
 		case 0x23: /* 0xc023 */
 			if((val & 0x19) != 0) {
-				printf("c023 write of %02x!!!\n",val);
-				set_halt(1);
+				halt_printf("c023 write of %02x!!!\n",val);
 			}
 			c023_1sec_en = ((val & 0x4) != 0);
 			c023_scan_en = ((val & 2) != 0);
@@ -1801,8 +1789,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			linear_vid = (val >> 6) & 1;
 			new_tmp = val & 0xa0;
 			if(bank1latch == 0) {
-				printf("c029: %02x\n", val);
-				set_halt(1);
+				halt_printf("c029: %02x\n", val);
 			}
 			if(new_tmp != (g_cur_a2_stat & 0xa0)) {
 				g_cur_a2_stat = (g_cur_a2_stat & (~0xa0)) +
@@ -1814,19 +1801,16 @@ io_write(word32 loc, int val, double *cyc_ptr)
 #if 0
 			printf("Writing c02a with %02x\n", val);
 #endif
-			set_halt(halt_on_c02a);
 			return;
 		case 0x2b: /* 0xc02b */
 			c02b_val = val;
 			if(val != 0x08 && val != 0x00) {
-				printf("Writing c02b with %02x\n", val);
-				set_halt(1);
+				halt_printf("Writing c02b with %02x\n", val);
 			}
 			return;
 		case 0x2d: /* 0xc02d */
 			if((val & 0x9) != 0) {
-				printf("Illegal c02d write: %02x!\n", val);
-				set_halt(1);
+				halt_printf("Illegal c02d write: %02x!\n", val);
 			}
 			fixup = 0;
 			for(i = 0; i < 8; i++) {
@@ -1929,8 +1913,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 
 			power_on_clear = (val >> 6) & 1;
 			if((val & 0x70) != 0) {
-				printf("c036: %2x\n", val);
-				set_halt(1);
+				halt_printf("c036: %2x\n", val);
 			}
 			return;
 		case 0x37: /* 0xc037 */
@@ -1973,8 +1956,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			c041_en_move_ints = ((val & 0x2) != 0);
 			c041_en_mouse = ((val & 0x1) != 0);
 			if((val & 0xe7) != 0) {
-				printf("write c041: %02x\n", val);
-				set_halt(1);
+				halt_printf("write c041: %02x\n", val);
 			}
 
 			if(!c041_en_vbl_ints && c046_vbl_irq_pending) {
@@ -2084,10 +2066,10 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			annunc_1 = 0;
 			if((val & 0xf0) == 0x50) {
 				g_zipgs_unlock++;
+			} else if((val & 0xf0) == 0xa0) {
+				g_zipgs_unlock = 0;
 			} else if(g_zipgs_unlock >= 4) {
 				g_zipgs_disabled = 1;
-			} else {
-				g_zipgs_unlock = 0;
 			}
 			return;
 		case 0x5b: /* 0xc05b */
@@ -2121,8 +2103,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			return;
 		case 0x5f: /* 0xc05f */
 			if(g_zipgs_unlock >= 4) {
-				printf("Wrote ZipGS $c05f with: %02x\n", val);
-				set_halt(1);
+				halt_printf("Wrote ZipGS $c05f: %02x\n", val);
 			} else if((g_cur_a2_stat & ALL_STAT_ANNUNC3) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_ANNUNC3);
 				change_display_mode(dcycs);
@@ -2146,8 +2127,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			return;
 		case 0x69: /* 0xc069 */
 			if(val != 0) {
-				printf("Writing c069 with %02x\n",val);
-				set_halt(1);
+				halt_printf("Writing c069 with %02x\n",val);
 			}
 			return;
 		case 0x6a: /* 0xc06a */
@@ -2312,8 +2292,7 @@ get_slow_mem(word32 loc, int duff_cycles)
 
 	val = g_slow_memory_ptr[loc];
 
-	printf("get_slow_mem: %06x = %02x\n", loc, val);
-	set_halt(1);
+	halt_printf("get_slow_mem: %06x = %02x\n", loc, val);
 
 	return val;
 }
@@ -2384,8 +2363,7 @@ get_lines_since_vbl(double dcycs)
 	if(lines_since_vbl < 0x10680) {
 		return lines_since_vbl;
 	} else {
-		set_halt(1);
-		printf("lines_since_vbl: %08x!\n", lines_since_vbl);
+		halt_printf("lines_since_vbl: %08x!\n", lines_since_vbl);
 		printf("dc_s_l_v: %f, dcycs: %f, last_vbl_cycs: %f\n",
 			dcycs_since_last_vbl, dcycs, g_last_vbl_dcycs);
 		show_dtime_array();
@@ -2430,9 +2408,8 @@ read_vid_counters(int loc, double dcycs)
 	}
 
 	if(lines_since_vbl > 0x1ffff) {
-		printf("lines_since_vbl: %04x, dcycs: %f, last_vbl: %f\n",
+		halt_printf("lines_since_vbl: %04x, dcycs: %f, last_vbl: %f\n",
 			lines_since_vbl, dcycs, g_last_vbl_dcycs);
-		set_halt(1);
 	}
 
 	if(loc == 0xe) {

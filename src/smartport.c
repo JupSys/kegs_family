@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.18 99/06/22 23:34:15 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.21 99/09/06 20:50:50 kentd Exp $";
 
 #include "defc.h"
 
@@ -248,11 +248,13 @@ do_c70d(word32 arg0)
 	int	ext;
 	int	i;
 
+	set_memory_c(0x7f8, 0xc7, 0);
+
 	if((engine.psr & 0x100) == 0) {
 		disk_printf("c70d called in native mode!\n");
 		if((engine.psr & 0x30) != 0x30) {
-			printf("c70d called native, psr: %03x!\n", engine.psr);
-			set_halt(1);
+			halt_printf("c70d called native, psr: %03x!\n",
+							engine.psr);
 		}
 	}
 
@@ -328,7 +330,7 @@ do_c70d(word32 arg0)
 			engine.yreg = 0;
 			engine.acc &= 0xff00;
 			engine.psr &= ~1;
-			engine.pc = (rts_addr + 3 + ext) & mask;
+			engine.kpc = (rts_addr + 3 + ext) & mask;
 			return;
 		} else if(unit > 0 && status_code == 0) {
 			/* status for unit x */
@@ -353,7 +355,7 @@ do_c70d(word32 arg0)
 			engine.yreg = 0;
 			engine.acc &= 0xff00;
 			engine.psr &= ~1;
-			engine.pc = (rts_addr + 3 + ext) & mask;
+			engine.kpc = (rts_addr + 3 + ext) & mask;
 
 			disk_printf("just finished unit %d, stat 0\n", unit);
 			return;
@@ -403,15 +405,14 @@ do_c70d(word32 arg0)
 			engine.yreg = 0;
 			engine.acc &= 0xff00;
 			engine.psr &= ~1;
-			engine.pc = (rts_addr + 3 + ext) & 0xffff;
+			engine.kpc = (rts_addr + 3 + ext) & 0xffff;
 
 			disk_printf("Just finished unit %d, stat 3\n", unit);
 			if(unit == 0 || unit > (g_highest_smartport_unit+1)) {
 				engine.acc |= 0x28;
 				engine.psr |= 1;
 				if(unit == 0 || unit > MAX_C7_DISKS) {
-					printf("unit: %02x, stat 3\n", unit);
-					set_halt(1);
+					halt_printf("unit:%02x, stat 3\n",unit);
 				}
 			}
 			return;
@@ -420,9 +421,8 @@ do_c70d(word32 arg0)
 		break;
 	case 0x01:	/* Read Block == 0x01 and 0x41 */
 		if(param_cnt != 3) {
-			printf("param_cnt %d is != 3!\n", param_cnt);
-			set_halt(1);
-			exit(8);
+			halt_printf("param_cnt %d is != 3!\n", param_cnt);
+			return;
 		}
 		unit = get_memory_c((cmd_list+1) & mask, 0);
 		buf_ptr_lo = get_memory_c((cmd_list+2) & mask, 0);
@@ -442,8 +442,7 @@ do_c70d(word32 arg0)
 		disk_printf("smartport read unit %d of block %04x into %04x\n",
 			unit, block, buf_ptr);
 		if(unit < 1 || unit > MAX_C7_DISKS) {
-			printf("Unknown unit #: %d\n", unit);
-			set_halt(1);
+			halt_printf("Unknown unit #: %d\n", unit);
 		}
 
 		smartport_log(0, unit - 1, buf_ptr, block);
@@ -456,15 +455,14 @@ do_c70d(word32 arg0)
 		if(ret != 0) {
 			engine.psr |= 1;
 		}
-		engine.pc = (rts_addr + 3 + ext) & 0xffff;
+		engine.kpc = (rts_addr + 3 + ext) & 0xffff;
 
 		return;
 		break;
 	case 0x02:	/* Write Block == 0x02 and 0x42 */
 		if(param_cnt != 3) {
-			printf("param_cnt %d is != 3!\n", param_cnt);
-			set_halt(1);
-			exit(8);
+			halt_printf("param_cnt %d is != 3!\n", param_cnt);
+			return;
 		}
 		unit = get_memory_c((cmd_list+1) & mask, 0);
 		buf_ptr_lo = get_memory_c((cmd_list+2) & mask, 0);
@@ -484,8 +482,7 @@ do_c70d(word32 arg0)
 		disk_printf("smartport write unit %d of block %04x from %04x\n",
 			unit, block, buf_ptr);
 		if(unit < 1 || unit > MAX_C7_DISKS) {
-			printf("Unknown unit #: %d\n", unit);
-			set_halt(1);
+			halt_printf("Unknown unit #: %d\n", unit);
 		}
 
 		smartport_log(0, unit - 1, buf_ptr, block);
@@ -498,22 +495,20 @@ do_c70d(word32 arg0)
 		if(ret != 0) {
 			engine.psr |= 1;
 		}
-		engine.pc = (rts_addr + 3 + ext) & 0xffff;
+		engine.kpc = (rts_addr + 3 + ext) & 0xffff;
 
 		HALT_ON(HALT_ON_C70D_WRITES, "c70d Write done\n");
 		return;
 		break;
 	case 0x03:	/* Format == 0x03 and 0x43 */
 		if(param_cnt != 1) {
-			printf("param_cnt %d is != 1!\n", param_cnt);
-			set_halt(1);
-			exit(8);
+			halt_printf("param_cnt %d is != 1!\n", param_cnt);
+			return;
 		}
 		unit = get_memory_c((cmd_list+1) & mask, 0);
 
 		if(unit < 1 || unit > MAX_C7_DISKS) {
-			printf("Unknown unit #: %d\n", unit);
-			set_halt(1);
+			halt_printf("Unknown unit #: %d\n", unit);
 		}
 
 		smartport_log(0, unit - 1, 0, 0);
@@ -526,20 +521,18 @@ do_c70d(word32 arg0)
 		if(ret != 0) {
 			engine.psr |= 1;
 		}
-		engine.pc = (rts_addr + 3 + ext) & 0xffff;
+		engine.kpc = (rts_addr + 3 + ext) & 0xffff;
 
 		HALT_ON(HALT_ON_C70D_WRITES, "c70d Format done\n");
 		return;
 		break;
 	case 0x04:	/* Control == 0x04 and 0x44 */
 		if(cmd == 0x44) {
-			printf("smartport code 0x44 not supported\n");
-			set_halt(1);
+			halt_printf("smartport code 0x44 not supported\n");
 		}
 		if(param_cnt != 3) {
-			printf("param_cnt %d is != 3!\n", param_cnt);
-			set_halt(1);
-			exit(8);
+			halt_printf("param_cnt %d is != 3!\n", param_cnt);
+			return;
 		}
 		unit = get_memory_c((cmd_list+1) & mask, 0);
 		ctl_ptr_lo = get_memory_c((cmd_list+2) & mask, 0);
@@ -560,37 +553,34 @@ do_c70d(word32 arg0)
 			printf("Performing a reset on unit %d\n", unit);
 			break;
 		default:
-			printf("control code: %02x unknown!\n", ctl_code);
-			set_halt(1);
+			halt_printf("control code: %02x unknown!\n", ctl_code);
 		}
 
 		engine.xreg = 0;
 		engine.yreg = 2;
 		engine.acc &= 0xff00;
 		engine.psr &= ~1;
-		engine.pc = (rts_addr + 3 + ext) & 0xffff;
+		engine.kpc = (rts_addr + 3 + ext) & 0xffff;
 		return;
 		break;
 	default:	/* Unknown command! */
-		/* set acc = 1, and set carry, and set pc */
+		/* set acc = 1, and set carry, and set kpc */
 		engine.xreg = (rts_addr) & 0xff;
 		engine.yreg = (rts_addr >> 8) & 0xff;
 		engine.acc = (engine.acc & 0xff00) + 0x01;
 		engine.psr |= 0x01;	/* set carry */
-		engine.pc = (rts_addr + 3 + ext) & 0xffff;
+		engine.kpc = (rts_addr + 3 + ext) & 0xffff;
 		if(cmd != 0x4a && cmd != 0x48) {
 			/* Finder does 0x4a call before formatting disk */
 			/* Many things do 0x48 call to see online drives */
-			printf("Just did smtport cmd:%02x rts_addr:%04x, "
+			halt_printf("Just did smtport cmd:%02x rts_addr:%04x, "
 				"cmdlst:%06x\n", cmd, rts_addr, cmd_list);
-			set_halt(1);
 		}
 		return;
 	}
 
-	printf("Unknown smartport cmd: %02x, cmd_list: %06x, rts_addr: %06x\n",
+	halt_printf("Unknown smtport cmd:%02x, cmd_list:%06x, rts_addr:%06x\n",
 		cmd, cmd_list, rts_addr);
-	set_halt(1);
 }
 
 void
@@ -603,6 +593,8 @@ do_c70a(word32 arg0)
 	int	prodos_unit;
 	int	size;
 	int	ret;
+
+	set_memory_c(0x7f8, 0xc7, 0);
 
 	cmd = get_memory_c((engine.direct + 0x42) & 0xffff, 0);
 	prodos_unit = get_memory_c((engine.direct + 0x43) & 0xffff, 0);
@@ -621,8 +613,7 @@ do_c70a(word32 arg0)
 	} else if((prodos_unit & 0x7f) == 0x40) {
 		unit = 2 + (prodos_unit >> 7);
 	} else {
-		printf("Unknown prodos_unit: %d\n", prodos_unit);
-		set_halt(1);
+		halt_printf("Unknown prodos_unit: %d\n", prodos_unit);
 		return;
 	}
 
@@ -637,9 +628,9 @@ do_c70a(word32 arg0)
 		}
 		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
 		if(g_rom_version >= 3) {
-			engine.pc = 0xc764;
+			engine.kpc = 0xc764;
 		} else {
-			engine.pc = 0xc765;
+			engine.kpc = 0xc765;
 		}
 		return;
 	} else if(cmd == 0x00) {
@@ -652,9 +643,9 @@ do_c70a(word32 arg0)
 		ret = 0;
 		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
 		if(g_rom_version >= 3) {
-			engine.pc = 0xc764;
+			engine.kpc = 0xc764;
 		} else {
-			engine.pc = 0xc765;
+			engine.kpc = 0xc765;
 		}
 		engine.xreg = size & 0xff;
 		engine.yreg = size >> 8;
@@ -665,14 +656,13 @@ do_c70a(word32 arg0)
 		engine.psr &= ~1;
 		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
 		if(g_rom_version >= 3) {
-			engine.pc = 0xc764;
+			engine.kpc = 0xc764;
 		} else {
-			engine.pc = 0xc765;
+			engine.kpc = 0xc765;
 		}
 		return;
 	}
-	printf("cmd unknown: %02x, unit: %02x!!!!\n", cmd, unit);
-	set_halt(1);
+	halt_printf("cmd unknown: %02x, unit: %02x!!!!\n", cmd, unit);
 }
 
 int
@@ -690,9 +680,8 @@ do_read_c7(int unit_num, word32 buf, int blk)
 	int	i;
 
 	if(unit_num < 0 || unit_num > MAX_C7_DISKS) {
-		printf("do_read_c7: unit_num: %d\n", unit_num);
+		halt_printf("do_read_c7: unit_num: %d\n", unit_num);
 		smartport_error();
-		set_halt(1);
 		return 0x28;
 	}
 
@@ -704,24 +693,22 @@ do_read_c7(int unit_num, word32 buf, int blk)
 		if(blk != 2 && blk != 0) {
 			/* don't print error if only reading directory */
 			smartport_error();
-			set_halt(1);
+			halt_printf("Read unit:%02x blk:%04x\n", unit_num, blk);
 		}
 		return 0x2f;
 	}
 
 	ret = lseek(fd, image_start + blk*0x200, SEEK_SET);
 	if(ret != image_start + blk*0x200) {
-		printf("lseek returned %08x, errno: %d\n", ret, errno);
+		halt_printf("lseek returned %08x, errno: %d\n", ret, errno);
 		smartport_error();
-		set_halt(1);
 		return 0x27;
 	}
 
 	if(ret >= image_start + image_size) {
-		printf("Tried to read from pos %08x on disk, (blk: %04x)\n",
+		halt_printf("Tried to read from pos %08x on disk, (blk:%04x)\n",
 			ret, blk);
 		smartport_error();
-		set_halt(1);
 		return 0x27;
 	}
 
@@ -729,9 +716,8 @@ do_read_c7(int unit_num, word32 buf, int blk)
 	if(len != 0x200) {
 		printf("read returned %08x, errno:%d, blk:%04x, unit: %02x\n",
 			len, errno, blk, unit_num);
-		printf("name: %s\n", iwm.smartport[unit_num].name_ptr);
+		halt_printf("name: %s\n", iwm.smartport[unit_num].name_ptr);
 		smartport_error();
-		set_halt(1);
 		return 0x27;
 	}
 
@@ -773,9 +759,8 @@ do_write_c7(int unit_num, word32 buf, int blk)
 	int	i;
 
 	if(unit_num < 0 || unit_num > MAX_C7_DISKS) {
-		printf("do_write_c7: unit_num: %d\n", unit_num);
+		halt_printf("do_write_c7: unit_num: %d\n", unit_num);
 		smartport_error();
-		set_halt(1);
 		return 0x28;
 	}
 
@@ -784,9 +769,8 @@ do_write_c7(int unit_num, word32 buf, int blk)
 	image_start = dsk->image_start;
 	image_size = dsk->image_size;
 	if(fd < 0) {
-		printf("c7_fd == %d!\n", fd);
+		halt_printf("c7_fd == %d!\n", fd);
 		smartport_error();
-		set_halt(1);
 		return 0x28;
 	}
 
@@ -806,16 +790,14 @@ do_write_c7(int unit_num, word32 buf, int blk)
 
 	ret = lseek(fd, image_start + blk*0x200, SEEK_SET);
 	if(ret != image_start + blk*0x200) {
-		printf("lseek returned %08x, errno: %d\n", ret, errno);
+		halt_printf("lseek returned %08x, errno: %d\n", ret, errno);
 		smartport_error();
-		set_halt(1);
 		return 0x27;
 	}
 
 	if(ret >= image_start + image_size) {
-		printf("Tried to write to %08x\n", ret);
+		halt_printf("Tried to write to %08x\n", ret);
 		smartport_error();
-		set_halt(1);
 		return 0x27;
 	}
 
@@ -825,16 +807,14 @@ do_write_c7(int unit_num, word32 buf, int blk)
 	}
 
 	if(dsk->write_through_to_unix == 0) {
-		printf("Write to %s, but not write_through!\n", dsk->name_ptr);
-		set_halt(1);
+		halt_printf("Write to %s, but not wr_thru!\n", dsk->name_ptr);
 		return 0x00;
 	}
 
 	len = write(fd, (byte *)&local_buf[0], 0x200);
 	if(len != 0x200) {
-		printf("write returned %08x bytes, errno: %d\n", len, errno);
+		halt_printf("write ret %08x bytes, errno: %d\n", len, errno);
 		smartport_error();
-		set_halt(1);
 		return 0x27;
 	}
 
@@ -860,9 +840,8 @@ do_format_c7(int unit_num)
 	int	i;
 
 	if(unit_num < 0 || unit_num > MAX_C7_DISKS) {
-		printf("do_format_c7: unit_num: %d\n", unit_num);
+		halt_printf("do_format_c7: unit_num: %d\n", unit_num);
 		smartport_error();
-		set_halt(1);
 		return 0x28;
 	}
 
@@ -871,9 +850,8 @@ do_format_c7(int unit_num)
 	image_start = dsk->image_start;
 	image_size = dsk->image_size;
 	if(fd < 0) {
-		printf("c7_fd == %d!\n", fd);
+		halt_printf("c7_fd == %d!\n", fd);
 		smartport_error();
-		set_halt(1);
 		return 0x28;
 	}
 
@@ -883,9 +861,8 @@ do_format_c7(int unit_num)
 
 	ret = lseek(fd, image_start, SEEK_SET);
 	if(ret != image_start) {
-		printf("lseek returned %08x, errno: %d\n", ret, errno);
+		halt_printf("lseek returned %08x, errno: %d\n", ret, errno);
 		smartport_error();
-		set_halt(1);
 		return 0x27;
 	}
 
@@ -906,10 +883,9 @@ do_format_c7(int unit_num)
 		max = MIN(0x2000, total-sum);
 		len = write(fd, &local_buf[0], max);
 		if(len != max) {
-			printf("write returned %08x bytes, errno: %d\n",
+			halt_printf("write returned %08x bytes, errno: %d\n",
 				len, errno);
 			smartport_error();
-			set_halt(1);
 			return 0x27;
 		}
 		sum += len;
@@ -934,12 +910,11 @@ do_c700(word32 ret)
 	set_memory_c(0x46, 0x0, 0);
 	set_memory_c(0x47, 0x0, 0);
 	engine.xreg = 0x70;
-	engine.pc = 0x801;
+	engine.kpc = 0x801;
 
 	if(ret != 0) {
 		printf("Failure reading boot disk in s7d1!\n");
-		engine.pc = 0xe000;
-		engine.kbank = 0;
+		engine.kpc = 0xe000;
 	}
 }
 

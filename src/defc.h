@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.71 99/07/12 23:49:31 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.73 99/09/06 20:48:53 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -78,7 +78,7 @@ void U_STACK_TRACE();
 #endif
 
 STRUCT(Pc_log) {
-	word32	dbank_kbank_pc;
+	word32	dbank_kpc;
 	word32	instr;
 	word32	psr_acc;
 	word32	xreg_yreg;
@@ -102,8 +102,7 @@ STRUCT(Engine_reg) {
 	double	fcycles;
 	Fplus	*fplus_ptr;
 
-	word32	kbank;
-	word32	pc;
+	word32	kpc;
 	word32	acc;
 	word32	xreg;
 	word32	yreg;
@@ -189,10 +188,9 @@ extern int errno;
 #define HALT_ON_SHADOW_REG	0x004
 #define HALT_ON_C70D_WRITES	0x008
 
-#define HALT_ON(a, msg)		\
-	if(Halt_on & a) {	\
-		printf(msg);	\
-		set_halt(1);	\
+#define HALT_ON(a, msg)			\
+	if(Halt_on & a) {		\
+		halt_printf(msg);	\
 	}
 
 
