@@ -10,7 +10,7 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$KmKId: instable.h,v 1.102 2003-11-25 22:05:33-05 kentd Exp $"
+	.stringz "@(#)$KmKId: instable.h,v 1.103 2004-01-10 15:50:50-05 kentd Exp $"
 # endif
 #endif
 
@@ -93,13 +93,13 @@ brk_testing_SYM
 	if(psr & 0x100) {
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xfffe, kpc);
+		GET_MEMORY16(0xfffe, kpc, 0);
 		dbank = 0;
 	} else {
 		PUSH8(kpc >> 16);
 		PUSH16(kpc);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xffe6, kpc);
+		GET_MEMORY16(0xffe6, kpc, 0);
 		halt_printf("Halting for native break!\n");
 	}
 	kpc = kpc & 0xffff;
@@ -168,13 +168,13 @@ cop_native_SYM
 		halt_printf("Halting for emul COP at %04x\n", kpc);
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xfff4, kpc);
+		GET_MEMORY16(0xfff4, kpc, 0);
 		dbank = 0;
 	} else {
 		PUSH8(kpc >> 16);
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xffe4, kpc);
+		GET_MEMORY16(0xffe4, kpc, 0);
 	}
 	kpc = kpc & 0xffff;
 	psr |= 4;
@@ -187,7 +187,7 @@ inst03_SYM		/*  ORA Disp8,S */
 
 inst04_SYM		/*  TSB Dloc */
 	GET_DLOC_RD();
-	TSB_INST();
+	TSB_INST(1);
 
 inst05_SYM		/*  ORA Dloc */
 	GET_DLOC_RD();
@@ -195,7 +195,7 @@ inst05_SYM		/*  ORA Dloc */
 
 inst06_SYM		/*  ASL Dloc */
 	GET_DLOC_RD();
-	ASL_INST();
+	ASL_INST(1);
 
 inst07_SYM		/*  ORA [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -273,7 +273,7 @@ inst0b_SYM		/*  PHD */
 
 inst0c_SYM		/*  TSB abs */
 	GET_ABS_RD();
-	TSB_INST();
+	TSB_INST(0);
 
 inst0d_SYM		/*  ORA abs */
 	GET_ABS_RD();
@@ -281,7 +281,7 @@ inst0d_SYM		/*  ORA abs */
 
 inst0e_SYM		/*  ASL abs */
 	GET_ABS_RD();
-	ASL_INST();
+	ASL_INST(0);
 
 inst0f_SYM		/*  ORA long */
 	GET_LONG_RD();
@@ -314,7 +314,7 @@ inst13_SYM		/*  ORA (Disp8,s),y */
 
 inst14_SYM		/*  TRB Dloc */
 	GET_DLOC_RD();
-	TRB_INST();
+	TRB_INST(1);
 
 inst15_SYM		/*  ORA Dloc,x */
 	GET_DLOC_X_RD();
@@ -322,7 +322,7 @@ inst15_SYM		/*  ORA Dloc,x */
 
 inst16_SYM		/*  ASL Dloc,X */
 	GET_DLOC_X_RD();
-	ASL_INST();
+	ASL_INST(1);
 
 inst17_SYM		/*  ORA [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -391,7 +391,7 @@ inst1b_SYM		/*  TCS */
 
 inst1c_SYM		/*  TRB Abs */
 	GET_ABS_RD();
-	TRB_INST();
+	TRB_INST(0);
 
 inst1d_SYM		/*  ORA Abs,X */
 	GET_ABS_X_RD();
@@ -399,7 +399,7 @@ inst1d_SYM		/*  ORA Abs,X */
 
 inst1e_SYM		/*  ASL Abs,X */
 	GET_ABS_X_RD_WR();
-	ASL_INST();
+	ASL_INST(0);
 
 inst1f_SYM		/*  ORA Long,X */
 	GET_LONG_X_RD();
@@ -420,7 +420,8 @@ inst20_SYM		/*  JSR abs */
 	dep	scratch1,23,8,kpc
 #else
 	GET_2BYTE_ARG;
-	PUSH16(kpc + 2);
+	INC_KPC_2;
+	PUSH16(kpc);
 	kpc = (kpc & 0xff0000) + arg;
 	CYCLES_PLUS_2;
 #endif
@@ -449,7 +450,8 @@ inst22_SYM		/*  JSL Long */
 	GET_3BYTE_ARG;
 	tmp1 = arg;
 	CYCLES_PLUS_3;
-	PUSH24_UNSAFE(kpc + 3);
+	INC_KPC_3;
+	PUSH24_UNSAFE(kpc);
 	kpc = tmp1 & 0xffffff;
 #endif
 
@@ -471,7 +473,7 @@ inst26_SYM		/*  ROL Dloc */
 	GET_DLOC_RD();
 /*  save1 is now apple addr */
 /*  ret0 is data */
-	ROL_INST();
+	ROL_INST(1);
 
 inst27_SYM		/*  AND [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -573,7 +575,7 @@ inst2d_SYM		/*  AND abs */
 
 inst2e_SYM		/*  ROL abs */
 	GET_ABS_RD();
-	ROL_INST();
+	ROL_INST(0);
 
 inst2f_SYM		/*  AND long */
 	GET_LONG_RD();
@@ -614,7 +616,7 @@ inst35_SYM		/*  AND Dloc,x */
 
 inst36_SYM		/*  ROL Dloc,X */
 	GET_DLOC_X_RD();
-	ROL_INST();
+	ROL_INST(1);
 
 inst37_SYM		/*  AND [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -686,7 +688,7 @@ inst3d_SYM		/*  AND Abs,X */
 
 inst3e_SYM		/*  ROL Abs,X */
 	GET_ABS_X_RD_WR();
-	ROL_INST();
+	ROL_INST(0);
 
 inst3f_SYM		/*  AND Long,X */
 	GET_LONG_X_RD();
@@ -875,7 +877,7 @@ inst46_SYM		/*  LSR Dloc */
 	GET_DLOC_RD();
 /*  save1 is now apple addr */
 /*  ret0 is data */
-	LSR_INST();
+	LSR_INST(1);
 
 inst47_SYM		/*  EOR [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -976,7 +978,7 @@ inst4d_SYM		/*  EOR abs */
 
 inst4e_SYM		/*  LSR abs */
 	GET_ABS_RD();
-	LSR_INST();
+	LSR_INST(0);
 
 inst4f_SYM		/*  EOR long */
 	GET_LONG_RD();
@@ -1102,7 +1104,7 @@ inst55_SYM		/*  EOR Dloc,x */
 
 inst56_SYM		/*  LSR Dloc,X */
 	GET_DLOC_X_RD();
-	LSR_INST();
+	LSR_INST(1);
 
 inst57_SYM		/*  EOR [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -1181,7 +1183,7 @@ inst5d_SYM		/*  EOR Abs,X */
 
 inst5e_SYM		/*  LSR Abs,X */
 	GET_ABS_X_RD_WR();
-	LSR_INST();
+	LSR_INST(0);
 
 inst5f_SYM		/*  EOR Long,X */
 	GET_LONG_X_RD();
@@ -1234,7 +1236,7 @@ inst63_SYM		/*  ADC Disp8,S */
 
 inst64_SYM		/*  STZ Dloc */
 	GET_DLOC_ADDR();
-	STZ_INST();
+	STZ_INST(1);
 
 inst65_SYM		/*  ADC Dloc */
 /*  called with arg = val to ADC in */
@@ -1245,7 +1247,7 @@ inst66_SYM		/*  ROR Dloc */
 	GET_DLOC_RD();
 /*  save1 is now apple addr */
 /*  ret0 is data */
-	ROR_INST();
+	ROR_INST(1);
 
 inst67_SYM		/*  ADC [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -1353,7 +1355,7 @@ inst6c_SYM		/*  JMP (abs) */
 #else
 	GET_2BYTE_ARG;
 	CYCLES_PLUS_1;
-	GET_MEMORY16(arg, tmp1);
+	GET_MEMORY16(arg, tmp1, 1);
 	kpc = (kpc & 0xff0000) + tmp1;
 #endif
 
@@ -1363,7 +1365,7 @@ inst6d_SYM		/*  ADC abs */
 
 inst6e_SYM		/*  ROR abs */
 	GET_ABS_RD();
-	ROR_INST();
+	ROR_INST(0);
 
 inst6f_SYM		/*  ADC long */
 	GET_LONG_RD();
@@ -1398,11 +1400,11 @@ inst74_SYM		/*  STZ Dloc,x */
 #ifdef ASM
 	ldb	1(scratch1),arg0
 	GET_DLOC_X_WR();
-	STZ_INST();
+	STZ_INST(1);
 #else
 	GET_1BYTE_ARG;
 	GET_DLOC_X_WR();
-	STZ_INST();
+	STZ_INST(1);
 #endif
 
 inst75_SYM		/*  ADC Dloc,x */
@@ -1411,7 +1413,7 @@ inst75_SYM		/*  ADC Dloc,x */
 
 inst76_SYM		/*  ROR Dloc,X */
 	GET_DLOC_X_RD();
-	ROR_INST();
+	ROR_INST(1);
 
 inst77_SYM		/*  ADC [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -1480,7 +1482,7 @@ inst7b_SYM		/*  TDC */
 #endif
 
 inst7c_SYM		/*  JMP (Abs,x) */
-/*  is this right?  Should xreg allow wrapping into next bank? */
+/*  always access kbank, xreg cannot wrap into next bank */
 #ifdef ASM
 	ldb	1(scratch1),ret0
 	copy	kpc,scratch2
@@ -1495,10 +1497,9 @@ inst7c_SYM		/*  JMP (Abs,x) */
 	dep	ret0,31,16,kpc
 #else
 	GET_2BYTE_ARG;
-	tmp1 = (kpc & 0xff0000) + xreg;
-	arg = tmp1 + (arg & 0xffff);
+	arg = (kpc & 0xff0000) + ((xreg + arg) & 0xffff);
 	CYCLES_PLUS_2;
-	GET_MEMORY16(arg & 0xffffff, tmp1);
+	GET_MEMORY16(arg, tmp1, 1);
 	kpc = (kpc & 0xff0000) + tmp1;
 #endif
 
@@ -1508,7 +1509,7 @@ inst7d_SYM		/*  ADC Abs,X */
 
 inst7e_SYM		/*  ROR Abs,X */
 	GET_ABS_X_RD_WR();
-	ROR_INST();
+	ROR_INST(0);
 
 inst7f_SYM		/*  ADC Long,X */
 	GET_LONG_X_RD();
@@ -1526,7 +1527,7 @@ inst80_SYM		/*  BRA */
 
 inst81_SYM		/*  STA (Dloc,X) */
 	GET_DLOC_X_IND_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst82_SYM		/*  BRL disp16 */
 #ifdef ASM
@@ -1546,25 +1547,25 @@ inst82_SYM		/*  BRL disp16 */
 
 inst83_SYM		/*  STA Disp8,S */
 	GET_DISP8_S_ADDR();
-	STA_INST();
+	STA_INST(1);
 
 inst84_SYM		/*  STY Dloc */
 	GET_DLOC_ADDR();
-	STY_INST();
+	STY_INST(1);
 
 
 inst85_SYM		/*  STA Dloc */
 	GET_DLOC_ADDR();
-	STA_INST();
+	STA_INST(1);
 
 inst86_SYM		/*  STX Dloc */
 	GET_DLOC_ADDR();
-	STX_INST();
+	STX_INST(1);
 
 
 inst87_SYM		/*  STA [Dloc] */
 	GET_DLOC_L_IND_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst88_SYM		/*  DEY */
 #ifdef ASM
@@ -1644,20 +1645,20 @@ inst8b_SYM		/*  PHB */
 
 inst8c_SYM		/*  STY abs */
 	GET_ABS_ADDR();
-	STY_INST();
+	STY_INST(0);
 
 inst8d_SYM		/*  STA abs */
 	GET_ABS_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst8e_SYM		/*  STX abs */
 	GET_ABS_ADDR();
-	STX_INST();
+	STX_INST(0);
 
 
 inst8f_SYM		/*  STA long */
 	GET_LONG_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 
 inst90_SYM		/*  BCC disp8 */
@@ -1675,31 +1676,31 @@ inst90_2_SYM
 
 inst91_SYM		/*  STA (Dloc),y */
 	GET_DLOC_IND_Y_ADDR_FOR_WR();
-	STA_INST();
+	STA_INST(0);
 
 inst92_SYM		/*  STA (Dloc) */
 	GET_DLOC_IND_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst93_SYM		/*  STA (Disp8,s),y */
 	GET_DISP8_S_IND_Y_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst94_SYM		/*  STY Dloc,x */
 	GET_DLOC_X_ADDR();
-	STY_INST();
+	STY_INST(1);
 
 inst95_SYM		/*  STA Dloc,x */
 	GET_DLOC_X_ADDR();
-	STA_INST();
+	STA_INST(1);
 
 inst96_SYM		/*  STX Dloc,Y */
 	GET_DLOC_Y_ADDR();
-	STX_INST();
+	STX_INST(1);
 
 inst97_SYM		/*  STA [Dloc],Y */
 	GET_DLOC_L_IND_Y_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst98_SYM		/*  TYA */
 #ifdef ASM
@@ -1724,7 +1725,7 @@ inst98_SYM		/*  TYA */
 
 inst99_SYM		/*  STA abs,y */
 	GET_ABS_INDEX_ADDR_FOR_WR(yreg)
-	STA_INST();
+	STA_INST(0);
 
 inst9a_SYM		/*  TXS */
 #ifdef ASM
@@ -1760,19 +1761,19 @@ inst9b_SYM		/*  TXY */
 
 inst9c_SYM		/*  STZ Abs */
 	GET_ABS_ADDR();
-	STZ_INST();
+	STZ_INST(0);
 
 inst9d_SYM		/*  STA Abs,X */
 	GET_ABS_INDEX_ADDR_FOR_WR(xreg);
-	STA_INST();
+	STA_INST(0);
 
 inst9e_SYM		/*  STZ Abs,X */
 	GET_ABS_INDEX_ADDR_FOR_WR(xreg);
-	STZ_INST();
+	STZ_INST(0);
 
 inst9f_SYM		/*  STA Long,X */
 	GET_LONG_X_ADDR_FOR_WR();
-	STA_INST();
+	STA_INST(0);
 
 
 insta0_SYM		/*  LDY #imm */
@@ -2165,7 +2166,7 @@ instc5_SYM		/*  CMP Dloc */
 
 instc6_SYM		/*  DEC Dloc */
 	GET_DLOC_RD();
-	DEC_INST();
+	DEC_INST(1);
 
 instc7_SYM		/*  CMP [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -2246,7 +2247,7 @@ instcd_SYM		/*  CMP abs */
 
 instce_SYM		/*  DEC abs */
 	GET_ABS_RD();
-	DEC_INST();
+	DEC_INST(0);
 
 
 instcf_SYM		/*  CMP long */
@@ -2291,7 +2292,7 @@ instd4_SYM		/*  PEI Dloc */
 	ldo	r%dispatch(link),link
 #else
 	GET_DLOC_ADDR()
-	GET_MEMORY16(arg, arg);
+	GET_MEMORY16(arg, arg, 1);
 	CYCLES_PLUS_1;
 	PUSH16_UNSAFE(arg);
 #endif
@@ -2302,7 +2303,7 @@ instd5_SYM		/*  CMP Dloc,x */
 
 instd6_SYM		/*  DEC Dloc,x */
 	GET_DLOC_X_RD();
-	DEC_INST();
+	DEC_INST(1);
 
 instd7_SYM		/*  CMP [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -2370,7 +2371,7 @@ instdc_SYM		/*  JML (Abs) */
 #else
 	GET_2BYTE_ARG;
 	CYCLES_PLUS_1;
-	GET_MEMORY24(arg, kpc);
+	GET_MEMORY24(arg, kpc, 1);
 #endif
 
 instdd_SYM		/*  CMP Abs,X */
@@ -2379,7 +2380,7 @@ instdd_SYM		/*  CMP Abs,X */
 
 instde_SYM		/*  DEC Abs,X */
 	GET_ABS_X_RD_WR();
-	DEC_INST();
+	DEC_INST(0);
 
 instdf_SYM		/*  CMP Long,X */
 	GET_LONG_X_RD();
@@ -2459,7 +2460,7 @@ inste5_SYM		/*  SBC Dloc */
 
 inste6_SYM		/*  INC Dloc */
 	GET_DLOC_RD();
-	INC_INST();
+	INC_INST(1);
 
 inste7_SYM		/*  SBC [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -2534,7 +2535,7 @@ insted_SYM		/*  SBC abs */
 
 instee_SYM		/*  INC abs */
 	GET_ABS_RD();
-	INC_INST();
+	INC_INST(0);
 
 
 instef_SYM		/*  SBC long */
@@ -2589,7 +2590,7 @@ instf5_SYM		/*  SBC Dloc,x */
 
 instf6_SYM		/*  INC Dloc,x */
 	GET_DLOC_X_RD();
-	INC_INST();
+	INC_INST(1);
 
 instf7_SYM		/*  SBC [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -2679,9 +2680,10 @@ instfc_SYM		/*  JSR (Abs,X) */
 	ldo	r%dispatch(link),link
 #else
 	GET_2BYTE_ARG;
-	tmp1 = kpc + 2;
-	arg = (kpc & 0xff0000) + arg + xreg;
-	GET_MEMORY16(arg, tmp2);
+	INC_KPC_2;
+	tmp1 = kpc;
+	arg = (kpc & 0xff0000) + ((arg + xreg) & 0xffff);
+	GET_MEMORY16(arg, tmp2, 1);
 	kpc = (kpc & 0xff0000) + tmp2;
 	CYCLES_PLUS_2
 	PUSH16_UNSAFE(tmp1);
@@ -2693,7 +2695,7 @@ instfd_SYM		/*  SBC Abs,X */
 
 instfe_SYM		/*  INC Abs,X */
 	GET_ABS_X_RD_WR();
-	INC_INST();
+	INC_INST(0);
 
 instff_SYM		/*  SBC Long,X */
 	GET_LONG_X_RD();

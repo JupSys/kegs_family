@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.6 2003-11-04 01:32:26-05 kentd Exp $";
+const char rcsid_windriver_c[] = "@(#)$KmKId: windriver.c,v 1.7 2004-01-09 01:16:08-05 kentd Exp $";
 
 #define WIN32_LEAN_AND_MEAN	/* Tell windows we want less header gunk */
 #define STRICT			/* Tell Windows we want compile type checks */
@@ -34,7 +34,6 @@ extern int g_quit_sim_now;
 int	g_use_shmem = 1;
 int	g_has_focus = 0;
 int	g_auto_repeat_on = -1;
-int	g_x_shift_control_state = 0;
 
 extern Kimage g_mainwin_kimage;
 
@@ -42,12 +41,10 @@ HDC	g_main_dc;
 HDC	g_main_cdc;
 int	g_main_height = 0;
 
+int	g_win_capslock_down = 0;
 
 extern word32 g_palette_8to1624[256];
 extern word32 g_a2palette_8to1624[256];
-
-int	g_alt_left_up = 1;
-int	g_alt_right_up = 1;
 
 extern word32 g_full_refresh_needed;
 
@@ -140,7 +137,7 @@ int g_a2_key_to_wsym[][3] = {
 	{ 0x5c,	VK_NUMPAD9, VK_PRIOR },
 	{ 0x4e,	VK_SUBTRACT, VK_SUBTRACT+0x100 },
 
-	{ 0x39,	VK_CAPITAL, 0 },
+	// { 0x39,	VK_CAPITAL, 0 },  // Handled specially!
 	{ 0x00,	'A', 0 },
 	{ 0x01,	'S', 0 },
 	{ 0x02,	'D', 0 },
@@ -223,6 +220,7 @@ win_event_key(HWND hwnd, UINT raw_vk, BOOL down, int repeat, UINT flags)
 	word32	vk;
 	int	a2code;
 	int	is_up;
+	int	capslock_down;
 	int	i;
 
 	if((flags & 0x4000) && down) {
@@ -240,6 +238,19 @@ win_event_key(HWND hwnd, UINT raw_vk, BOOL down, int repeat, UINT flags)
 	if((vk & 0xff) == VK_APPS) {
 		/* remap to command */
 		vk = VK_MENU;
+	}
+
+	if((vk & 0xff) == VK_CAPITAL) {
+		// Windows gives us up-and-down events of the actual key
+		//  Use GetKeyState to get the true toggle state, and pass
+		//  that on to the adb interface
+		capslock_down = GetKeyState(VK_CAPITAL) & 0x01;
+		if(capslock_down != g_win_capslock_down) {
+			g_win_capslock_down = capslock_down;
+			adb_physical_key_update(0x39, !capslock_down);
+		}
+
+		return;		// Do no more processing!
 	}
 
 	/* search a2key_to_wsym to find wsym in col 1 or 2 */

@@ -9,7 +9,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_engine_c_h[] = "@(#)$KmKId: protos_engine_c.h,v 1.9 2003-11-19 19:46:18-05 kentd Exp $";
+const char rcsid_protos_engine_c_h[] = "@(#)$KmKId: protos_engine_c.h,v 1.10 2004-01-10 15:50:02-05 kentd Exp $";
 #endif
 
 /* END_HDR */
@@ -17,11 +17,11 @@ const char rcsid_protos_engine_c_h[] = "@(#)$KmKId: protos_engine_c.h,v 1.9 2003
 /* engine_c.c */
 void check_breakpoints(word32 addr);
 word32 get_memory8_io_stub(word32 addr, byte *stat, double *fcycs_ptr, double fplus_x_m1);
-word32 get_memory16_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr, Fplus *fplus_ptr);
-word32 get_memory24_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr, Fplus *fplus_ptr);
+word32 get_memory16_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr, Fplus *fplus_ptr, int in_bank);
+word32 get_memory24_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr, Fplus *fplus_ptr, int in_bank);
 void set_memory8_io_stub(word32 addr, word32 val, byte *stat, double *fcycs_ptr, double fplus_x_m1);
-void set_memory16_pieces_stub(word32 addr, word32 val, double *fcycs_ptr, Fplus *fplus_ptr);
-void set_memory24_pieces_stub(word32 addr, word32 val, double *fcycs_ptr, Fplus *fplus_ptr);
+void set_memory16_pieces_stub(word32 addr, word32 val, double *fcycs_ptr, Fplus *fplus_ptr, int in_bank);
+void set_memory24_pieces_stub(word32 addr, word32 val, double *fcycs_ptr, Fplus *fplus_ptr, int in_bank);
 word32 get_memory_c(word32 addr, int cycs);
 word32 get_memory16_c(word32 addr, int cycs);
 word32 get_memory24_c(word32 addr, int cycs);

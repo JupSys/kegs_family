@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.57 2003-11-21 14:45:52-05 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.58 2003-12-31 12:20:17-05 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -543,7 +543,7 @@ void
 adb_set_new_mode(word32 val)
 {
 	if(val & 0x03) {
-		printf("Disabling keyboard/mouse:%02x!\n", val);
+		halt2_printf("Disabling keyboard/mouse:%02x!\n", val);
 	}
 
 	if(val & 0xa2) {

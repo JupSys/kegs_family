@@ -1,4 +1,10 @@
 
+Changes in KEGS v0.85 since v0.84 (01/09/04)
+- Fix some minor 65816 bank-crossing bugs.
+- Add -noignhalt to allow user to stop on code red halts.
+- Fix Win32 capslock problem as reported by Edward Moore
+- Fixed DreamVoir app on the sample image (it was corrupt)
+
 Changes in KEGS v0.84 since v0.83 (11/21/03)
 - Add new speed, 8.0MHz directly using right-clicking or F6.
 - Sim speed and Video update interval added to Config panel.

@@ -13,7 +13,7 @@
 	.data
 	.export rcsdif_op_routs_h,data
 rcsdif_op_routs_h
-	.stringz "@(#)$KmKId: op_routs.h,v 1.39 2002-11-20 01:17:03-05 kadickey Exp $"
+	.stringz "@(#)$KmKId: op_routs.h,v 1.40 2004-01-10 15:49:46-05 kentd Exp $"
 	.code
 # endif
 
@@ -161,7 +161,7 @@ op_routs_start	.word	0
 		CYCLES_PLUS_1;		\
 	}				\
 	INC_KPC_2;			\
-	GET_MEMORY24(arg, arg);
+	GET_MEMORY24(arg, arg, 1);
 #endif
 
 
@@ -305,7 +305,7 @@ op_routs_start	.word	0
 
 # define GET_DISP8_S_IND_Y_WR()		\
 	arg = (stack + arg) & 0xffff;	\
-	GET_MEMORY16(arg,arg);		\
+	GET_MEMORY16(arg,arg,1);	\
 	CYCLES_PLUS_2;			\
 	arg += (dbank << 16);		\
 	INC_KPC_2;			\
@@ -338,7 +338,7 @@ op_routs_start	.word	0
 	if(direct & 0xff) {		\
 		CYCLES_PLUS_1;		\
 	}				\
-	GET_MEMORY24(arg,arg);		\
+	GET_MEMORY24(arg,arg,1);	\
 	INC_KPC_2;			\
 	arg = (arg + yreg) & 0xffffff;
 

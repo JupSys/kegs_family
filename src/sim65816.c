@@ -8,7 +8,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.343 2003-11-21 15:18:00-05 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.345 2003-11-27 22:35:09-05 kentd Exp $";
 
 #include <math.h>
 
@@ -105,7 +105,7 @@ int	g_raw_serial = 1;
 int	g_serial_out_masking = 0;
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "0.84";
+const char g_kegs_version_str[] = "0.85";
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
@@ -727,6 +727,9 @@ kegsmain(int argc, char **argv)
 		} else if(!strcmp("-noignbadacc", argv[i])) {
 			printf("Not ignoring bad memory accesses\n");
 			g_ignore_bad_acc = 0;
+		} else if(!strcmp("-noignhalt", argv[i])) {
+			printf("Not ignoring code red halts\n");
+			g_ignore_halts = 0;
 		} else if(!strcmp("-test", argv[i])) {
 			printf("Allowing testing\n");
 			g_testing_enabled = 1;
