@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.81 99/04/13 00:14:43 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.84 99/05/03 22:02:31 kentd Exp $";
 
 #include "defc.h"
 
@@ -53,7 +53,7 @@ int	g_queued_nonsamps = 0;
 #ifdef HPUX
 int	g_audio_enable = -1;
 #else
-# ifdef __linux__
+# if defined(__linux__) || defined(OSS)
 /* default to off for now */
 int	g_audio_enable = 0;
 # else
@@ -926,7 +926,7 @@ sound_play(double dsamps)
 	
 				outptr += 2;
 
-#ifdef __linux__
+#if defined(__linux__) || defined(OSS)
 				/* Linux seems to expect little-endian */
 				/*  samples always, even on PowerPC */
 # ifdef KEGS_LITTLE_ENDIAN
@@ -1038,8 +1038,8 @@ doc_handle_event(int osc, double dcycs)
 void
 doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 {
-	Doc_reg	*rptr;
-	int	mode;
+	Doc_reg	*rptr, *orptr;
+	int	mode, omode;
 	int	other_osc;
 	int	ctl;
 
@@ -1083,23 +1083,27 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 	rptr->running = 0;
 
 	mode = (ctl >> 1) & 3;
+	other_osc = osc ^ 1;
+	orptr = &(g_doc_regs[other_osc]);
+	omode = (orptr->ctl >> 1) & 3;
 
-	if(mode == 3) {
-		/* swap mode! */
-		rptr->ctl |= 1;
-		other_osc = osc ^ 1;
-		rptr = &(g_doc_regs[other_osc]);
-		if(!rptr->running && (rptr->ctl & 0x1)) {
-			rptr->ctl = rptr->ctl & (~1);
-			start_sound(other_osc, eff_dsamps, dsamps);
-		}
-		return;
-	} else if(mode == 0 && can_repeat) {
+	/* If either this osc or it's partner is in swap mode, treat the */
+	/*  pair as being in swap mode.  This Ensoniq feature pointed out */
+	/*  by Ian Schmidt */
+	if(mode == 0 && can_repeat) {
 		/* free-running mode with no 0 byte! */
 		/* start doing it again */
 
 		start_sound(osc, eff_dsamps, dsamps);
 
+		return;
+	} else if((mode == 3) || (omode == 3)) {
+		/* swap mode (even if we're one_shot and partner is swap)! */
+		rptr->ctl |= 1;
+		if(!orptr->running && (orptr->ctl & 0x1)) {
+			orptr->ctl = orptr->ctl & (~1);
+			start_sound(other_osc, eff_dsamps, dsamps);
+		}
 		return;
 	} else {
 		/* stop the oscillator */

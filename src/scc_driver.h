@@ -11,11 +11,11 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_driver_h[] = "@(#)$Header: scc_driver.h,v 1.3 99/04/05 00:12:00 kentd Exp $";
+const char rcsid_scc_driver_h[] = "@(#)$Header: scc_driver.h,v 1.4 99/05/03 22:02:38 kentd Exp $";
 
 /* This file contains the Unix socket calls */
 
-#if defined(HPUX) || defined(__linux__)
+#if defined(HPUX) || defined(__linux__) || defined(SOLARIS)
 int
 scc_socket_init(int port)
 {
@@ -206,7 +206,7 @@ scc_accept_socket(int port)
 }
 
 void
-scc_try_fill_readbuf(int port)
+scc_try_fill_readbuf(int port, double dcycs)
 {
 }
 

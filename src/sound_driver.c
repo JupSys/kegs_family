@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.3 99/02/08 23:51:25 kentd Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.4 99/05/03 22:02:52 kentd Exp $";
 
 #include "defc.h"
 #include "sound.h"
@@ -21,7 +21,7 @@ const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.3 99/02/08 
 # include "Alib.h"
 #endif
 
-#ifdef __linux__
+#if defined(__linux__) || defined(OSS)
 # include <sys/soundcard.h>
 #endif
 
@@ -45,7 +45,7 @@ ATransID g_xid;
 
 #define ZERO_BUF_SIZE		2048
 
-word32 zero_buf[ZERO_BUF_SIZE];
+word32 zero_buf2[ZERO_BUF_SIZE];
 
 #define ZERO_PAUSE_SAFETY_SAMPS		(g_audio_rate >> 5)
 #define ZERO_PAUSE_NUM_SAMPS		(4*g_audio_rate)
@@ -93,7 +93,7 @@ reliable_zero_write(int amt)
 
 	while(amt > 0) {
 		len = MIN(amt, ZERO_BUF_SIZE);
-		reliable_buf_write(zero_buf, 0, len);
+		reliable_buf_write(zero_buf2, 0, len);
 		amt -= len;
 	}
 }
@@ -123,7 +123,7 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
 		child_sound_init_hpdev();
 	}
 #endif
-#ifdef __linux__
+#if defined(__linux__) || defined(OSS)
 	child_sound_init_linux();
 #endif
 
@@ -431,7 +431,7 @@ child_sound_init_alib()
 }
 #endif
 
-#ifdef __linux__
+#if defined(__linux__) || defined(OSS)
 void
 child_sound_init_linux()
 {

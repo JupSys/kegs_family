@@ -67,12 +67,26 @@ Audio is currently disabled by default, but you can try turning it on
 by runnning "kegs -audio 1".  It sounds horrible to me, but sounds do
 come out.
 
-Solaris build instructions:
---------------------------
+Solaris SPARC build instructions:
+--------------------------------
 
 Use the Makefile_solaris makefile by:
 
 rm Makefile; ln -s Makefile_solaris Makefile
+make
+
+KEGS assumes perl is in your path. If it is somewhere else, you need to edit
+the "PERL = perl" line in the makefile and make it point to the correct place.
+
+Audio is currently disabled by default, but you can try turning it on
+by runnning "kegs -audio 1".
+
+Solaris x86 build instructions:
+--------------------------------
+
+Use the Makefile_x86solaris makefile by:
+
+rm Makefile; ln -s Makefile_x86solaris Makefile
 make
 
 KEGS assumes perl is in your path. If it is somewhere else, you need to edit

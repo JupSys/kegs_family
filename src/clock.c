@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.16 99/04/05 00:10:11 kentd Exp $";
+const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.17 99/05/03 22:02:10 kentd Exp $";
 
 #include "defc.h"
 #include <time.h>
@@ -20,6 +20,11 @@ const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.16 99/04/05 00:10:11 kent
 extern int Verbose;
 extern int g_vbl_count;
 extern int g_rom_version;
+
+#ifdef SOLARIS
+extern time_t timezone, altzone;
+extern int daylight;
+#endif
 
 #define CLK_IDLE		1
 #define CLK_TIME		2
@@ -51,7 +56,11 @@ get_dtime()
 	/* No routine cares about the absolute value, only deltas--maybe */
 	/*  take advantage of that in future to increase usec accuracy */
 
+#ifdef SOLARIS
+	gettimeofday(&tp1, (void *)0);
+#else
 	gettimeofday(&tp1, (struct timezone *)0);
+#endif
 
 	dsec = (double)tp1.tv_sec;
 	dusec = (double)tp1.tv_usec;
@@ -117,29 +126,44 @@ setup_bram()
 			bram[i] = 0;
 		}
 	}
+#if defined SOLARIS
+	/* set timezone, altzone, and daylight */
+	(void)tzset();
+#endif
 }
 
 void
 update_cur_time()
 {
 	struct timeval tv;
+#ifndef SOLARIS
 	struct timezone tz;
+#endif
 	unsigned int secs;
 
 
+#ifdef SOLARIS
+	gettimeofday(&tv, (void *)0);
+#else
 	gettimeofday(&tv, &tz);
+#endif
+
 	secs = tv.tv_sec;
 	/* add in secs to make date based on Apple Jan 1, 1904 instead of */
 	/*   Unix's Jan 1, 1970 */
 	/*  So add in 66 years and 17 leap year days (1904 is a leap year) */
 	secs += ((66*365) + 17) * (24*3600);
-	secs -= (tz.tz_minuteswest) * 60;
 
-#ifndef HPUX
+#ifdef SOLARIS
+	secs -= (daylight <= 0)*timezone + (daylight > 0)*altzone;
+#else
+	secs -= (tz.tz_minuteswest) * 60;
+#endif
+
+#ifdef __linux__
 	/* attempt to do daylight savings time adjustment on Linux */
 	secs += ((tz.tz_dsttime != 0)*3600);
 #endif
-	
 	g_clk_cur_time = secs;
 
 	clk_printf("Update g_clk_cur_time to %08x\n", g_clk_cur_time);

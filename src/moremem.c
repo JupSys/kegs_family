@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.197 99/04/11 22:48:42 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.198 99/04/24 22:45:12 kentd Exp $";
 
 #include "defc.h"
 
@@ -1476,35 +1476,11 @@ io_read(word32 loc, Cyc *cyc_ptr)
 			g_paddle_trig_dcycs = dcycs;
 			return 0;
 		case 0x71:	/* 0xc071 */
-			return 0xe2;
-		case 0x72:
-			return 0x40;
-		case 0x73:
-			return 0x50;
-		case 0x74:
-			return 0xb8;
-		case 0x75:
-			return 0x5c;
-		case 0x76:
-			return 0x10;
-		case 0x77:
-			return 0x00;
-		case 0x78:
-			return 0xe1;
-		case 0x79:
-			return 0x38;
-		case 0x7a:
-			return 0x90;
-		case 0x7b:
-			return 0x18;
-		case 0x7c:
-			return 0x5c;
-		case 0x7d:
-			return 0xb4;
-		case 0x7e:
-			return 0xb7;
-		case 0x7f:
-			return 0xff;
+		case 0x72: case 0x73:
+		case 0x74: case 0x75: case 0x76: case 0x77:
+		case 0x78: case 0x79: case 0x7a: case 0x7b:
+		case 0x7c: case 0x7d: case 0x7e: case 0x7f:
+			return g_rom_fc_ff_ptr[3*65536 + 0xc000 + (loc & 0xff)];
 
 		/* 0xc080 - 0xc08f */
 		case 0x80: case 0x81: case 0x82: case 0x83:

@@ -1,4 +1,13 @@
 
+Changes in KEGS v0.49 since v0.48
+- Fixed a key-repeat bug in v0.48 caused usually with shift-key sequences.
+- Fixed bug where GNO would not work with ROM 03.  ROM area at $C071-$C07F
+	is different from ROM 01.
+- Ian Schmidt pointed out a special Ensoniq case where an oscillator in
+	one-shot mode can cause it's partner to start if it is in swap mode.
+- Integrated in Geoff Weiss's Solaris x86 ports.  I might have broken it
+	making a few last-minute changes...
+
 Changes in KEGS v0.48 since v0.47
 - Even better ADB key repeat--key rollover works more like a real Apple //gs.
 - IWM fix: some "smarport" modes were being activated sometimes during

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.26 99/04/09 00:37:02 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.27 99/05/03 22:06:21 kentd Exp $";
 
 #include "defc.h"
 
@@ -154,6 +154,7 @@ scc_regen_clocks(int port)
 	br_const++;	/* counts down past 0 */
 
 	reg4 = scc_ptr->reg[4];
+	clock_mult = 1.0;
 	switch((reg4 >> 6) & 3) {
 	case 0:		/* x1 */
 		clock_mult = 1.0;
@@ -716,7 +717,6 @@ scc_maybe_rx_event(int port, double dcycs)
 	double	rx_dcycs;
 	int	in_rdptr, in_wrptr;
 	int	depth;
-	int	rx_int_mode;
 
 	scc_ptr = &(scc_stat[port]);
 
@@ -751,7 +751,6 @@ void
 scc_maybe_rx_int(int port, double dcycs)
 {
 	Scc	*scc_ptr;
-	double	rx_dcycs;
 	int	depth;
 	int	rx_int_mode;
 
@@ -781,7 +780,6 @@ void
 scc_handle_tx_event(int port, double dcycs)
 {
 	Scc	*scc_ptr;
-	double	tx_dcycs;
 	int	tx_int_mode;
 
 	scc_ptr = &(scc_stat[port]);
@@ -799,7 +797,6 @@ scc_maybe_tx_event(int port, double dcycs)
 {
 	Scc	*scc_ptr;
 	double	tx_dcycs;
-	int	tx_int_mode;
 
 	scc_ptr = &(scc_stat[port]);
 
@@ -912,7 +909,6 @@ scc_read_data(int port, double dcycs)
 	Scc	*scc_ptr;
 	word32	ret;
 	int	depth;
-	int	rx_int_mode;
 	int	i;
 
 	scc_ptr = &(scc_stat[port]);

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.143 99/03/02 00:07:24 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.144 99/05/03 22:03:22 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -1704,6 +1704,18 @@ handle_keysym(XEvent *xev_in)
 		/* 0072 is for cra@WPI.EDU who says it's Break under XFree86 */
 		case 0x0072:
 			keysym = XK_Break;
+			break;
+
+		/* 0x0042, 0x0046, and 0x0048 are the windows keys according */
+		/*  to Geoff Weiss on Solaris x86 */
+		case 0x0042:
+		case 0x0046:
+			/* flying windows == open apple */
+			keysym = XK_Scroll_Lock;
+			break;
+		case 0x0048:
+			/* menu windows == option */
+			keysym = XK_Print;
 			break;
 		}
 	}

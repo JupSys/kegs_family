@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.277 99/04/11 22:46:14 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.278 99/04/15 00:39:12 kentd Exp $";
 
 #include <math.h>
 
@@ -1026,8 +1026,8 @@ show_all_events()
 	ptr = g_event_start.next;
 	while(ptr != 0) {
 		dcycs = ptr->dcycs;
-		printf("Event: %02x: type: %05x, dcycs: %f\n",
-			count, ptr->type, dcycs);
+		printf("Event: %02x: type: %05x, dcycs: %f (%f)\n",
+			count, ptr->type, dcycs, dcycs - g_cur_dcycs);
 		ptr = ptr->next;
 		count++;
 	}
@@ -1556,7 +1556,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.48");
+		update_status_line(6, "KEGS v0.49");
 
 		g_status_refresh_needed = 1;
 
