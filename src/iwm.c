@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.95 99/10/31 01:41:34 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.97 2000/02/08 12:02:58 kentd Exp $";
 
 #include "defc.h"
 
@@ -2544,7 +2544,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	char	*partition_name;
 	int	cmp_o, cmp_p, cmp_dot;
 	int	cmp_b, cmp_i, cmp_n;
-	int	acc, acc2;
+	int	acc;
 	int	can_write;
 	int	len;
 	int	nibs;
@@ -2643,19 +2643,17 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		}
 	}
 
-	/* Trick: If W_OK, then not write_prot, and write_through_to_unix */
-	/*	but if X_OK, then not write_prot, and not write_through */
-	/*	This lets you mark images as executable, and then the sim */
-	/*	can write to them, but you don't have to make backups of */
-	/*	the Unix images */
+	/* I used to allow images that were "executable" to mean KEGS will */
+	/*  treat the image as not write-protected, but will not propagate */
+	/*  changes through to the Unix file */
+	/* This confused many users, and no one seems to have used it, so */
+	/*  I'm getting rid of it */
 
 	if(dsk->fd >= 0) {
 		acc = access(tmp_buf, W_OK);
-		acc2 = access(tmp_buf, X_OK);
 	} else {
 		/* virtual image */
 		acc = 0;
-		acc2 = 0;
 	}
 
 	if(acc == 0 && can_write != 0) {
@@ -2663,11 +2661,6 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		dsk->write_through_to_unix = 1;
 	} else {
 		dsk->write_prot = 1;
-		dsk->write_through_to_unix = 0;
-	}
-
-	if(acc2 == 0) {
-		dsk->write_prot = 0;
 		dsk->write_through_to_unix = 0;
 	}
 

@@ -1,4 +1,15 @@
 
+Changes in KEGS v0.58 since v0.57 (2/08/00)
+- Setting the execute bit on the disk image no longer means no-write-thru.
+	Too many new users were getting confused by this.
+- Fixed another bug with Apple //e bank switching created by v0.56
+	Reported by phoenyx.
+- Add command line option "-v" to turn on some verbose debugging flags.
+- Fixed potential core-dump bug with non-8 bit visuals.
+- Fixed double-lo-res color problem.
+- The X driver should work with any visual depth display now and get the
+	colors right.  Ian Schmidt reported his 16-bit card had bad colors.
+
 Changes in KEGS v0.57 since v0.56 (12/27/99)
 - Another try at making timezone stuff work across all Unix variants.
 	Let me know if the time in the Apple //gs control panel doesn't

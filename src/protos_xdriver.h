@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_protos_x_h[] = "@(#)$Header: protos_xdriver.h,v 1.10 99/07/17 10:41:41 kentd Exp $";
+const char rcsid_protos_x_h[] = "@(#)$Header: protos_xdriver.h,v 1.12 2000/02/08 12:24:30 kentd Exp $";
 
 /* END_HDR */
 
@@ -25,6 +25,7 @@ void xdriver_end(void);
 void show_colormap(char *str, Colormap cmap, int index1, int index2, int index3);
 void dev_video_init(void);
 Visual *x_try_find_visual(Display *display, int depth, int screen_num, XVisualInfo **visual_list_ptr);
+void x_set_mask_and_shift(word32 x_mask, word32 *mask_ptr, int *shift_ptr);
 int xhandle_shm_error(Display *display, XErrorEvent *event);
 int get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual, XShmSegmentInfo *seginfo, int extended_info);
 XImage *get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info);

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.134 99/10/31 01:11:49 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.136 2000/02/08 12:23:55 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -334,7 +334,7 @@ void sound_update(double dcycs);
 void open_sound_file(void);
 void close_sound_file(void);
 void check_for_range(word32 *addr, int num_samps, int offset);
-void send_sound_to_file(word32 *addr, int cur_pos, int num_samps);
+void send_sound_to_file(word32 *addr, int shm_pos, int num_samps);
 void send_sound(int fd, int real_samps, int size);
 void show_c030_state(void);
 void show_c030_samps(int *outptr, int num);

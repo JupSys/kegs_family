@@ -1,6 +1,6 @@
 Summary: Kent's Emulated GS; Apple //GS Emulator
 Name: kegs
-%define version 0.56
+%define version 0.57
 Version: %{version}
 Release: 1
 Group: Applications/Emulators
@@ -57,6 +57,10 @@ rm -rf $RPM_BUILD_ROOT
 /usr/bin/xgs2raw
 
 %changelog
+* Wed Dec 29 1999 Jonathan Stark <stark@starks.org>
+- v0.57 packaged
+* Mon Nov  1 1999 Jonathan Stark <stark@starks.org>
+- v0.56 packaged
 * Tue Oct 19 1999 Jonathan Stark <stark@starks.org>
 - v0.55 packaged
 * Sun Oct 17 1999 Jonathan Stark <stark@starks.org>

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.151 99/10/19 22:19:17 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.154 2000/02/08 12:24:53 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -30,9 +30,7 @@ const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.151 99/10/19 22:19:17
 int XShmQueryExtension(Display *display);
 
 #include "defc.h"
-
 #include "protos_xdriver.h"
-
 
 #define FONT_NAME_STATUS	"8x13"
 
@@ -65,6 +63,12 @@ XFontStruct *text_FontSt;
 Colormap g_a2_colormap = 0;
 Colormap g_default_colormap = 0;
 int	g_needs_cmap = 0;
+word32	g_red_mask = 0xf;
+word32	g_green_mask = 0xf;
+word32	g_blue_mask = 0xf;
+int	g_red_shift = 8;
+int	g_green_shift = 4;
+int	g_blue_shift = 0;
 
 #ifdef X_SHARED_MEM
 int g_use_shmem = 1;
@@ -110,10 +114,8 @@ XColor xcolor_a2vid_array[256];
 XColor xcolor_superhires_array[256];
 XColor dummy_xcolor;
 int g_palette_internal[200];
-word32 g_palette_8to16[256];
-word32 g_a2palette_8to16[256];
-word32 g_palette_8to24[256];
-word32 g_a2palette_8to24[256];
+word32 g_palette_8to1624[256];
+word32 g_a2palette_8to1624[256];
 
 int	g_alt_left_up = 1;
 int	g_alt_right_up = 1;
@@ -312,12 +314,6 @@ update_color_array(int col_num, int a2_color)
 }
 
 #define MAKE_4(val)	( (val << 12) + (val << 8) + (val << 4) + val)
-#define	MAKE_COL16(red, green, blue)				\
-		(((red) << 11) + \
-		((green) << 6) + \
-		((blue) << 1))
-#define	MAKE_COL24(red, green, blue)				\
-		(((red) << 20) + ((green) << 12) + ((blue) << 4))
 
 void
 convert_to_xcolor(XColor *xcol, XColor *xcol2, int col_num,
@@ -339,8 +335,13 @@ convert_to_xcolor(XColor *xcol, XColor *xcol2, int col_num,
 		xcol->flags = DoRed | DoGreen | DoBlue;
 		xcol2->flags = DoRed | DoGreen | DoBlue;
 	} else {
-		g_palette_8to16[col_num] = MAKE_COL16(red, green, blue);
-		g_palette_8to24[col_num] = MAKE_COL24(red, green, blue);
+		red = (red << 4) + red;
+		green = (green << 4) + green;
+		blue = (blue << 4) + blue;
+		g_palette_8to1624[col_num] =
+				((red & g_red_mask) << g_red_shift) +
+				((green & g_green_mask) << g_green_shift) +
+				((blue & g_blue_mask) << g_blue_shift);
 	}
 }
 
@@ -387,8 +388,7 @@ show_xcolor_array()
 	int i;
 
 	for(i = 0; i < 256; i++) {
-		printf("%02x: %08x, %08x\n", i,
-			g_palette_8to16[i], g_palette_8to24[i]);
+		printf("%02x: %08x\n", i, g_palette_8to1624[i]);
 			
 #if 0
 		printf("%02x: %04x %04x %04x, %02x %x\n",
@@ -471,7 +471,6 @@ dev_video_init()
 	int	font_height;
 	int	screen_num;
 	char	*myTextString[1];
-	int	red, green, blue;
 	word32	lores_col;
 	int	ret;
 	int	i;
@@ -577,24 +576,25 @@ dev_video_init()
 	win_attr.event_mask = X_A2_WIN_EVENT_LIST;
 	win_attr.colormap = g_a2_colormap;
 	win_attr.backing_store = WhenMapped;
+	win_attr.border_pixel = 1;
+	win_attr.background_pixel = 0;
 	if(g_warp_pointer) {
 		win_attr.cursor = g_cursor;
 	} else {
 		win_attr.cursor = None;
 	}
 
-	vid_printf("About to a2_win\n");
+	vid_printf("About to a2_win, depth: %d\n", g_screen_depth);
 	fflush(stdout);
 
 	create_win_list = CWEventMask | CWBackingStore | CWCursor;
-	create_win_list |= CWColormap;
+	create_win_list |= CWColormap | CWBorderPixel | CWBackPixel;
+
 	a2_win = XCreateWindow(display, RootWindow(display, screen_num),
 		0, 0, BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT,
 		0, g_screen_depth, InputOutput, vis,
 		create_win_list, &win_attr);
 
-	if(g_needs_cmap) {
-	}
 	XSetWindowColormap(display, a2_win, g_a2_colormap);
 
 	XFlush(display);
@@ -693,11 +693,7 @@ dev_video_init()
 		convert_to_xcolor(&xcolor_a2vid_array[i],
 			&xcolor_superhires_array[i], i,
 			lores_col, 1);
-		red = (lores_col >> 8) & 0xf;
-		green = (lores_col >> 4) & 0xf;
-		blue = (lores_col) & 0xf;
-		g_a2palette_8to16[i] = MAKE_COL16(red, green, blue);
-		g_a2palette_8to24[i] = MAKE_COL24(red, green, blue);
+		g_a2palette_8to1624[i] = g_palette_8to1624[i];
 	}
 
 	if(g_needs_cmap) {
@@ -781,6 +777,7 @@ x_try_find_visual(Display *display, int depth, int screen_num,
 		XVisualInfo **visual_list_ptr)
 {
 	XVisualInfo *visualList;
+	XVisualInfo *v_chosen;
 	XVisualInfo vTemplate;
 	int	visualsMatched;
 	int	mdepth;
@@ -842,21 +839,46 @@ x_try_find_visual(Display *display, int depth, int screen_num,
 	printf("Chose visual: %d, max_colors: %d\n", visual_chosen,
 		Max_color_size);
 
+	v_chosen = &(visualList[visual_chosen]);
+	x_set_mask_and_shift(v_chosen->red_mask, &g_red_mask, &g_red_shift);
+	x_set_mask_and_shift(v_chosen->green_mask,&g_green_mask,&g_green_shift);
+	x_set_mask_and_shift(v_chosen->blue_mask, &g_blue_mask, &g_blue_shift);
+
 	g_screen_depth = depth;
 	mdepth = depth;
-	if(depth == 15) {
+	if(depth > 8) {
 		mdepth = 16;
 	}
-	if(depth == 24) {
+	if(depth > 16) {
 		mdepth = 32;
 	}
 	g_screen_mdepth = mdepth;
 	g_needs_cmap = needs_cmap;
 	*visual_list_ptr = visualList;
 
-	return visualList[visual_chosen].visual;
+	return v_chosen->visual;
 }
 
+void
+x_set_mask_and_shift(word32 x_mask, word32 *mask_ptr, int *shift_ptr)
+{
+	int	shift;
+	int	i;
+
+	/* Shift until we find first set bit in mask, then remember mask,shift*/
+
+	shift = 0;
+	for(i = 0; i < 32; i++) {
+		if(x_mask & 1) {
+			/* we're done! */
+			*mask_ptr = x_mask;
+			*shift_ptr = shift;
+			return;
+		}
+		x_mask = x_mask >> 1;
+		shift++;
+	}
+}
 
 #ifdef X_SHARED_MEM
 int xshm_error = 0;
@@ -1391,9 +1413,9 @@ x_convert_8to16(XImage *xim, XImage *xout, int startx, int starty,
 	outdata = (word16 *)xout->data;
 
 	if(indata == data_superhires) {
-		palptr = &(g_palette_8to16[0]);
+		palptr = &(g_palette_8to1624[0]);
 	} else {
-		palptr = &(g_a2palette_8to16[0]);
+		palptr = &(g_a2palette_8to1624[0]);
 	}
 
 	for(y = 0; y < height; y++) {
@@ -1426,9 +1448,9 @@ x_convert_8to24(XImage *xim, XImage *xout, int startx, int starty,
 	outdata = (word32 *)xout->data;
 
 	if(indata == data_superhires) {
-		palptr = &(g_palette_8to24[0]);
+		palptr = &(g_palette_8to1624[0]);
 	} else {
-		palptr = &(g_a2palette_8to24[0]);
+		palptr = &(g_a2palette_8to1624[0]);
 	}
 
 	for(y = 0; y < height; y++) {

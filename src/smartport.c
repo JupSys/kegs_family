@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.22 99/10/13 00:32:17 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.23 2000/01/11 00:13:23 kentd Exp $";
 
 #include "defc.h"
 
@@ -866,15 +866,15 @@ do_format_c7(int unit_num)
 		return 0x27;
 	}
 
-	if(dsk->write_through_to_unix == 0) {
-		printf("Format of %s ignored\n", dsk->name_ptr);
-		return 0x00;
-	}
 	if(dsk->write_prot) {
 		printf("Format, but %s is write protected!\n", dsk->name_ptr);
 		return 0x2b;
 	}
 
+	if(dsk->write_through_to_unix == 0) {
+		printf("Format of %s ignored\n", dsk->name_ptr);
+		return 0x00;
+	}
 
 	sum = 0;
 	total = image_size;

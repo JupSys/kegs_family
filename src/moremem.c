@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.215 99/12/20 22:20:29 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.216 2000/01/11 00:12:30 kentd Exp $";
 
 #include "defc.h"
 
@@ -368,7 +368,9 @@ fixup_st80col(double dcycs)
 
 	fixup_bank0_0400_0800();
 
-	if((cur_a2_stat & ALL_STAT_HIRES) && PAGE2) {
+	if(cur_a2_stat & ALL_STAT_HIRES) {
+		/* fixup no matter what PAGE2 since PAGE2 and RAMRD/WR */
+		/*  can work against each other */
 		fixup_bank0_2000_4000();
 	}
 

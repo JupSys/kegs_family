@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.99 99/09/06 20:50:22 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.101 2000/02/06 01:45:03 kentd Exp $";
 
 #include <time.h>
 
@@ -351,7 +351,6 @@ video_init()
 			exit(3);
 		}
 
-		total = (total * g_screen_depth) / 8;
 		for(j = 0; j < total >> 2; j++) {
 			*ptr++ = 0;
 		}
@@ -1476,6 +1475,11 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 				val1 = val_even_main & 0xf;
 				val2 = val_odd_aux & 0xf;
 				val3 = val_odd_main & 0xf;
+
+				/* Handle funny pattern of dbl gr aux mem */
+				val0 = ((val0 << 1) & 0xf) + (val0 >> 3);
+				val2 = ((val2 << 1) & 0xf) + (val2 >> 3);
+
 				val0_wd = (val0 << 24) + (val0 << 16) +
 						(val0 << 8) + val0;
 				val1_wd = (val1 << 24) + (val1 << 16) +
