@@ -38,7 +38,7 @@ takes about 3 minutes to fully compile KEGS on a 712/80.
 X86 Linux build instructions:
 ----------------------------
 
-Use the Makefile_linux makefile by:
+Use the Makefile_x86linux makefile by:
 
 mv Makefile_x86linux Makefile
 
@@ -53,17 +53,39 @@ correct place.
 Audio is currently disabled by using the sound_dummy.c file in
 place of code to really use /dev/audio on Linux.
 
+PowerPC Linux build instructions:
+----------------------------
+
+Use the Makefile_linuxppc makefile by:
+
+mv Makefile_linuxppc Makefile
+
+and then:
+
+make
+
+KEGS assumes perl is in /usr/local/bin/perl.  If it is somewhere else, you
+need to edit the first line of make_inst and make_size to point to the
+correct place.  Or add a symbolic link in /usr/local/bin/perl to
+/usr/bin/perl.
+
+Audio is currently disabled by using the sound_dummy.c file in
+place of code to really use /dev/audio on Linux.
+
+
 Other platform "C" build instructions:
 -------------------------------------
 
 I don't know--you tell me.  If you are porting to an X-windows and
-Unix-based machine, it should be easy.  Start with Makefile_x86linux.
-Don't define -DLITTLE_ENDIAN unless your processor is little-endian
-(x86, Alpha).  Sun, MIPS, HP, Motorola, and IBM are big-endian.
+Unix-based machine, it should be easy.  Start with Makefile_x86linux if
+you are a little-endian machine, or Makefile_linuxppc if you are big
+endian.  Don't define -DKEGS_LITTLE_ENDIAN unless your processor is
+little-endian (x86, Alpha).  Sun, MIPS, HP, Motorola, and IBM are
+big-endian.
 
 If you want to port to a non-X-Windows environment, you'll need to
 rewrite xdriver.c and sound_hp.c/sound_dummy.c.  You'll probably have
 to make changes to scc.c (BSD sockets) and smartport.c (Unix file
 handling).  clock.c assumes gettimeofday() is accurate and fast, and
 also uses select() for a microsecond sleep operation.
-
+.

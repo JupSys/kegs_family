@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.58 98/05/25 18:29:46 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.60 98/07/04 19:32:19 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -32,7 +32,7 @@ void U_STACK_TRACE();
 #define DCYCS_1_MHZ		((DCYCS_28_MHZ/28.0)*(65.0*7/(65.0*7+1.0)))
 #define CYCS_1_MHZ		((int)DCYCS_1_MHZ)
 
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 # define BIGEND(a)    ((((a) >> 24) & 0xff) +			\
 			(((a) >> 8) & 0xff00) + 		\
 			(((a) << 8) & 0xff0000) + 		\
@@ -58,6 +58,11 @@ typedef float Cyc;
 #include <string.h>
 #ifdef HPUX
 # include <machine/inline.h>		/* for GET_ITIMER */
+#endif
+
+#ifndef O_BINARY
+/* work around some Windows junk */
+# define O_BINARY	0
 #endif
 
 STRUCT(Pc_log) {

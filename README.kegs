@@ -1,22 +1,22 @@
 
-KEGS: Kent's Emulated GS version 0.36
+KEGS: Kent's Emulated GS version 0.37
 
 What is this?
 -------------
 
 KEGS is an Apple //gs emulator for X windows, but optimized for HP
-workstations.  New with KEGS v0.35 is portability to another platform--
-Linux on Intel x86.  KEGS was originally written for HP Unix
-workstations using a hand-coded assembly language interpreter loop.  To
-open KEGS up to a wider audience, I recoded the assembly parts into a
-C-only version, which can now be compiled and run on other platforms.
-The Linux port is probably the most demanding X window port, and only a
-few dozen lines of code needed to change.  See README.compile.
+workstations.  KEGS is now portable to two other platforms-- Linux on
+Intel x86 and Linux on PowerPC machines.  KEGS was originally written
+for HP Unix workstations using a hand-coded assembly language
+interpreter loop.  To open KEGS up to a wider audience, I recoded the
+assembly parts into a C-only version, which can now be compiled and run
+on other platforms.  The Linux port was very easy since only a few dozen
+lines of code needed to change.  See README.compile.
 
 KEGS uses X-Windows for its display (you can send the display to another
 machine) and uses the built-in audio on HP workstations to emulate all
 Apple //gs sounds.  It supports limited serial port emulation through
-sockets.  Audio does not work under x86 Linux yet.
+sockets.  Audio does not work under Linux yet.
 
 The ROMs and GS/OS (the Apple //gs operating system) are not included
 with KEGS since they are not freely distributable.  KEGS is a little
@@ -30,6 +30,7 @@ KEGS features:
 Fast 65816 emulation:
 	Assembly version: about 8MHz on a 712/80, and 17-20MHz on a C180.
 	C version: about 4MHz on a 712/80, 12MHz on a 266MHz Pentium II.
+		About 13MHz on a 240MHz 604e PowerCenter 240 running MkLinux.
 Emulates low-level 5.25" and 3.5" drive accesses (even nibble-copiers work!).
 Emulates classic Apple II sound and 32-voice Ensoniq sound.
 	All sound is played in 16-bit stereo at 48KHz.  (Not on Linux, yet).
@@ -99,10 +100,16 @@ language interpreter loop.  Full source and a makefile is provided
 to allow you to compile for other HP-UX revisions or for other platforms.
 See the README.compile file for more info about compiling.
 
-If you are on linux, run "kegs.linux" instead.  There is a temporary
-bug with drawing the border on Linux with Shared Memory--add the options
-"-noshm -skip 0" to fix this up (but lose some graphics performance,
-sorry).
+It's not so easy for me to create x86 Linux binaries, so you must
+compile it yourself (It's easy, see README.compile).
+
+If you are on a PowerPC computer running Linux, run "kegs.linuxppc" instead.
+This version was compiled on MkLinux pre-DR3, but it should work
+on LinuxPPC, too.
+
+There may be a bug with drawing the border on x86 Linux with Shared Memory--
+add the options "-noshm -skip 0" to fix this up (but lose some graphics
+performance, sorry).
 
 If you want the display to go somewhere different, make sure the shell
 environment variable $DISPLAY is set, or give the command-line argument
@@ -112,12 +119,16 @@ By default, the audio will be active if the display is the local HP
 workstation, else it will be disabled.  The command-line arguments
 "-audio 0" forces audio off, and "-audio 1" forces audio on (even if the
 display is remote).  Audio is sent to the internal workstation speaker
-unless $SPEAKER=external.  Audio will be sent through the HP Alib
-routines (see audio(5)).  You can send audio to a remote machine by
-setting the AUDIO environment variable.  You can get KEGS to use the
-direct audio hardware using the command-line option "-hpdev", but this
-can cause panics on HPUX 10.X before 10.20ACE without some audio
-patches.
+unless $SPEAKER=external.
+
+I've had too many annoying bugs with the Aserver audio system, so
+with v0.37, KEGS defaults to using the /dev/audio interface.
+If you are on HPUX 10.X before 10.20ACE, you may need to install
+some audio patches to avoid panic'ing your machine.
+
+Audio can still be sent through the HP Alib routines (see audio(5)) using the
+"-alib" cmd line option.  You can send audio to a remote machine by
+setting the AUDIO environment variable if you're using the.
 
 Audio currently is not functional on Linux.
 
@@ -131,8 +142,7 @@ workstations, this is always available, even if you have a 24-bit
 graphics card.  On Linux, it seems as if you must run the server in
 8-bit mode.  On Linux, moving the cursor into the KEGS window causes the
 rest of the screen to go "technicolor" due to KEGS needing the
-whole colormap to operate.  Can some Linux expert chime in on
-any ways to avoid this?
+whole colormap to operate.
 
 KEGS also forks off a subprocess to help handle the sound if audio is
 active.  If KEGS crashes in a unusual way (a coredump, for instance),
@@ -793,7 +803,7 @@ it plays the music just fine.
 Under GS/OS, the 5.25" drive emulation does not seem to work right.
 I'm working on fixing this.
 
-Linux draws the border all wrong with Shared Memory on--use -noshm
+x86 Linux may draw the border wrong with Shared Memory on--use -noshm
 on Linux to avoid this for now.
 
 Sound emulation:

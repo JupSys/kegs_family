@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.190 98/05/23 00:30:12 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.191 98/07/04 21:34:43 kentd Exp $";
 
 #include "defc.h"
 
@@ -1559,9 +1559,13 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		/* 0xc0b0 - 0xc0bf */
 		case 0xb0: case 0xb1: case 0xb2: case 0xb3:
 		case 0xb4: case 0xb5: case 0xb6: case 0xb7:
-		case 0xb8: case 0xb9: case 0xba: case 0xbb:
+		case 0xb9: case 0xba: case 0xbb:
 		case 0xbc: case 0xbd: case 0xbe: case 0xbf:
 			UNIMPL_READ;
+		/* c0b8: Second Sight card stuff: return 0 */
+		case 0xb8:
+			return 0;
+			break;
 
 		/* 0xc0c0 - 0xc0cf */
 		case 0xc0: case 0xc1: case 0xc2: case 0xc3:
@@ -2188,7 +2192,10 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 			UNIMPL_WRITE;
 
 		/* 0xc0b0 - 0xc0bf */
-		case 0xb0: case 0xb1: case 0xb2: case 0xb3:
+		case 0xb0:
+			/* Second sight stuff--ignore it */
+			return;
+		case 0xb1: case 0xb2: case 0xb3:
 		case 0xb4: case 0xb5: case 0xb6: case 0xb7:
 		case 0xb8: case 0xb9: case 0xba: case 0xbb:
 		case 0xbc: case 0xbd: case 0xbe: case 0xbf:

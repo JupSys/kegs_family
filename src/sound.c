@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.69 98/05/25 18:29:17 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.71 98/07/04 19:32:26 kentd Exp $";
 
 #include "defc.h"
 
@@ -363,7 +363,7 @@ open_sound_file()
 
 	sprintf(name, "snd.out.%d", g_sound_file_num);
 
-	fd = open(name, O_WRONLY | O_CREAT | O_TRUNC, 0x1ff);
+	fd = open(name, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0x1ff);
 	if(fd < 0) {
 		printf("open_sound_file open ret: %d, errno: %d\n", fd, errno);
 		exit(1);
@@ -877,7 +877,7 @@ sound_play(double dcycs)
 	
 				outptr += 2;
 	
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 				sndptr[pos] = (val << 16) + (val0 & 0xffff);
 #else
 				sndptr[pos] = (val0 << 16) + (val & 0xffff);

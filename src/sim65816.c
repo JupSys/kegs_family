@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.256 98/05/26 00:09:35 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.258 98/07/05 20:32:39 kentd Exp $";
 
 #include <math.h>
 
@@ -96,7 +96,7 @@ int halt_on_decimal_ops = 0;
 int	g_rom_version = 0;
 int	g_halt_on_bad_read = 0;
 int	g_ignore_bad_acc = 0;
-int	g_use_alib = 1;
+int	g_use_alib = 0;
 
 const double g_drecip_cycles_in_16ms_1mhz = (60.0/(CYCS_1_MHZ));
 const double g_dcycles_in_16ms_1mhz = ((double)(CYCS_1_MHZ)) / 60.0;
@@ -670,6 +670,7 @@ extern int g_screen_redraw_skip_amt;
 extern int g_use_shmem;
 
 char g_display_env[512];
+int	g_visual_depth = 8;
 
 int
 main(int argc, char **argv)
@@ -693,6 +694,12 @@ main(int argc, char **argv)
 		} else if(!strcmp("-hpdev", argv[i])) {
 			printf("Using /dev/audio\n");
 			g_use_alib = 0;
+		} else if(!strcmp("-alib", argv[i])) {
+			printf("Using Aserver audio server\n");
+			g_use_alib = 1;
+		} else if(!strcmp("-24", argv[i])) {
+			printf("Using 24-bit visual\n");
+			g_visual_depth = 24;
 		} else if(!strcmp("-skip", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
@@ -1495,7 +1502,7 @@ vbl_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.36");
+		update_status_line(6, "KEGS v0.37");
 
 		g_status_refresh_needed = 1;
 

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.85 98/05/25 18:09:41 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.87 98/07/10 00:25:18 kentd Exp $";
 
 #include <time.h>
 
@@ -44,6 +44,7 @@ word32 g_cycs_in_40col = 0;
 
 extern int screen_index[];
 extern byte *g_slow_memory_ptr;
+extern int g_visual_depth;
 
 extern int statereg;
 extern double g_cur_dcycs;
@@ -297,9 +298,9 @@ video_init()
 
 	g_new_a2_stat_cur_line = 0;
 
-	read_a2_font("font.65sim");
-
 	dev_video_init();
+
+	read_a2_font("font.65sim");
 
 	vid_printf("Zeroing out video memory\n");
 
@@ -339,6 +340,7 @@ video_init()
 			exit(3);
 		}
 
+		total = (total * g_visual_depth) / 8;
 		for(j = 0; j < total >> 2; j++) {
 			*ptr++ = 0;
 		}
@@ -1306,7 +1308,7 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 						(val0 << 8) + val0;
 				val1_wd = (val1 << 24) + (val1 << 16) +
 						(val1 << 8) + val1;
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 				val01_wd = (val1_wd << 16) + (val0_wd & 0xffff);
 #else
 				val01_wd = (val0_wd << 16) + (val1_wd & 0xffff);
@@ -1426,7 +1428,7 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 						(val2 << 8) + val2;
 				val3_wd = (val3 << 24) + (val3 << 16) +
 						(val3 << 8) + val3;
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 				val01_wd = (val1_wd << 24) + (val0_wd&0xffffff);
 				val12_wd = (val2_wd << 16) + (val1_wd & 0xffff);
 				val23_wd = (val3_wd << 8) + (val2_wd & 0xff);

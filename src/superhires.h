@@ -2,7 +2,7 @@
 /* This file is included by video.c */
 
 #ifndef SUPERHIRES_INCLUDED
-const char rcsid_superhires_h[] = "@(#)$Header: superhires.h,v 1.6 98/05/30 22:40:44 kentd Exp $";
+const char rcsid_superhires_h[] = "@(#)$Header: superhires.h,v 1.7 98/07/04 19:32:27 kentd Exp $";
 # define SUPERHIRES_INCLUDED
 #endif
 
@@ -49,7 +49,7 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 			(pal << 4);
 
 		if(SUPER_MODE640 && !SUPER_A2VID) {
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 			pal_word += 0x04000c08;
 #else
 			pal_word += 0x080c0004;
@@ -76,7 +76,7 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 					pix2 = g_a2vid_palette_remap[pix2+0];
 					pix3 = g_a2vid_palette_remap[pix3+4];
 				}
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 				tmp = (pix3 << 24) + (pix2 << 16) +
 					(pix1 << 8) + pix0 + pal_word;
 #else
@@ -95,7 +95,7 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 					pix2 = g_a2vid_palette_remap[pix2+0];
 					pix3 = g_a2vid_palette_remap[pix3+4];
 				}
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 				tmp = (pix3 << 24) + (pix2 << 16) +
 					(pix1 << 8) + pix0 + pal_word;
 #else
@@ -124,7 +124,7 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 					pix0 = g_a2vid_palette_remap[pix0];
 					pix1 = g_a2vid_palette_remap[pix1];
 				}
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 				tmp = (pix1 << 24) + (pix1 << 16) +
 					(pix0 << 8) + pix0 + pal_word;
 #else
@@ -153,7 +153,7 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 					pix0 = g_a2vid_palette_remap[pix0];
 					pix1 = g_a2vid_palette_remap[pix1];
 				}
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 				tmp = (pix1 << 24) + (pix1 << 16) +
 					(pix0 << 8) + pix0 + pal_word;
 #else

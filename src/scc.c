@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.19 98/05/26 00:08:51 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.20 98/07/13 21:27:35 kentd Exp $";
 
 #include "defc.h"
 
@@ -338,9 +338,20 @@ scc_write_reg(int port, word32 val, double dcycs)
 				8+port, val, tmp1);
 			set_halt(1);
 		}
-		if((val & 0xc0) != 0) {
+		tmp1 = (val >> 6) & 0x3;
+		switch(tmp1) {
+		case 0x0:	/* null code */
+			break;
+		case 0x1:	/* reset rx crc */
+		case 0x2:	/* reset tx crc */
 			printf("Write c03%x to wr0 of %02x!\n", 8+port, val);
 			set_halt(1);
+			break;
+		case 0x3:	/* reset tx underrun/eom latch */
+			/* if no extern status pending, or being reset now */
+			/*  and tx disabled, ext int with tx underrun */
+			/* ah, just do nothing */
+			break;
 		}
 		return;
 	case 1:

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.71 98/05/23 22:38:03 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.74 98/07/11 01:28:09 kentd Exp $";
 
 #include "defc.h"
 
@@ -1810,7 +1810,7 @@ iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 
 
 	word_ptr = (word32 *)&(trk->nib_area[0]);
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 	val = 0xff08ff08;
 #else
 	val = 0x08ff08ff;
@@ -2171,6 +2171,9 @@ disk_nib_out(Disk *dsk, byte val, int size)
 
 	pos = trk->dsk->nib_pos;
 	overflow_size = trk->overflow_size;
+	if(pos >= track_len) {
+		pos = 0;
+	}
 
 	old_size = trk->nib_area[pos];
 
@@ -2547,15 +2550,16 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		tmp_buf[i+1] = 0;
 	}
 
-	dsk->fd = open(tmp_buf, O_RDWR, 0x1b6);
+	dsk->fd = open(tmp_buf, O_RDWR | O_BINARY, 0x1b6);
 	can_write = 1;
 	if(dsk->fd < 0) {
 		printf("Trying to open %s read-only, errno: %d\n", tmp_buf,
 								errno);
-		dsk->fd = open(tmp_buf, O_RDONLY, 0x1b6);
+		dsk->fd = open(tmp_buf, O_RDONLY | O_BINARY, 0x1b6);
 		can_write = 0;
 		if(dsk->fd < 0 && !dsk->smartport) {
-			dsk->fd = open(tmp_buf, O_RDWR | O_CREAT, 0x1b6);
+			dsk->fd = open(tmp_buf, O_RDWR | O_CREAT | O_BINARY,
+									0x1b6);
 			if(dsk->fd >= 0) {
 				can_write = 1;
 			}

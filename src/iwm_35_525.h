@@ -1,6 +1,6 @@
 
 #ifdef INCLUDE_IWM_RCSID_C
-const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.3 97/09/23 00:19:14 kentd Exp $";
+const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.4 98/07/11 01:28:18 kentd Exp $";
 #endif
 
 int
@@ -37,6 +37,11 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 	dcycs_passed = dcycs - dcycs_last_read;
 
 	pos = dsk->nib_pos;
+	if(pos >= track_len) {
+		/* Arm may have moved from inner 3.5 track to outer one, */
+		/*  and so must make pos fit on smaller sized track */
+		pos = 0;
+	}
 
 	cycs_passed = (int)dcycs_passed;
 
@@ -177,6 +182,10 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 	}
 
 	dsk->nib_pos = pos;
+	if(pos < 0 || pos > track_len) {
+		printf("I just set nib_pos: %d!\n", pos);
+		set_halt(1);
+	}
 
 #if 0
 	iwm_printf("Disk read, returning: %02x\n", ret);

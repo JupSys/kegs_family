@@ -1,4 +1,18 @@
 
+Changes in KEGS v0.37 since v0.36
+- Linux PPC port completed and functional.  KEGS has been tested to
+  run quite well and quite fast on a 240MHz 604e running
+  MkLinux pre-DR3.
+- Change LITTLE_ENDIAN define to KEGS_LITTLE_ENDIAN since Linux
+  always defines LITTLE_ENDIAN as a silly macro.
+- Dumb bug in IWM 3.5" routines could cause core dumps if disk arm moved
+  from outer track to inner track very quickly.
+- Deleted some breakpoints that some Second Sight searching code would hit.
+- Ignore some SCC reset commands GNO would use that caused KEGS to stop.
+- Handle odd partitions better--some //gs formatted Zips had a blocksize
+  of 0, which defaults to 512 now.
+- Handle some keysyms better to avoid MkLinux bug with keysym 0.
+
 Changes in KEGS v0.36 since v0.35
 
 - Linux x86 port completed and functional with help from Karl Pfleger

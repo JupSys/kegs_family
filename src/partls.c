@@ -78,6 +78,9 @@ main(int argc, char **argv)
 	if(long_form) {
 		printf("sig: %04x, blksize: %04x\n", sig, block_size);
 	}
+	if(block_size == 0) {
+		block_size = 512;
+	}
 
 	if(sig == 0x4552 && block_size >= 0x200) {
 		if(long_form) {

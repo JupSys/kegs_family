@@ -11,10 +11,11 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.13 98/05/30 22:39:18 kentd Exp $";
+const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.15 98/07/10 00:26:05 kentd Exp $";
 
 #include "defc.h"
 #include <time.h>
+#include <sys/time.h>
 
 extern int Verbose;
 extern int g_vbl_count;
@@ -97,7 +98,7 @@ setup_bram()
 	int	i;
 
 	sprintf(bram_buf, "bram.data.%d", g_rom_version);
-	bram_fd = open(bram_buf, O_RDWR | O_CREAT, 0x1b6);
+	bram_fd = open(bram_buf, O_RDWR | O_CREAT | O_BINARY, 0x1b6);
 	if(bram_fd < 0) {
 		printf("Couldn't open %s: %d, %d\n", bram_buf, bram_fd, errno);
 		exit(14);

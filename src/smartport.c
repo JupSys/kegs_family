@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.7 98/05/30 22:39:33 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.9 98/07/04 19:32:25 kentd Exp $";
 
 #include "defc.h"
 
@@ -96,8 +96,11 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 	driver_desc_ptr = (Driver_desc *)part_blk_buf;
 	sig = driver_desc_ptr->sig;
 	block_size = driver_desc_ptr->blk_size;
+	if(block_size == 0) {
+		block_size = 512;
+	}
 	if(sig != 0x4552 || block_size < 0x200 || block_size > MAX_BLOCK_SIZE) {
-		printf("No driver descriptor map found\n");
+		printf("Partition error: No driver descriptor map found\n");
 		return -1;
 	}
 
@@ -785,7 +788,7 @@ do_write_c7(int unit_num, word32 buf, int blk)
 		val1 = get_memory16_c(buf + i, 0);
 		val2 = get_memory16_c(buf + i + 2, 0);
 		/* reorder the little-endian bytes to be big-endian */
-#ifdef LITTLE_ENDIAN
+#ifdef KEGS_LITTLE_ENDIAN
 		val = (val2 << 16) + val1;
 #else
 		val = (val1 << 24) + ((val1 << 8) & 0xff0000) +

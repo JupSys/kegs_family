@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.133 98/05/30 22:40:57 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.135 98/07/10 00:28:44 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -51,6 +51,7 @@ extern int g_limit_speed;
 extern int g_fast_disk_emul;
 
 extern int g_warp_pointer;
+extern int g_visual_depth;
 
 extern int g_swap_paddles;
 extern int g_invert_paddles;
@@ -66,8 +67,8 @@ Display *display = 0;
 Window a2_win;
 GC a2_winGC;
 XFontStruct *text_FontSt;
-Colormap g_a2_colormap;
-Colormap g_default_colormap;
+Colormap g_a2_colormap = 0;
+Colormap g_default_colormap = 0;
 
 #ifdef X_SHARED_MEM
 int g_use_shmem = 1;
@@ -390,6 +391,9 @@ dev_video_init()
 	Visual	*vis;
 	char	cursor_data;
 	char	**font_ptr;
+	int	match8, match24;
+	word32	create_win_list;
+	int	needs_cmap;
 	int	cnt;
 	int	font_height;
 	int	screen_num;
@@ -441,7 +445,7 @@ dev_video_init()
 	screen_num = DefaultScreen(display);
 
 	vTemplate.screen = screen_num;
-	vTemplate.depth = 8;
+	vTemplate.depth = g_visual_depth;
 
 	visualList = XGetVisualInfo(display, VisualScreenMask | VisualDepthMask,
 		&vTemplate, &visualsMatched);
@@ -453,6 +457,7 @@ dev_video_init()
 	}
 
 	visual_chosen = -1;
+	needs_cmap = 0;
 	for(i = 0; i < visualsMatched; i++) {
 		printf("Visual %d\n", i);
 		printf("	id: %08x, screen: %d, depth: %d, class: %d\n",
@@ -467,9 +472,18 @@ dev_video_init()
 		printf("	cmap size: %d, bits_per_rgb: %d\n",
 			visualList[i].colormap_size,
 			visualList[i].bits_per_rgb);
-		if(visualList[i].class == PseudoColor) {
+		match8 = (visualList[i].class == PseudoColor);
+		match24 = (visualList[i].class == TrueColor);
+		if((g_visual_depth == 8) && match8) {
 			visual_chosen = i;
 			Max_color_size = visualList[i].colormap_size;
+			needs_cmap = 1;
+			break;
+		}
+		if((g_visual_depth == 8) && match24) {
+			visual_chosen = i;
+			Max_color_size = -1;
+			needs_cmap = 0;
 			break;
 		}
 	}
@@ -492,15 +506,18 @@ dev_video_init()
 	}
 
 
-	g_a2_colormap = XCreateColormap(display, RootWindow(display,screen_num),
-		vis, AllocAll);
+	g_a2_colormap = -1;
+	if(needs_cmap) {
+		g_a2_colormap = XCreateColormap(display,
+				RootWindow(display,screen_num), vis, AllocAll);
 
-	vid_printf("g_a2_colormap: %08x, main: %08x\n", (word32)g_a2_colormap,
-		(word32)g_default_colormap);
+		vid_printf("g_a2_colormap: %08x, main: %08x\n",
+			(word32)g_a2_colormap, (word32)g_default_colormap);
 
-	if(g_a2_colormap == g_default_colormap) {
-		printf("A2_colormap = default colormap!\n");
-		exit(4);
+		if(g_a2_colormap == g_default_colormap) {
+			printf("A2_colormap = default colormap!\n");
+			exit(4);
+		}
 	}
 
 	/* and define cursor */
@@ -531,13 +548,19 @@ dev_video_init()
 	vid_printf("About to a2_win\n");
 	fflush(stdout);
 
+	create_win_list = CWEventMask | CWBackingStore | CWCursor;
+	if(needs_cmap) {
+		create_win_list |= CWColormap;
+	}
 	a2_win = XCreateWindow(display, RootWindow(display, screen_num),
 		0, 0, BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT,
 		0, vTemplate.depth, InputOutput, vis,
 		CWEventMask | CWColormap | CWBackingStore | CWCursor,
 		&win_attr);
 
-	XSetWindowColormap(display, a2_win, g_a2_colormap);
+	if(needs_cmap) {
+		XSetWindowColormap(display, a2_win, g_a2_colormap);
+	}
 
 	XFlush(display);
 
@@ -623,8 +646,10 @@ dev_video_init()
 		xcolor_superhires_array[i].blue = i*256;
 	}
 
-	XStoreColors(display, g_a2_colormap, &xcolor_a2vid_array[0],
-		Max_color_size);
+	if(needs_cmap) {
+		XStoreColors(display, g_a2_colormap, &xcolor_a2vid_array[0],
+			Max_color_size);
+	}
 
 	g_installed_full_superhires_colormap = 0;
 	
@@ -639,8 +664,8 @@ dev_video_init()
 	my_winSizeHints.min_height = BASE_WINDOW_HEIGHT;
 	my_winSizeHints.max_width = BASE_WINDOW_WIDTH;
 	my_winSizeHints.max_height = BASE_WINDOW_HEIGHT;
-	my_winClassHint.res_name = "sim65";
-	my_winClassHint.res_class = "Sim65";
+	my_winClassHint.res_name = "KEGS";
+	my_winClassHint.res_class = "KEGS";
 
 	XSetWMProperties(display, a2_win, &my_winText, &my_winText, 0,
 		0, &my_winSizeHints, 0, &my_winClassHint);
@@ -706,7 +731,7 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 		height = A2_WINDOW_HEIGHT;
 	}
 
-	xim = XShmCreateImage(display, visual, 8, ZPixmap,
+	xim = XShmCreateImage(display, visual, g_visual_depth, ZPixmap,
 		(char *)0, seginfo, width, height);
 
 	vid_printf("xim: %08x\n", (word32)xim);
@@ -786,7 +811,7 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 		height = A2_WINDOW_HEIGHT;
 	}
 
-	ptr = (byte *)malloc(width * height);
+	ptr = (byte *)malloc((width * height * g_visual_depth) / 8);
 
 	vid_printf("ptr: %08x\n", (word32)ptr);
 
@@ -797,8 +822,8 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 
 	*data_ptr = ptr;
 
-	xim = XCreateImage(display, vis, 8, ZPixmap, 0, (char *)ptr,
-		width, height, 8, width);
+	xim = XCreateImage(display, vis, g_visual_depth, ZPixmap, 0,
+		(char *)ptr, width, height, 8, 0);
 
 	vid_printf("xim.data: %08x\n", (word32)xim->data);
 
@@ -1368,9 +1393,12 @@ handle_keysym(XEvent *xev_in)
 
 	/* Look up Apple 2 keycode */
 	for(i = g_num_a2_keycodes - 1; i >= 0; i--) {
-		if((keysym == a2_key_to_xsym[i][1]) ||
-					(keysym == a2_key_to_xsym[i][2])) {
+		if(keysym && ((keysym == a2_key_to_xsym[i][1]) ||
+					(keysym == a2_key_to_xsym[i][2]))) {
 
+			vid_printf("Found keysym:%04x = a[%d] = %04x or %04x\n",
+				keysym, i, a2_key_to_xsym[i][1],
+				a2_key_to_xsym[i][2]);
 			/* Special: handle shift, control multiple keys */
 			/* Make user hitting Shift_L, Shift_R, and then */
 			/*  releasing Shift_L work. */

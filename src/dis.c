@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.66 98/05/23 00:29:48 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.67 98/06/16 00:15:43 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -652,7 +652,7 @@ load_roms()
 	int	ret;
 
 	g_rom_version = 0;
-	fd = open("ROM", O_RDONLY);
+	fd = open("ROM", O_RDONLY | O_BINARY);
 	if(fd < 0) {
 		printf("Open ROM failed: %d\n", fd);
 		printf("errno: %d\n", errno);
@@ -782,9 +782,9 @@ do_debug_unix()
 
 	printf("About to open: %s,len: %d\n", localbuf, (int)strlen(localbuf));
 	if(load) {
-		fd = open(localbuf,O_RDONLY);
+		fd = open(localbuf,O_RDONLY | O_BINARY);
 	} else {
-		fd = open(localbuf,O_WRONLY | O_CREAT, 0x1b6);
+		fd = open(localbuf,O_WRONLY | O_CREAT | O_BINARY, 0x1b6);
 	}
 	if(fd < 0) {
 		printf("Open %s failed: %d\n", localbuf, fd);
