@@ -1346,7 +1346,7 @@ dispatch
 	dep	kbank,15,8,arg0
 #endif
 
-	fldw	(halt_sim_ptr),fscr1
+	fldws	(halt_sim_ptr),fscr1
 
 
 
