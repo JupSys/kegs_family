@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.296 99/10/17 23:22:39 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.299 99/10/31 01:41:54 kentd Exp $";
 
 #include <math.h>
 
@@ -45,17 +45,12 @@ extern int shadow_reg;
 extern int speed_fast;
 extern word32 g_slot_motor_detect;
 
-extern int c023_1sec_en;
-extern int c023_scan_en;
-extern int c023_1sec_int;
-extern int c023_scan_int;
+extern int g_c023_val;
 extern int c023_1sec_int_irq_pending;
 extern int c023_scan_int_irq_pending;
-extern int c023_vgc_int;
 extern int c041_en_25sec_ints;
 extern int c041_en_vbl_ints;
-extern int c046_25sec_int_status;
-extern int c046_vbl_int_status;
+extern int g_c046_val;
 extern int c046_25sec_irq_pend;
 extern int c046_vbl_irq_pending;
 
@@ -1149,8 +1144,8 @@ run_prog()
 
 		iwm_1 = motor_on && !apple35_sel &&
 				(g_slot_motor_detect & 0x4) &&
-				(g_slow_525_emul_wr || ~g_fast_disk_emul);
-		iwm_25 = (motor_on && apple35_sel) && ~g_fast_disk_emul;
+				(g_slow_525_emul_wr || !g_fast_disk_emul);
+		iwm_25 = (motor_on && apple35_sel) && !g_fast_disk_emul;
 		if(fast && (!iwm_1 && !iwm_25) && (limit_speed == 0)) {
 			/* unlimited speed */
 			fspeed_mult = g_projected_pmhz;
@@ -1480,6 +1475,7 @@ update_60hz(double dcycs, double dtime_now)
 	double	dtime_this_vbl;
 	double	dadjcycs_this_vbl;
 	double	dadj_cycles_1sec;
+	int	tmp;
 	int	cycs_int;
 	int	cur_vbl_index;
 	int	prev_vbl_index;
@@ -1581,7 +1577,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.55");
+		update_status_line(6, "KEGS v0.56");
 
 		g_status_refresh_needed = 1;
 
@@ -1702,10 +1698,10 @@ update_60hz(double dcycs, double dtime_now)
 	if(g_25sec_cntr >= 16) {
 		g_25sec_cntr = 0;
 		if(c041_en_25sec_ints && !c046_25sec_irq_pend) {
-			c046_25sec_int_status = 1;
+			g_c046_val |= 0x10;
 			c046_25sec_irq_pend = 1;
 			add_irq();
-			irq_printf("Setting c046_25sec_int_status to 1, "
+			irq_printf("Setting c046 .25 sec int to 1, "
 				"g_irq_pend: %d\n", g_irq_pending);
 		}
 	}
@@ -1713,14 +1709,16 @@ update_60hz(double dcycs, double dtime_now)
 	g_1sec_cntr++;
 	if(g_1sec_cntr >= 60) {
 		g_1sec_cntr = 0;
-		c023_1sec_int = 1;
-		if(c023_1sec_en && !c023_1sec_int_irq_pending) {
+		tmp = g_c023_val;
+		tmp |= 0x40;	/* set 1sec int */
+		if((tmp & 0x04) && !c023_1sec_int_irq_pending) {
 			c023_1sec_int_irq_pending = 1;
-			c023_vgc_int = 1;
+			tmp |= 0x80;
 			add_irq();
-			irq_printf("Setting c023_1sec_int_status to 1, "
-				"irq_pend: %d\n", g_irq_pending);
+			irq_printf("Setting c023 to %02x irq_pend: %d\n",
+				tmp, g_irq_pending);
 		}
+		g_c023_val = tmp;
 	}
 
 	if(!g_scan_int_events) {
@@ -1738,10 +1736,10 @@ void
 do_vbl_int()
 {
 	if(c041_en_vbl_ints && !c046_vbl_irq_pending) {
-		c046_vbl_int_status = 1;
+		g_c046_val |= 0x08;
 		c046_vbl_irq_pending = 1;
 		add_irq();
-		irq_printf("Setting c046_vbl_int_status to 1, irq_pend: %d\n",
+		irq_printf("Setting c046 vbl_int_status to 1, irq_pend: %d\n",
 			g_irq_pending);
 	}
 }
@@ -1750,23 +1748,25 @@ do_vbl_int()
 void
 do_scan_int(double dcycs, int line)
 {
+	int	c023_val;
 	g_scan_int_events = 0;
 
-	if(c023_scan_int) {
-		halt_printf("c023_scan_int and another on line %03x\n", line);
+	c023_val = g_c023_val;
+	if(c023_val & 0x20) {
+		halt_printf("c023 scan_int and another on line %03x\n", line);
 	}
 
 	/* make sure scan int is still enabled for this line */
 	if(g_slow_memory_ptr[0x19d00 + line] & 0x40) {
 		/* valid interrupt, do it */
-		c023_scan_int = 1;
-		c023_vgc_int = 1;
-		if(c023_scan_en && !c023_scan_int_irq_pending) {
+		c023_val |= 0xa0;	/* vgc_int and scan_int */
+		if((c023_val & 0x02) && !c023_scan_int_irq_pending) {
 			add_irq();
 			c023_scan_int_irq_pending = 1;
-			irq_printf("Setting c023_scan_int to 1, irq_pend: %d\n",
-				g_irq_pending);
+			irq_printf("Setting c023 to %02x, irq_pend: %d\n",
+				c023_val, g_irq_pending);
 		}
+		g_c023_val = c023_val;
 		HALT_ON(HALT_ON_SCAN_INT, "In do_scan_int\n");
 	} else {
 		/* scan int bit cleared on scan line control byte */
@@ -1789,7 +1789,7 @@ check_scan_line_int(double dcycs, int cur_video_line)
 		return;
 	}
 
-	if(c023_scan_int) {
+	if(g_c023_val & 0x20) {
 		/* don't check for any more */
 		return;
 	}

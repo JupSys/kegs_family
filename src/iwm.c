@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.94 99/10/19 00:12:58 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.95 99/10/31 01:41:34 kentd Exp $";
 
 #include "defc.h"
 
@@ -571,7 +571,7 @@ iwm525_phase_change(int drive, int phase)
 	if(qtr_track > 4*34) {
 		printf("Disk arm moved past track 0x21, moving it back\n");
 		qtr_track = 4*34;
-		last_phase = 2;
+		last_phase = 0;
 	}
 
 	iwm_move_to_track(dsk, qtr_track);

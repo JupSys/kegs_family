@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.74 99/10/17 23:23:18 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.75 99/10/23 02:05:42 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -114,8 +114,9 @@ STRUCT(Engine_reg) {
 	word32	psr;
 };
 
+typedef word32 Pg_info;
 STRUCT(Page_info) {
-	word32 rd_wr;
+	Pg_info rd_wr;
 };
 
 
@@ -151,10 +152,11 @@ extern int errno;
 	(page_info_rd_wr[0x10000 + PAGE_INFO_PAD_SIZE + (page)].rd_wr)
 
 #define SET_PAGE_INFO_RD(page,val) \
-	;page_info_rd_wr[page].rd_wr = val;
+	;page_info_rd_wr[page].rd_wr = (Pg_info)val;
 
 #define SET_PAGE_INFO_WR(page,val) \
-	;page_info_rd_wr[0x10000 + PAGE_INFO_PAD_SIZE + (page)].rd_wr = val;
+	;page_info_rd_wr[0x10000 + PAGE_INFO_PAD_SIZE + (page)].rd_wr = \
+							(Pg_info)val;
 
 #define VERBOSE_DISK	0x001
 #define VERBOSE_IRQ	0x002

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.150 99/09/06 20:48:41 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.151 99/10/19 22:19:17 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -1697,6 +1697,7 @@ handle_keysym(XEvent *xev_in)
 	switch(keysym) {
 	case XK_Alt_R:
 	case XK_Meta_R:
+	case XK_Mode_switch:
 	case XK_Cancel:
 		keysym = XK_Print;		/* option */
 		break;

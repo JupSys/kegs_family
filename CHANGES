@@ -1,4 +1,14 @@
 
+Changes in KEGS v0.56 since v0.55 (10/31/99)
+- Faster Apple //e bank switch emulation.
+- Simplified number of global variables for various softswitches.
+- Fix a bug which made 3.5" and 5.25" disk access much slower than necessary.
+- Improved scan-line interrupt accuracy (lets MEGADEMO run).
+- Improved sound interrupt accuracy (was hoping this would fix some sound
+	issues, but it doesn't seem to help).
+- Add Mode_switch as an alias for the Option key
+- I noticed the //gs self-tests were broken again--fixed.
+ 
 Changes in KEGS v0.55 since v0.54 (10/19/99)
 - In LOG_PC debug aid, add cycles to the trace
 - Fix MEGADEMO bug where 3.5" disks weren't properly ejected.  Needed to

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.6 99/04/12 22:45:58 kentd Exp $";
+const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.7 99/10/31 01:13:38 kentd Exp $";
 #endif
 
 #include <sys/ipc.h>
@@ -29,10 +29,11 @@ STRUCT(Doc_reg) {
 	double	dsamp_ev2;
 	double	complete_dsamp;
 	int	samps_left;
-	word32	cur_ptr;
+	word32	cur_acc;
 	word32	cur_inc;
 	word32	cur_start;
 	word32	cur_end;
+	word32	cur_mask;
 	int	size_bytes;
 	int	event;
 	int	running;

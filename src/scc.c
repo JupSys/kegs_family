@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.28 99/09/06 20:49:51 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.29 99/10/31 21:06:38 kentd Exp $";
 
 #include "defc.h"
 
@@ -194,6 +194,11 @@ scc_regen_clocks(int port)
 	/* HACK HACK */
 	tx_char_size = 10.0;
 	rx_char_size = 10.0;
+	if(scc_ptr->reg[14] & 0x10) {
+		/* loopback mode, make it go faster...*/
+		rx_char_size = 1.0;
+		tx_char_size = 1.0;
+	}
 
 	scc_ptr->br_dcycs = br_dcycs;
 	scc_ptr->tx_dcycs = tx_dcycs * tx_char_size;

@@ -13,7 +13,7 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$Header: instable.h,v 1.93 99/09/06 20:47:36 kentd Exp $"
+	.stringz "@(#)$Header: instable.h,v 1.94 99/10/23 15:59:11 kentd Exp $"
 # endif
 #endif
 
@@ -41,15 +41,15 @@ inst00_SYM		/*  brk */
 	bl	get_mem_long_16,link
 	ldo	r%0xfffe(arg0),arg0
 
+	zdep	ret0,31,16,kpc		;set kbank to 0
+
 #if 0
-	ldil	l%halt_sim,arg0
-	ldi	3,arg1
-	stw	arg1,r%halt_sim(arg0)
+	bl	set_halt_act,link
+	ldi	3,arg0
 #endif
 
 
 	ldi	0,dbank			;clear dbank in emul mode
-	zdep	ret0,31,16,kpc		;set kbank to 0
 	b	dispatch
 	depi	1,29,2,psr		;ints masked, decimal off
 
@@ -69,13 +69,13 @@ brk_native_SYM
 	bl	get_mem_long_16,link
 	ldo	r%0xffe6(arg0),arg0
 
+	zdep	ret0,31,16,kpc		;zero kbank in kpc
+
 #if 0
 #endif
-	ldil	l%halt_sim,arg0
-	ldi	3,arg1
-	stw	arg1,r%halt_sim(arg0)
+	bl	set_halt_act,link
+	ldi	3,arg0
 
-	zdep	ret0,31,16,kpc		;zero kbank in kpc
 	b	dispatch
 	depi	1,29,2,psr		;ints masked, decimal off
 
@@ -103,8 +103,7 @@ brk_testing_SYM
 		PUSH16(kpc);
 		PUSH8(psr & 0xff);
 		GET_MEMORY16(0xffe6, kpc);
-		halt_sim = 3;
-		printf("Halting for native break!\n");
+		halt_printf("Halting for native break!\n");
 	}
 	kpc = kpc & 0xffff;
 	psr |= 0x4;
@@ -138,12 +137,12 @@ inst02_SYM		/*  COP */
 
 	ldi	0,dbank			;clear dbank in emul mode
 	zdep	ret0,31,16,kpc		;clear kbank
-	depi	1,29,2,psr		;ints masked, decimal off
 
-	ldil	l%halt_sim,arg0
-	ldi	3,arg1
+	bl	set_halt_act,link
+	ldi	3,arg0
+
 	b	dispatch
-	stw	arg1,r%halt_sim(arg0)
+	depi	1,29,2,psr		;ints masked, decimal off
 
 cop_native_SYM
 	stw	arg0,STACK_SAVE_COP_ARG0(sp)
@@ -174,7 +173,6 @@ cop_native_SYM
 		PUSH8(psr & 0xff);
 		GET_MEMORY16(0xfff4, kpc);
 		dbank = 0;
-		halt_sim = 3;
 	} else {
 		PUSH8(kpc >> 16);
 		PUSH16(kpc & 0xffff);

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.86 99/09/06 20:50:59 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.88 99/10/31 19:15:29 kentd Exp $";
 
 #include "defc.h"
 
@@ -19,8 +19,8 @@ const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.86 99/09/06 20:50:59 kent
 #include "sound.h"
 #undef INCLUDE_RCSID_C
 
-# define DO_DOC_LOG
 #if 0
+# define DO_DOC_LOG
 #endif
 
 extern int Verbose;
@@ -48,6 +48,7 @@ double	g_drecip_osc_en_plus_2 = 1.0 / (double)(1 + 2);
 int	g_doc_saved_ctl = 0;
 int	g_queued_samps = 0;
 int	g_queued_nonsamps = 0;
+int	g_num_osc_interrupting = 0;
 
 #ifdef HPUX
 int	g_audio_enable = -1;
@@ -92,7 +93,7 @@ int	g_pipe2_fd[2] = { -1, -1 };
 word32	*g_sound_shm_addr = 0;
 int	g_sound_shm_pos = 0;
 
-#define LEN_DOC_LOG	256
+#define LEN_DOC_LOG	128
 
 STRUCT(Doc_log) {
 	char	*msg;
@@ -151,33 +152,58 @@ extern double g_cur_dcycs;
 void
 show_doc_log(void)
 {
+	FILE	*docfile;
 	Doc_reg	*rptr;
+	double	dsamp_start;
+	int	osc, ctl, freq;
 	int	pos;
 	int	i;
 
+	docfile = fopen("doc_log_out", "wt");
+	if(docfile == 0) {
+		printf("fopen failed, errno: %d\n", errno);
+		return;
+	}
 	pos = g_doc_log_pos;
-	printf("DOC log pos: %d\n", pos);
+	fprintf(docfile, "DOC log pos: %d\n", pos);
+	dsamp_start = g_doc_log[pos].dsamps;
 	for(i = 0; i < LEN_DOC_LOG; i++) {
 		rptr = &(g_doc_log[pos].doc_reg);
-		printf("%03x:%03x: %s ds:%11.1f dt2:%10.1f etc:%4d o:%2d "
-			"c:%02x fq:%04x\n",
+		osc = g_doc_log[pos].osc;
+		ctl = rptr->ctl;
+		freq = rptr->freq;
+		if(osc < 0) {
+			ctl = 0;
+			freq = 0;
+		}
+		fprintf(docfile, "%03x:%03x: %-11s ds:%11.1f dt2:%10.1f "
+			"etc:%08x o:%02x c:%02x fq:%04x\n",
 			i, pos, g_doc_log[pos].msg,
-			g_doc_log[pos].dsamps, g_doc_log[pos].dtmp2,
-			g_doc_log[pos].etc, g_doc_log[pos].osc, rptr->ctl,
-			rptr->freq);
-		printf("          ire:%d,%d,%d ptr:%08x inc:%08x "
-			"comp_ds:%.1f left:%d\n",
-			rptr->has_irq_pending, rptr->running, rptr->event,
-			rptr->cur_ptr, rptr->cur_inc, rptr->complete_dsamp,
-			rptr->samps_left);
+			g_doc_log[pos].dsamps - dsamp_start,
+			g_doc_log[pos].dtmp2,
+			g_doc_log[pos].etc, osc & 0xff, ctl, freq);
+		if(osc >= 0) {
+			fprintf(docfile, "          ire:%d,%d,%d ptr4:%08x "
+				"inc4:%08x comp_ds:%.1f left:%04x, vol:%02x "
+				"wptr:%02x, wsz:%02x, 4st:%08x, 4end:%08x\n",
+				rptr->has_irq_pending, rptr->running,
+				rptr->event, 4*rptr->cur_acc, 4*rptr->cur_inc,
+				rptr->complete_dsamp - dsamp_start,
+				rptr->samps_left, rptr->vol, rptr->waveptr,
+				rptr->wavesize, 4*rptr->cur_start,
+				4*rptr->cur_end);
+		}
 		pos++;
 		if(pos >= LEN_DOC_LOG) {
 			pos = 0;
 		}
 	}
 
-	printf("cur_dcycs: %f\n", g_cur_dcycs);
-
+	fprintf(docfile, "cur_dcycs: %f\n", g_cur_dcycs);
+	fprintf(docfile, "dsamps_now: %f\n",
+		(g_cur_dcycs * g_dsamps_per_dcyc) - dsamp_start);
+	fprintf(docfile, "g_doc_num_osc_en: %d\n", g_doc_num_osc_en);
+	fclose(docfile);
 }
 
 void
@@ -196,10 +222,11 @@ sound_init()
 		rptr->dsamp_ev2 = 0.0;
 		rptr->complete_dsamp = 0.0;
 		rptr->samps_left = 0;
-		rptr->cur_ptr = 0;
+		rptr->cur_acc = 0;
 		rptr->cur_inc = 0;
 		rptr->cur_start = 0;
 		rptr->cur_end = 0;
+		rptr->cur_mask = 0;
 		rptr->size_bytes = 0;
 		rptr->event = 0;
 		rptr->running = 0;
@@ -333,6 +360,9 @@ sound_reset(double dcycs)
 				g_doc_regs[i].has_irq_pending);
 		}
 	}
+	if(g_num_osc_interrupting) {
+		halt_printf("reset: num_osc_int:%d\n", g_num_osc_interrupting);
+	}
 
 	g_doc_num_osc_en = 1;
 	UPDATE_G_DCYCS_PER_DOC_UPDATE(1);
@@ -357,7 +387,7 @@ sound_update(double dcycs)
 	/* "play" sounds for this vbl */
 
 	dsamps = dcycs * g_dsamps_per_dcyc;
-	DOC_LOG("do_sound_play", -1, dsamps, 0);
+	DOC_LOG("do_snd_pl", -1, dsamps, 0);
 	sound_play(dsamps);
 }
 
@@ -458,7 +488,7 @@ check_for_range(word32 *addr, int num_samps, int offset)
 }
 
 void
-send_sound_to_file(word32 *addr, int cur_pos, int num_samps)
+send_sound_to_file(word32 *addr, int shm_pos, int num_samps)
 {
 	int	size;
 	int	ret;
@@ -468,34 +498,34 @@ send_sound_to_file(word32 *addr, int cur_pos, int num_samps)
 	}
 
 	size = 0;
-	if((num_samps + cur_pos) > SOUND_SHM_SAMP_SIZE) {
-		size = SOUND_SHM_SAMP_SIZE - cur_pos;
+	if((num_samps + shm_pos) > SOUND_SHM_SAMP_SIZE) {
+		size = SOUND_SHM_SAMP_SIZE - shm_pos;
 		g_send_file_bytes += (size * 4);
 
-		ret = write(g_sound_file_fd, &(addr[cur_pos]), 4*size);
+		ret = write(g_sound_file_fd, &(addr[shm_pos]), 4*size);
 		if(ret != 4*size) {
 			halt_printf("wrote %d not %d\n", ret, 4*size);
 		}
 
 		if(g_doc_vol < 3) {
-			check_for_range(&(addr[cur_pos]), size, 0);
+			check_for_range(&(addr[shm_pos]), size, 0);
 		} else {
 			printf("Not checking %d bytes since vol: %d\n",
 				4*size, g_doc_vol);
 		}
-		cur_pos = 0;
+		shm_pos = 0;
 		num_samps -= size;
 	}
 
 	g_send_file_bytes += (num_samps * 4);
 
-	ret = write(g_sound_file_fd, &(addr[cur_pos]), 4*num_samps);
+	ret = write(g_sound_file_fd, &(addr[shm_pos]), 4*num_samps);
 	if(ret != 4*num_samps) {
 		halt_printf("wrote %d not %d\n", ret, 4*num_samps);
 	}
 
 	if(g_doc_vol < 3) {
-		check_for_range(&(addr[cur_pos]), num_samps, size);
+		check_for_range(&(addr[shm_pos]), num_samps, size);
 	} else {
 		printf("Not checking2 %d bytes since vol: %d\n",
 			4*num_samps, g_doc_vol);
@@ -519,6 +549,8 @@ send_sound(int fd, int real_samps, int size)
 	} else {
 		tmp = size + 0xa1000000;
 	}
+	DOC_LOG("send_sound", -1, g_last_sound_play_dsamp,
+						(real_samps << 30) + size);
 
 	/* Although this looks like a big/little-endian issue, since the */
 	/*  child is also reading an int, it just works with no byte swap */
@@ -585,7 +617,9 @@ sound_play(double dsamps)
 	float	fpercent;
 	int	c030_state;
 	int	val0, val1;
-	word32	cur_ptr;
+	word32	cur_acc;
+	word32	cur_pos;
+	word32	cur_mask;
 	word32	cur_inc;
 	word32	cur_end;
 	int	ctl;
@@ -777,7 +811,8 @@ sound_play(double dsamps)
 			rptr = &(g_doc_regs[osc]);
 			complete_dsamp = rptr->complete_dsamp;
 			samps_left = rptr->samps_left;
-			cur_ptr = rptr->cur_ptr;
+			cur_acc = rptr->cur_acc;
+			cur_mask = rptr->cur_mask;
 			cur_inc = rptr->cur_inc;
 			cur_end = rptr->cur_end;
 			if(!rptr->running || cur_inc == 0 ||
@@ -809,20 +844,21 @@ sound_play(double dsamps)
 			if(imul == 0 || samps_to_do == 0) {
 				/* produce no sound */
 				samps_left = samps_left - samps_to_do;
-				cur_ptr += cur_inc * samps_to_do;
+				cur_acc += cur_inc * samps_to_do;
 				rptr->samps_left = samps_left;
-				rptr->cur_ptr = cur_ptr;
+				rptr->cur_acc = cur_acc;
 				cur_dsamp = last_dsamp +
 					(double)(samps_to_do + samp_offset);
 				DOC_LOG("nosnd", osc, cur_dsamp, samps_to_do);
 				rptr->complete_dsamp = dsamp_now;
+				cur_pos = rptr->cur_start+(cur_acc & cur_mask);
 				if(samps_left <= 0) {
 					doc_sound_end(osc, 1, cur_dsamp,
 								dsamp_now);
 					val = 0;
 					j--;
 				} else {
-					val = doc_ram[cur_ptr >> SND_PTR_SHIFT];
+					val = doc_ram[cur_pos >> SND_PTR_SHIFT];
 				}
 				rptr->last_samp_val = val;
 				continue;
@@ -836,17 +872,22 @@ sound_play(double dsamps)
 	
 			val = 0;
 			rptr->complete_dsamp = dsamp_now;
+			cur_pos = rptr->cur_start + (cur_acc & cur_mask);
 			for(i = 0; i < samps_to_do; i++) {
-				pos = cur_ptr >> SND_PTR_SHIFT;
-				cur_ptr += cur_inc;
+				pos = cur_pos >> SND_PTR_SHIFT;
+				cur_pos += cur_inc;
+				cur_acc += cur_inc;
 				val = doc_ram[pos];
 	
 				val2 = (val * imul - off) >> 4;
-				if(val == 0 || cur_ptr >= cur_end) {
+				if((val == 0) || (cur_pos >= cur_end)) {
 					cur_dsamp = last_dsamp +
 						(double)(samp_offset + i + 1);
-					rptr->cur_ptr = cur_ptr;
+					rptr->cur_acc = cur_acc;
 					rptr->samps_left = 0;
+					DOC_LOG("end or 0", osc, cur_dsamp,
+						(pos << 16) + ((i &0xff) << 8) +
+						val);
 					doc_sound_end(osc, val, cur_dsamp,
 								dsamp_now);
 					val = 0;
@@ -863,12 +904,14 @@ sound_play(double dsamps)
 			rptr->last_samp_val = val;
 
 			if(val != 0) {
-				rptr->cur_ptr = cur_ptr;
+				rptr->cur_acc = cur_acc;
 				rptr->samps_left = samps_left;
 				rptr->complete_dsamp = dsamp_now;
 			}
 	
 			samps_played += samps_to_do;
+			DOC_LOG("splayed", osc, dsamp_now,
+				(samps_to_do << 16) + (pos & 0xffff));
 		}
 	}
 
@@ -876,7 +919,7 @@ sound_play(double dsamps)
 
 	g_cycs_in_sound2 += (end_time2 - start_time2);
 
-
+	g_last_sound_play_dsamp = dsamp_now;
 
 	GET_ITIMER(start_time3);
 
@@ -1048,6 +1091,7 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 		remove_event_doc(osc);
 	}
 	rptr->event = 0;
+	rptr->cur_acc = 0;		/* reset internal accumulator*/
 
 	/* check to make sure osc is running */
 	if(ctl & 0x01) {
@@ -1105,37 +1149,66 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 void
 add_sound_irq(int osc)
 {
+	int	num_osc_interrupting;
+
 	if(g_doc_regs[osc].has_irq_pending) {
 		halt_printf("Adding sound_irq for %02x, but irq_p: %d\n", osc,
 			g_doc_regs[osc].has_irq_pending);
 	}
 
-	g_doc_regs[osc].has_irq_pending = 1;
+	num_osc_interrupting = g_num_osc_interrupting + 1;
+	g_doc_regs[osc].has_irq_pending = num_osc_interrupting;
+	g_num_osc_interrupting = num_osc_interrupting;
+
 	add_irq();
-	doc_reg_e0 = 0x00 + (osc << 1);
+	if(num_osc_interrupting == 1) {
+		doc_reg_e0 = 0x00 + (osc << 1);
+	}
+
+	DOC_LOG("add_irq", osc, g_cur_dcycs * g_dsamps_per_dcyc, 0);
 }
 
 void
-remove_sound_irq(int osc)
+remove_sound_irq(int osc, int must)
 {
+	Doc_reg	*rptr;
+	int	num_osc_interrupt;
+	int	has_irq_pending;
+	int	first;
 	int	i;
 
 	doc_printf("remove irq for osc: %d, has_irq: %d\n",
 		osc, g_doc_regs[osc].has_irq_pending);
 
-	if(g_doc_regs[osc].has_irq_pending) {
+	num_osc_interrupt = g_doc_regs[osc].has_irq_pending;
+	first = 0;
+	if(num_osc_interrupt) {
+		g_num_osc_interrupting--;
 		g_doc_regs[osc].has_irq_pending = 0;
+		DOC_LOG("rem_irq", osc, g_cur_dcycs * g_dsamps_per_dcyc, 0);
 		remove_irq();
 
+		first = 0x40 | (doc_reg_e0 >> 1);
+					/* if none found, then def = no ints */
 		for(i = 0; i < g_doc_num_osc_en; i++) {
-			if(g_doc_regs[i].has_irq_pending) {
-				/* This guy is still interrupting! */
-				doc_reg_e0 = 0x00 + (i << 1);
-				return;
+			rptr = &(g_doc_regs[i]);
+			has_irq_pending = rptr->has_irq_pending;
+			if(has_irq_pending > num_osc_interrupt) {
+				has_irq_pending--;
+				rptr->has_irq_pending = has_irq_pending;
+			}
+			if(has_irq_pending == 1) {
+				first = i;
 			}
 		}
-
-		doc_reg_e0 |= 0x80;
+		if(num_osc_interrupt == 1) {
+			doc_reg_e0 = (first << 1);
+		} else {
+#if 0
+			halt_printf("remove_sound_irq[%02x]=%d, first:%d\n",
+				osc, num_osc_interrupt, first);
+#endif
+		}
 	} else {
 #if 0
 		/* make sure no int pending */
@@ -1144,13 +1217,20 @@ remove_sound_irq(int osc)
 				osc, doc_reg_e0);
 		}
 #endif
+		if(must) {
+			halt_printf("REMOVE_sound_irq[%02x]=0, but e0: %02x\n",
+				osc, doc_reg_e0);
+		}
 	}
 
 	if(doc_reg_e0 & 0x80) {
 		for(i = 0; i < 0x20; i++) {
-			if(g_doc_regs[i].has_irq_pending) {
+			has_irq_pending = g_doc_regs[i].has_irq_pending;
+			if(has_irq_pending) {
 				halt_printf("remove_sound_irq[%02x], but "
-					"[%02x]!\n", osc, i);
+					"[%02x]=%d!\n", osc,i,has_irq_pending);
+				printf("num_osc_int: %d, first: %02x\n",
+					num_osc_interrupt, first);
 			}
 		}
 	}
@@ -1202,7 +1282,6 @@ start_sound(int osc, double eff_dsamps, double dsamps)
 
 	rptr->running = 1;
 
-	rptr->cur_ptr = rptr->cur_start;
 	rptr->complete_dsamp = eff_dsamps;
 
 	doc_printf("Starting osc %02x, dsamp: %f\n", osc, dsamps);
@@ -1225,7 +1304,12 @@ start_sound(int osc, double eff_dsamps, double dsamps)
 
 	wave_end_estimate(osc, eff_dsamps, dsamps);
 
-	DOC_LOG("start playing", osc, eff_dsamps, size);
+	DOC_LOG("st playing", osc, eff_dsamps, size);
+#if 0
+	if(rptr->cur_acc != 0) {
+		halt_printf("Start osc %02x, acc: %08x\n", osc, rptr->cur_acc);
+	}
+#endif
 
 	GET_ITIMER(end_time1);
 
@@ -1267,7 +1351,7 @@ wave_end_estimate(int osc, double eff_dsamps, double dsamps)
 	}
 
 	/* see if there's a zero byte */
-	tmp1 = rptr->cur_ptr;
+	tmp1 = rptr->cur_start + (rptr->cur_acc & rptr->cur_mask);
 	pos = tmp1 >> SND_PTR_SHIFT;
 	size = ((rptr->cur_end) >> SND_PTR_SHIFT) - pos;
 
@@ -1349,6 +1433,8 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 		return;
 	}
 
+	DOC_LOG("ctl_reg", osc, dsamps, (old_val << 16) + val);
+
 	mode = (val >> 1) & 3;
 
 	old_halt = (old_val & 1);
@@ -1366,7 +1452,7 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 #endif
 
 	/* no matter what, remove any pending IRQs on this osc */
-	remove_sound_irq(osc);
+	remove_sound_irq(osc, 0);
 
 #if 0
 	if(old_halt) {
@@ -1385,7 +1471,11 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 				"%02x, oldctl: %02x\n", osc, eff_dsamps,
 				val, old_val);
 #endif
-			/* sound_play(eff_dsamps); */
+			sound_play(eff_dsamps);
+		}
+		if(((old_val >> 1) & 3) > 0) {
+			/* don't clear acc if free-running */
+			g_doc_regs[osc].cur_acc = 0;
 		}
 
 		g_doc_regs[osc].ctl = val;
@@ -1401,13 +1491,17 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 			start_sound(osc, eff_dsamps, dsamps);
 		} else {
 			/* was running, and something changed */
-			if(old_val != val) {
-				doc_printf("osc %d old ctl:%02x new:%02x!\n",
-					osc, old_val, val);
-				/* sound_play(eff_dsamps); */
-			}
-
+			doc_printf("osc %d old ctl:%02x new:%02x!\n",
+				osc, old_val, val);
+#if 0
+			sound_play(eff_dsamps);
+/* HACK: fix this??? */
+#endif
 			g_doc_regs[osc].ctl = val;
+			if((old_val ^ val) & val & 0x8) {
+				/* now has ints on */
+				wave_end_estimate(osc, dsamps, dsamps);
+			}
 		}
 	}
 }
@@ -1450,6 +1544,9 @@ doc_recalc_sound_parms(int osc, double eff_dcycs, double dsamps)
 	rptr->cur_inc = (int)(dtmp1);
 	rptr->cur_start = cur_start;
 	rptr->cur_end = cur_start + shifted_size;
+	rptr->cur_mask = (shifted_size - 1);
+
+	DOC_LOG("recalc", osc, dsamps, (rptr->waveptr << 16) + wave_size);
 }
 
 int
@@ -1533,7 +1630,7 @@ doc_read_c03d(double dcycs)
 
 				/* Clear IRQ on read of e0, if any irq pend */
 				if((doc_reg_e0 & 0x80) == 0) {
-					remove_sound_irq(doc_reg_e0 >> 1);
+					remove_sound_irq(doc_reg_e0 >> 1, 1);
 				}
 				break;
 			case 0x01:	/* 0xe1 */
@@ -1562,6 +1659,9 @@ doc_read_c03d(double dcycs)
 	doc_printf("read c03d, doc_ptr: %04x, ret: %02x, saved: %02x\n",
 		doc_ptr, ret, doc_saved_val);
 
+	DOC_LOG("read c03d", -1, dsamps, (doc_ptr << 16) +
+			(doc_saved_val << 8) + ret);
+
 	if(doc_sound_ctl & 0x20) {
 		doc_ptr = (doc_ptr + 1) & 0xffff;
 	}
@@ -1584,6 +1684,7 @@ doc_write_c03c(int val, double dcycs)
 		doc_printf("Setting doc vol to 0x%x at %f\n",
 			vol, dcycs);
 	}
+	DOC_LOG("c03c write", -1, dcycs * g_dsamps_per_dcyc, val);
 
 	doc_sound_ctl = val;
 }
@@ -1607,15 +1708,13 @@ doc_write_c03d(int val, double dcycs)
 	doc_printf("write c03d, doc_ptr: %04x, val: %02x\n",
 		doc_ptr, val);
 
+	DOC_LOG("write c03d", -1, dsamps, (doc_ptr << 16) + val);
+
 	if(doc_sound_ctl & 0x40) {
 		/* RAM */
 		doc_ram[doc_ptr] = val;
 	} else {
 		/* DOC */
-#if 0
-		printf("doc ctl write: %02x: %02x\n", doc_ptr & 0xff, val);
-#endif
-
 		osc = doc_ptr & 0x1f;
 		type = (doc_ptr >> 5) & 0x7;
 		
@@ -1860,11 +1959,12 @@ doc_show_ensoniq_state(int osc)
 			rptr->ctl, rptr->waveptr, rptr->wavesize, rptr->freq,
 			rptr->vol, rptr->event, rptr->running,
 			rptr->has_irq_pending, rptr->size_bytes);
-		printf("    ptr:%08x inc:%08x st:%08x end:%08x comp_ds:%f\n",
-			rptr->cur_ptr, rptr->cur_inc, rptr->cur_start,
-			rptr->cur_end, rptr->complete_dsamp);
-		printf("    samps_left:%d ev:%f ev2:%f\n",
-			rptr->samps_left, rptr->dsamp_ev, rptr->dsamp_ev2);
+		printf("    acc:%08x inc:%08x st:%08x end:%08x m:%08x\n",
+			rptr->cur_acc, rptr->cur_inc, rptr->cur_start,
+			rptr->cur_end, rptr->cur_mask);
+		printf("    compl_ds:%f samps_left:%d ev:%f ev2:%f\n",
+			rptr->complete_dsamp, rptr->samps_left,
+			rptr->dsamp_ev, rptr->dsamp_ev2);
 	}
 
 #if 0

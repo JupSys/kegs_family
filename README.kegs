@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.53
+KEGS: Kent's Emulated GS version 0.56
 http://www.crosswinds.net/san-jose/~kentd/kegs/
 
 What is this?
@@ -59,22 +59,24 @@ Release info:
 ------------
 
 Included files:
-	CHANGES		- Description of changes since last release
-	README.kegs	- you're here
-	README.compile	- Describes how to build KEGS
-	INTERNALS.overview - description of how KEGS works
-	INTERNALS.xdriver - Describes the xdriver.c routines for porting
-	INTERNALS.iwm	- Describes the internal 3.5" and 5.25" disk handling
-			   routines
-	kegs		- the executable, for HP-UX 10.20+
-	font.65sim	- C-like description of the font KEGS uses.
-	disk_conf	- disk image configuration info
-	to_pro		- Hard-to-use ProDOS volume creator
-	partls		- Lists partitions on Apple-partitioned hard drives
-			   or CD-ROMs
-	dc2raw		- Program to convert Mac Disk Copy images to raw fmt
-	xgs2raw		- Script to convert .xgs files to KEGS's raw format
-	src/		- All the source code, with a Makefile
+	CHANGES			- Description of changes since last release
+	README.kegs		- you're here
+	README.compile		- Describes how to build KEGS
+	README.linux.rpm	- Describes how to install KEGS's RPM for Linux
+	INTERNALS.overview	- description of how KEGS works
+	INTERNALS.xdriver	- Describes the xdriver.c routines for porting
+	INTERNALS.iwm		- Describes the internal 3.5" and 5.25" disk
+				   handling routines
+	kegs			- the executable, for HP-UX 10.20+
+	kegs.spec		- The Linux spec file for making an RPM
+	font.65sim		- C-like description of the font KEGS uses.
+	disk_conf		- disk image configuration info
+	to_pro			- Hard-to-use ProDOS volume creator
+	partls			- Lists partitions on Apple-partitioned hard
+				   drives or CD-ROMs
+	dc2raw			- Converts Mac Disk Copy images to raw fmt
+	xgs2raw			- Script converts .xgs files to KEGS's raw fmt
+	src/			- All the source code, with a Makefile
 
 You need to provide:
 
@@ -103,8 +105,8 @@ language interpreter loop.  Full source and a makefile is provided
 to allow you to compile for other HP-UX revisions or for other platforms.
 See the README.compile file for more info about compiling.
 
-It's not so easy for me to create Linux binaries (since I don't have one),
-so you must compile it yourself (It's easy, see README.compile).
+A user has offered to provide Linux RPM versions of KEGS--you should
+be able to get a precompiled binary on the KEGS web site for x86 Linux.
 
 There may be a bug with drawing the border on x86 Linux with Shared Memory--
 add the options "-noshm -skip 0" to fix this up (but lose some graphics
@@ -118,17 +120,18 @@ environment variable $DISPLAY is set, or give the command-line argument
 By default, the audio will be active if the display is the local
 workstation, else it will be disabled.  The command-line arguments
 "-audio 0" forces audio off, and "-audio 1" forces audio on (even if the
-display is remote).  Audio is sent to the internal workstation speaker
+display is remote).  Audio is sent to the internal HP workstation speaker
 unless $SPEAKER=external.
 
 On HP-UX, I've had too many annoying bugs with the Aserver audio system, so
-with v0.37, KEGS defaults to using the /dev/audio interface.
+with v0.37 and higher, KEGS defaults to using the /dev/audio interface.
 If you are on HPUX 10.X before 10.20ACE, you may need to install
 some audio patches to avoid panic'ing your machine.
 
-Audio can still be sent through the HP Alib routines (see audio(5)) using the
-"-alib" cmd line option.  You can send audio to a remote machine by
-setting the AUDIO environment variable if you're using the -alib option.
+Audio can still be sent through the HP Alib/Aserver routines (see
+audio(5)) using the "-alib" cmd line option.  You can send audio to a
+remote machine by setting the AUDIO environment variable if you're using
+the -alib option.
 
 Audio currently defaults to off with Linux, but README.compile explains
 how you can experiment with it a little bit.
@@ -152,7 +155,7 @@ depth by giving "-15", "-16", or "-24" on the command-line when
 starting KEGS.
 
 KEGS also forks off a subprocess to help handle the sound if audio is
-active.  If KEGS crashes in a unusual way (a coredump, for instance),
+active.  If KEGS crashes in a unusual way (a core dump, for instance),
 you may have to manually kill the subprocess.  ("ps -ef|grep kegs;kill
 xxxxx").
 
@@ -374,7 +377,13 @@ To delete a breakpoint, enter its address followed by 'D', so
 
 e1/0010D
 
-deletes the above breakpoint.
+deletes the above breakpoint.  The addresses work like the //gs monitor:
+once you change banks, you can use shortcut addresses:
+
+e1/0010B
+14B
+
+will add breakpoints at e1/0010 and e1/0014.
 
 This is a "transparent" breakpoint--memory is not changed.  But any
 read or write to that address will cause KEGS to halt.  So you can
@@ -384,8 +393,12 @@ in a noticeable slow down.  Breakpoints are not just instruction breakpoints,
 they also cause KEGS to halt on any data access, too.
 
 You can view memory using 'start.end' address notation, or disassemble
-using the 'L' command.  KEGS can print out instruction history traces
-if you define LOG_PC in engine_s.s or engine_c.c and recompile.
+using the 'L' or 'l' command.  KEGS can print out instruction history traces
+if you define LOG_PC in engine_s.s or engine_c.c and recompile.  When
+you hit a breakpoint, hit "P" and it will dump the trace to pc_log_out.
+Similar tracing is available for Ensoniq state.  SCC state tracing is
+always active, and you can get a dump to the debugger window using 'Z'.
+IWM state is available with 'I'.
 
 Virtually every capital letter does some debug function--see dis.c for
 the big switch statement.  I'll document all of them someday.
@@ -412,12 +425,13 @@ The left mouse button is the mouse button for KEGS.  The middle mouse
 button toggles between three speed modes.  Mode 0 means run as fast as
 possible.  Mode 1 means run at 1.024MHz.  Mode 2 means run at 2.5MHz.
 Most Apple II games need to be run at 1.024MHz.  Many Apple //gs demos
-must run at 2.5MHz.
+must run at 2.5MHz.  If a program/demo appears to crash in KEGS, try
+forcing speed to 2.5MHz and then running it.
 
 The right mouse button causes KEGS to stop emulation, and enter the
 debugger.  You can continue with "g" then return in the debug window.
-You can also disassemble memory, etc.  I'll write more info about
-the debugger in the future.
+You can also disassemble memory, etc.  The section "Debugging KEGS"
+above describes the debugger interface a little more.
 
 KEGS has no pop-up menus or other interactive interfaces (other than
 the debug window).  Input to the debug window is only acted upon when
@@ -489,11 +503,12 @@ If you have a workstation keyboard with the new Windows keys, you can
 use them as the command/option keys.  This is what I use.  Since most people
 don't have a PC keyboard, there are several alternatives.
 
-The following keys are Option (closed-apple) (not all keyboards have
-all keys):  Meta_R, Alt_R, Cancel, Print_screen, and the Windows key just
-to the right of the spacebar.  The following keys are Command (open-apple):
-Meta_L, Alt_L, Menu, Scroll_lock, the Windows key left of the spacebar,
-and the Windows key on the far right that looks like a pull-down menu.
+The following keys are Option (closed-apple) (not all keyboards have all
+keys):  Meta_R, Alt_R, Cancel, Print_screen, Mode_switch and the Windows
+key just to the right of the spacebar.  The following keys are Command
+(open-apple):  Meta_L, Alt_L, Menu, Scroll_lock, the Windows key left of
+the spacebar, and the Windows key on the far right that looks like a
+pull-down menu.
 
 If you can't get any of these to work on your machine, let me know.
 Note that X Windows often has other things mapped to Meta- and Alt-
@@ -856,7 +871,8 @@ and then run KEGS.  This is the environment variable used by the HP
 sound routines to decide whether or not to send the sound to the
 external jack.
 
-You may be able to send the sound to a different workstation.  If you:
+You may be able to send the sound to a different workstation if you run
+KEGS with the -alig option.  If you:
 
 export AUDIO=myboss:0
 
@@ -945,14 +961,12 @@ pal:	Super-hires palette that is unavailable.  KEGS needs one palette
 		impact.
 
 Line 2: (Video and X info)
-ior:  Number of Unix processor cycles spent handling smartport reads and
-		writes.  Probably only interesting to me.
+xfer:  Number of bytes transferred to the X screen per second.
 xred_cs:	Number of Unix processor cycles that were spent in the X
 		server (or other processes on the machine).
 		Divided into two fields--read the left three hex digits
 		as millions of cycles.  Hex.
-ch_in:	Number of Unix processor cycles spent checking for X input
-		Events.
+ch_in:	Number of Unix processor cycles spent checking for X input Events.
 ref_l:	Number of Unix processor cycles spent scanning the Apple //gs
 		memory for changes to the current display screen memory,
 		and copying those changes to internal XImage buffers.
@@ -973,10 +987,9 @@ Eng:	Number of calls to the main instruction interpreter loop in the
 act:	Some instructions are handled by the main interpreter loop returning
 		special status "actions" to main event loop.  This is the
 		number over the last second.  Should be low.
-hev:	This is really getting too complicated.  This tracks HALT_EVENTs.
-		KEGS returns to the main loop to recalculate effective
-		speed whenever any speed-changing I/O location is touched.
-		See the code.
+hev:	This tracks HALT_EVENTs.  KEGS returns to the main loop to recalc
+		effective speed whenever any speed-changing I/O location is
+		touched.  See the code, mostly in moremem.c
 esi:	This counts the number of superhires scan-line interrupts
 		taken in the last second.
 edi:	This counts the number of Ensoniq "special events" over the last
@@ -991,11 +1004,12 @@ snd1,2,3,4:  Number of Unix processor cycles spent handling various
 st:	Number of Unix cycles spent starting new Ensoniq oscillators.
 est:	Number of Unix cycles spent looking for 0 bytes in sounds.
 x.yz:	This final number is the average number of oscillators playing
-		over the last second.  Up to 4.00 is low overhead.
+		over the last second.  Up to 4.00 is low overhead, over
+		20.0 is high overhead.
 
 Line 5: (Ensoniq DOC info)
 snd_plays:	Number of calls to a routine called sound_play, which
-		plays Ensoniq sounds.
+		plays Ensoniq sounds.  Always called at least 60 times per sec.
 doc_ev:	Number of Ensoniq (DOC) events in the last second.  A sound
 		stopping is an event, but changing a parameter of a sound
 		while it is playing is also an event.
@@ -1016,7 +1030,7 @@ to accurate disk emulation.
 X-Windows interactions:
 ----------------------
 
-To provide low-level ADB emulation, KEGS turns off Unix keyrepeat when the
+To provide low-level ADB emulation, KEGS turns off Unix key repeat when the
 focus is in the KEGS window.  It should be turned back on every time
 the pointer leaves the KEGS window, but sometimes it doesn't.  Re-running
 KEGS (and then quitting it quickly) should turn key-repeat back on,
@@ -1028,7 +1042,7 @@ back in should solve it.  This is sometimes noticeable when running
 Wolfenstein 3D GS.  I haven't spent much time debugging the problem.
 I think it may be the X Server.
 
-KEGS uses a private color-map for its X-window.  Most new workstation have
+KEGS uses a private color-map for its X-window.  Most new workstations have
 graphics hardware with two color-maps, so it is no problem, but if your
 workstation does not, then the colormap will "flash" when your cursor
 enters the window.  
@@ -1045,8 +1059,8 @@ F10:   Attempt to change the a2vid_palette.  If you notice some lines on
 F11:	Swap X & Y axis of the joystick.
 F12:	Invert the sense of the joystick.
 
-Alt_R, Meta_r, Menu, Print:         Option key
-Alt_L, Meta_L, Cancel, Scroll_lock:  Command key
+Alt_R, Meta_r, Menu, Print, Mode_switch:   Option key
+Alt_L, Meta_L, Cancel, Scroll_lock:        Command key
 
 "Home": Alias for keypad equals (since my Unix keyboard doesn't have an =).
 
@@ -1065,7 +1079,8 @@ KEGS To-Do:
 Better serial port emulation (printing, comm)
 3200 color mode.
 Better nibblized images.
-
+Accurate dbl-hires colors.
+Fix the Ensoniq bugs to make sound more accurate.
 
 -------------------
 

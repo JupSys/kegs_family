@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.146 99/10/17 23:23:44 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.149 99/10/31 21:07:35 kentd Exp $"
 
 	.code
 
@@ -25,7 +25,6 @@ rcsid_engine_s_s
 #undef INCLUDE_RCSID_S
 
 #define ASM
-
 
 
 #if 0
@@ -773,6 +772,7 @@ check_breakpoints_hit
 	ldil	l%g_fcycles_stop,ret0
 	depi	1,31,1,r1
 	stw	0,r%g_fcycles_stop(ret0)
+	stw	0,r%g_fcycles_stop+4(ret0)
 	bv	0(scratch4)
 	stw	r1,(scratch1)
 	nop
@@ -1331,8 +1331,9 @@ set_halt_act
 	LDC(halt_sim,scratch1)
 	ldw	(scratch1),scratch2
 	ldil	l%g_fcycles_stop,scratch3
-	or	scratch2,arg0,arg0
 	stw	0,r%g_fcycles_stop(scratch3)
+	or	scratch2,arg0,arg0
+	stw	0,r%g_fcycles_stop+4(scratch3)
 	bv	0(link)
 	stw	arg0,(scratch1)
 

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.209 99/10/19 00:37:52 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.214 99/10/31 21:36:23 kentd Exp $";
 
 #include "defc.h"
 
@@ -61,6 +61,8 @@ int	g_zipgs_reg_c05c = 0x00;
 int	statereg;
 int	old_statereg = 0xffff;
 int	halt_on_c02a = 0;
+int	g_shadow_all_banks = 0;
+int	g_num_shadow_all_banks = 0;
 
 extern Engine_reg engine;
 
@@ -93,13 +95,7 @@ word32	g_slot_motor_detect = 0;
 int	power_on_clear = 0;
 
 
-int	c023_vgc_int = 0;
-int	c023_1sec_int = 0;
-int	c023_scan_int = 0;
-int	c023_ext_int = 0;
-int	c023_1sec_en = 0;
-int	c023_scan_en = 0;
-int	c023_ext_en = 0;
+int	g_c023_val = 0;
 int	c023_scan_int_irq_pending = 0;
 int	c023_1sec_int_irq_pending = 0;
 
@@ -113,16 +109,10 @@ int	c041_en_switch_ints = 0;
 int	c041_en_move_ints = 0;
 int	c041_en_mouse = 0;
 
-int	c046_mouse_down = 0;
-int	c046_mouse_last = 0;
-int	c046_an3_status = 0;
-int	c046_25sec_int_status = 0;
+int	g_c046_val = 0;
+
 int	c046_25sec_irq_pend = 0;
-int	c046_vbl_int_status = 0;
 int	c046_vbl_irq_pending = 0;
-int	c046_switch_int_status = 0;
-int	c046_move_int_status = 0;
-int	c046_system_irq_status = 0;
 
 
 #define UNIMPL_READ	\
@@ -137,7 +127,7 @@ void
 fixup_brks()
 {
 	word32	page;
-	word32	val;
+	Pg_info	val;
 	int	i, num;
 
 	num = g_num_breakpoints;
@@ -151,167 +141,24 @@ fixup_brks()
 }
 
 void
-fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
+fixup_hires_on()
 {
-	word32	ramrd_add_rd;
-	word32	ramwrt_add_wr;
-	word32	add_rd, add_wr;
-	int	shadow;
-	int	j;
-
-	add_rd = 0;
-	if(mask & 0x0003) {
-		/* pages 0 and 1 */
-		if(ALTZP) {
-			add_rd = 0x10000;
-		}
-		SET_PAGE_INFO_RD(0, mem0rd + add_rd);
-		SET_PAGE_INFO_WR(0, mem0wr + add_rd);
-		add_rd += 0x100;
-		SET_PAGE_INFO_RD(1, mem0rd + add_rd);
-		SET_PAGE_INFO_WR(1, mem0wr + add_rd);
+	if((g_cur_a2_stat & ALL_STAT_ST80) == 0) {
+		return;
 	}
 
-	ramrd_add_rd = 0;
-	if(RAMRD) {
-		ramrd_add_rd = 0x10000;
-	}
-
-	ramwrt_add_wr = 0;
-	shadow = BANK_SHADOW;
-	if(RAMWRT) {
-		ramwrt_add_wr = 0x10000;
-		shadow = BANK_SHADOW2;
-	}
-
-	if(mask & 0x000c) {
-		/* pages 2 and 3 */
-		SET_PAGE_INFO_RD(2, mem0rd + ramrd_add_rd + 0x200);
-		SET_PAGE_INFO_WR(2, mem0wr + ramwrt_add_wr + 0x200);
-		SET_PAGE_INFO_RD(3, mem0rd + ramrd_add_rd + 0x300);
-		SET_PAGE_INFO_WR(3, mem0wr + ramwrt_add_wr + 0x300);
-	}
-
-	if(mask & 0x00000f00) {
-		/* pages 8 - b */
-		add_rd = ramrd_add_rd + 0x800;
-		add_wr = ramwrt_add_wr + 0x800;
-		if((shadow_reg & 0x20) == 0 && g_rom_version >= 3) {
-			/* shadow */
-			add_wr += shadow;
-		}
-
-		for(j = 8; j < 0xc; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
-			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
-			add_rd += 0x100;
-			add_wr += 0x100;
-		}
-	}
-
-	if(mask & 0x000000f0) {
-		/* pages 4-7 */
-		add_rd = ramrd_add_rd + 0x400;
-		add_wr = ramwrt_add_wr + 0x400;
-		if(g_cur_a2_stat & ALL_STAT_ST80) {
-			shadow = BANK_SHADOW;
-			if(PAGE2) {
-				add_rd = 0x10400;
-				add_wr = 0x10400;
-				shadow = BANK_SHADOW2;
-			} else {
-				add_rd = 0x0400;
-				add_wr = 0x0400;
-			}
-		}
-		if((shadow_reg & 0x01) == 0) {
-			/* shadow */
-			add_wr += shadow;
-		}
-		
-		for(j = 4; j < 8; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
-			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
-			add_rd += 0x100;
-			add_wr += 0x100;
-		}
-	}
-
-	if(mask & 0xfffff000) {
-		/* pages c-1f */
-		add_rd = ramrd_add_rd + 0xc00;
-		add_wr = ramwrt_add_wr + 0xc00;
-		for(j = 0xc; j < 0x20; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
-			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
-			add_rd += 0x100;
-			add_wr += 0x100;
-		}
-	}
-}
-
-
-void
-fixup_bank1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
-{
-	word32	add;
-	int	j;
-
-	add = 0;
-	if(mask & 0x0000000f) {
-		/* pages 0 - 3 */
-		for(j = start_page; j < start_page + 4; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add);
-			SET_PAGE_INFO_WR(j, mem0wr + add);
-			add += 0x100;
-		}
-	}
-
-	if(mask & 0xfffff000) {
-		/* pages c-1f */
-		add = 0xc00;
-		for(j = start_page + 0xc; j < start_page + 0x20; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add);
-			SET_PAGE_INFO_WR(j, mem0wr + add);
-			add += 0x100;
-		}
-	}
-
-	if(mask & 0x000000f0) {
-		/* pages 4-7 */
-		add = 0x400;
-		if((shadow_reg & 0x01) == 0) {
-			/* shadow */
-			add += BANK_SHADOW2;
-		}
-		
-		for(j = start_page + 4; j < start_page + 8; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add);
-			SET_PAGE_INFO_WR(j, mem0wr + add);
-			add += 0x100;
-		}
-	}
-
-	if(mask & 0x00000f00) {
-		/* pages 8-b */
-		add = 0x800;
-		if((shadow_reg & 0x20) == 0 && g_rom_version >= 3) {
-			/* shadow */
-			add += BANK_SHADOW2;
-		}
-		
-		for(j = start_page + 8; j < start_page + 0xc; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add);
-			SET_PAGE_INFO_WR(j, mem0wr + add);
-			add += 0x100;
-		}
-	}
-
+	fixup_bank0_2000_4000();
+	fixup_brks();
 }
 
 void
-fixup_bank0_2000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
+fixup_bank0_2000_4000()
 {
+	byte	*mem0rd;
+	byte	*mem0wr;
+
+	mem0rd = &(g_memory_ptr[0x2000]);
+	mem0wr = mem0rd;
 	if((g_cur_a2_stat & ALL_STAT_ST80) && (g_cur_a2_stat & ALL_STAT_HIRES)){
 		if(PAGE2) {
 			mem0rd += 0x10000;
@@ -337,519 +184,267 @@ fixup_bank0_2000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		}
 	}
 
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
+	fixup_any_bank_any_page(0x20, 0x20, mem0rd, mem0wr);
 }
 
 void
-fixup_bank1_2000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
+fixup_bank0_0400_0800()
 {
-	if((shadow_reg & 0x12) == 0 || (shadow_reg & 0x8) == 0) {
-		mem0wr += BANK_SHADOW2;
-	}
+	byte	*mem0rd;
+	byte	*mem0wr;
+	int	shadow;
 
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
-}
-
-void
-fixup_bank0_1_4000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
-{
-
-	if(start_page < 0x100) {
-		if(RAMRD) {
+	mem0rd = &(g_memory_ptr[0x400]);
+	mem0wr = mem0rd;
+	shadow = BANK_SHADOW;
+	if(g_cur_a2_stat & ALL_STAT_ST80) {
+		if(PAGE2) {
+			shadow = BANK_SHADOW2;
 			mem0rd += 0x10000;
-		}
-
-		if(RAMWRT) {
 			mem0wr += 0x10000;
-			if((shadow_reg & 0x14) == 0 || (shadow_reg & 0x8) == 0){
-				mem0wr |= BANK_SHADOW2;
-			}
-		} else if((shadow_reg & 0x04) == 0) {
-			mem0wr |= BANK_SHADOW;
 		}
 	} else {
-		if((shadow_reg & 0x14) == 0 || (shadow_reg & 0x8) == 0) {
-			mem0wr |= BANK_SHADOW2;
+		if(RAMWRT) {
+			shadow = BANK_SHADOW2;
+			mem0wr += 0x10000;
 		}
-	}
-
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
-}
-
-
-void
-fixup_bank0_1_6000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
-{
-	if(start_page < 0x100) {
 		if(RAMRD) {
 			mem0rd += 0x10000;
 		}
-
-		if(RAMWRT) {
-			mem0wr += 0x10000;
-			if((shadow_reg & 0x8) == 0) {
-				mem0wr |= BANK_SHADOW2;
-			}
-		}
-	} else {
-		if((shadow_reg & 0x8) == 0) {
-			mem0wr |= BANK_SHADOW2;
-		}
+	}
+	if((shadow_reg & 0x01) == 0) {
+		mem0wr += shadow;
 	}
 
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
+	fixup_any_bank_any_page(0x4, 4, mem0rd, mem0wr);
 }
 
 void
-fixup_bank0_1_8000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
+fixup_any_bank_any_page(int start_page, int num_pages, byte *mem0rd,
+		byte *mem0wr)
 {
-	if(start_page < 0x100) {
-		if(RAMRD) {
-			mem0rd += 0x10000;
-		}
+	int	i;
 
-		if(RAMWRT) {
-			mem0wr += 0x10000;
-			if((shadow_reg & 0x8) == 0) {
-				mem0wr += BANK_SHADOW2;
-			}
-		}
-	} else {
-		if((shadow_reg & 0x8) == 0) {
-			mem0wr |= BANK_SHADOW2;
-		}
+	for(i = 0; i < num_pages; i++) {
+		SET_PAGE_INFO_RD(i + start_page, mem0rd);
+		mem0rd += 0x100;
 	}
 
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
+	for(i = 0; i < num_pages; i++) {
+		SET_PAGE_INFO_WR(i + start_page, mem0wr);
+		mem0wr += 0x100;
+	}
+
 }
 
 void
-fixup_bank0_1_a000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
+fixup_intcx()
 {
-	if(start_page < 0x100) {
-		if(RAMRD) {
-			mem0rd += 0x10000;
-		}
-
-		if(RAMWRT) {
-			mem0wr += 0x10000;
-		}
-	}
-
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
-}
-
-
-void
-fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
-{
-	word32	rom10000;
-	word32	add;
-	word32	add_rd, add_wr;
-	word32	rom_inc;
+	byte	*rom10000;
+	byte	*rom_inc;
+	int	no_io_shadow;
+	int	off;
+	int	start_k;
 	int	indx;
-	int	j;
+	int	j, k;
 
-	rom10000 = (word32)&(g_rom_fc_ff_ptr[0x30000]);
-	add = 0;
+	rom10000 = &(g_rom_fc_ff_ptr[0x30000]);
 
-	if((shadow_reg & 0x40) && start_page < 0x200) {
-		/* LC, I/O shadow off in banks 0 & 1 */
-		/* ignore ALTZP, it does not affect c000-d000 */
+	no_io_shadow = (shadow_reg & 0x40);
 
-		/* 1c000: LCBANK2 */
-		add = ((start_page + 0x10) & 0xff) << 8;
-		for(j = start_page; j < start_page + 0x10; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add);
-			SET_PAGE_INFO_WR(j, mem0wr + add);
-			add += 0x100;
-		}
-
-		/* and 1d000-1dfff */
-		/* d000: LCBANK1 */
-		add = (start_page & 0xff) << 8;
-		/* In no I/O shadow, never ROM in banks 0 or 1 */
-		if(start_page < 0x100 && ALTZP) {
-			mem0rd += 0x10000;
-			mem0wr += 0x10000;
-		}
-
-		for(j = start_page + 0x10; j < start_page + 0x20; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add);
-			SET_PAGE_INFO_WR(j, mem0wr + add);
-			add += 0x100;
-		}
-
-		return;
-
+	start_k = 0;
+	if(no_io_shadow) {
+		/* if not shadowing, banks 0 and 1 are not affected by intcx */
+		start_k = 2;
 	}
 
-	/* shadow_reg & 0x40 done...I/O area & normal 1d000-1dfff */
-	/* I/O area! */
-	SET_PAGE_INFO_RD(start_page, SET_BANK_IO);
-	SET_PAGE_INFO_WR(start_page, SET_BANK_IO);
-	rom_inc = rom10000 + 0xc100;
-	for(j = start_page + 1; j < start_page + 0x10; j++) {
-		indx = j & 0xf;
-		if(indx < 8) {
-			if((int_crom[indx] == 0) || INTCX) {
-				SET_PAGE_INFO_RD(j, rom_inc);
-			} else {
-				SET_PAGE_INFO_RD(j, SET_BANK_IO);
+	for(k = start_k; k < 4; k++) {
+		off = k;
+		if(k >= 2) {
+			off += (0xe0 - 2);
+		}
+		/* step off through 0x00, 0x01, 0xe0, 0xe1 */
+
+		off = off << 8;
+		SET_PAGE_INFO_RD(0xc0 + off, SET_BANK_IO);
+
+		for(j = 0xc1; j < 0xc8; j++) {
+			indx = j & 0xf;
+			if(j < 0xc8) {
+				rom_inc = SET_BANK_IO;
+				if((int_crom[indx] == 0) || INTCX) {
+					rom_inc = rom10000 + (j << 8);
+				}
+				SET_PAGE_INFO_RD(j + off, rom_inc);
 			}
-		} else {
+		}
+		for(j = 0xc8; j < 0xd0; j++) {
 			/* c800 - cfff */
 			if(int_crom[3] == 0 || INTCX) {
-				SET_PAGE_INFO_RD(j, rom_inc);
+				rom_inc = rom10000 + (j << 8);
 			} else {
 				/* c800 space not necessarily mapped */
 				/*   just map in ROM */
-				SET_PAGE_INFO_RD(j, rom_inc);
-#if 0
-				halt_printf("c8000-cfff space not map!\n");
-#endif
+				rom_inc = rom10000 + (j << 8);
 			}
+			SET_PAGE_INFO_RD(j + off, rom_inc);
 		}
-		SET_PAGE_INFO_WR(j, SET_BANK_IO);
-		rom_inc += 0x100;
-	}
-
-	SET_PAGE_INFO_RD(start_page + 7, SET_BANK_IO);		/* smartport */
-
-	/* and do 0xd000 - 0xdfff now */
-
-	add = ((start_page + 0x10) & 0xff) << 8;
-	add_wr = 0;
-	add_rd = 0;
-
-	if(!wrdefram && (start_page < 0x200)) {
-		mem0wr |= (BANK_IO_TMP | BANK_IO2_TMP);
-	}
-
-	if(start_page < 0x100) {
-		if(ALTZP) {
-			mem0rd += 0x10000;
-			mem0wr += 0x10000;
+		for(j = 0xc0; j < 0xd0; j++) {
+			SET_PAGE_INFO_WR(j + off, SET_BANK_IO);
 		}
 	}
 
-	if( ! LCBANK2) {
-		/* lcbank1, use area 0xc000-0xd000 */
-		add_wr = -0x1000;
-		add_rd = -0x1000;
+	if(!no_io_shadow) {
+		SET_PAGE_INFO_RD(0xc7, SET_BANK_IO);		/* smartport */
 	}
 
-	if(RDROM && (start_page < 0x200)) {
-		/* do rom */
-		mem0rd = rom10000;
-		add_rd = 0;
-	}
-
-	for(j = start_page + 0x10; j < start_page + 0x20; j++) {
-		SET_PAGE_INFO_RD(j, mem0rd + add + add_rd);
-		SET_PAGE_INFO_WR(j, mem0wr + add + add_wr);
-		add += 0x100;
-	}
-}
-
-
-void
-fixup_any_bank_e000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
-{
-	word32	rom10000;
-
-	rom10000 = (word32)&(g_rom_fc_ff_ptr[0x30000]);
-
-	if((shadow_reg & 0x40) && start_page < 0x200) {
-		/* LC shadowing off! */
-		/* Must be RAM in d000-ffff */
-		if(ALTZP) {
-			mem0rd += 0x10000;
-			mem0wr += 0x10000;
-		}
-	} else {
-		/* decide on ROM or RAM */
-		if(!wrdefram && start_page < 0x200) {
-			mem0wr |= (BANK_IO_TMP | BANK_IO2_TMP);
-		}
-
-		if((start_page < 0x100) && ALTZP) {
-			mem0rd += 0x10000;
-			mem0wr += 0x10000;
-		}
-
-		if(RDROM && (start_page < 0x200)) {
-			/* do rom */
-			mem0rd = rom10000;
-		}
-	}
-
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
+	fixup_brks();
 }
 
 void
-fixup_banke0_e1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
+fixup_wrdefram(int new_wrdefram)
 {
-	word32	add;
+	byte	*mem0wr;
+	byte	*wrptr;
 	int	j;
+	
+	wrdefram = new_wrdefram;
 
-	add = 0;
-
-	for(j = start_page; j < start_page + 0x20; j++) {
-		SET_PAGE_INFO_RD(j, mem0rd + add);
-		SET_PAGE_INFO_WR(j, mem0wr + add);
-		add += 0x100;
+	if(shadow_reg & 0x40) {
+		/* do nothing */
+		return;
 	}
 
-	/* pages 4-b */
-	if(start_page & 0x100) {
-		add = 0x400 + BANK_SHADOW2;
-	} else {
-		add = 0x400 + BANK_SHADOW;
+	/* if shadowing, banks 0 and 1 are affected by wrdefram */
+	mem0wr = &(g_memory_ptr[0]);
+	if(!new_wrdefram) {
+		mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
 	}
-	for(j = start_page + 4; j < start_page + 0xc; j++) {
-		SET_PAGE_INFO_RD(j, mem0rd + add);
-		SET_PAGE_INFO_WR(j, mem0wr + add);
-		add += 0x100;
+
+	wrptr = mem0wr + 0x1e000;
+	for(j = 0x1e0; j < 0x200; j++) {
+		SET_PAGE_INFO_WR(j, wrptr);
+		wrptr += 0x100;
 	}
+
+	wrptr = mem0wr + 0x0e000;
+	if(ALTZP) {
+		wrptr += 0x10000;
+	}
+	for(j = 0xe0; j < 0x100; j++) {
+		SET_PAGE_INFO_WR(j, wrptr);
+		wrptr += 0x100;
+	}
+
+	wrptr = mem0wr;
+	if(! LCBANK2) {
+		wrptr -= 0x1000;
+	}
+	for(j = 0x1d0; j < 0x1e0; j++) {
+		SET_PAGE_INFO_WR(j, wrptr);
+		wrptr += 0x100;
+	}
+
+	wrptr = mem0wr;
+	if(! LCBANK2) {
+		wrptr -= 0x1000;
+	}
+	if(ALTZP) {
+		wrptr += 0x10000;
+	}
+	for(j = 0xd0; j < 0xe0; j++) {
+		SET_PAGE_INFO_WR(j, wrptr);
+		wrptr += 0x100;
+	}
+
+	fixup_brks();
 }
 
 void
-fixup_banke0_e1_2_4000(word32 mask, int start_page, word32 mem0rd,
-			word32 mem0wr)
+fixup_st80col(double dcycs)
 {
-	if(start_page & 0x100) {
-		mem0wr += BANK_SHADOW2;
-	} else {
-		mem0wr += BANK_SHADOW;
-	}
+	int	cur_a2_stat;
 
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
-}
+	cur_a2_stat = g_cur_a2_stat;
 
-void
-fixup_banke0_e1_6_8000(word32 mask, int start_page, word32 mem0rd,
-			word32 mem0wr)
-{
-	if(start_page & 0x100) {
-		mem0wr += BANK_SHADOW2;
-	}
+	fixup_bank0_0400_0800();
 
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
-}
-
-void
-fixup_banke0_e1_a000(word32 mask, int start_page, word32 mem0rd,
-			word32 mem0wr)
-{
-	fixup_any_bank_any_page(mask, start_page, mem0rd, mem0wr);
-}
-
-void
-fixup_any_bank_any_page(word32 mask, int start_page, word32 mem0rd,
-	word32 mem0wr)
-{
-	word32	add;
-	int	j;
-
-	add = (start_page & 0xff) << 8;
-
-	for(j = start_page; j < start_page + 0x20; j++) {
-		SET_PAGE_INFO_RD(j, mem0rd + add);
-		SET_PAGE_INFO_WR(j, mem0wr + add);
-		add += 0x100;
-	}
-}
-
-typedef void (*Bank_func)(word32 mask, int start_page, word32 mem0rd,
-					word32 mem0wr);
-
-const Bank_func fixup_bank0_ptrs[] = {
-	fixup_bank0_0000,
-	fixup_bank0_2000,
-	fixup_bank0_1_4000,
-	fixup_bank0_1_6000,
-	fixup_bank0_1_8000,		/* 08000 */
-	fixup_bank0_1_a000,		/* 0a000 */
-	fixup_any_bank_c000,		/* 0c000 */
-	fixup_any_bank_e000		/* 0e000 */
-};
-
-const Bank_func fixup_bank1_ptrs[] = {
-	fixup_bank1_0000,
-	fixup_bank1_2000,
-	fixup_bank0_1_4000,
-	fixup_bank0_1_6000,
-	fixup_bank0_1_8000,		/* 18000 */
-	fixup_bank0_1_a000,		/* 1a000 */
-	fixup_any_bank_c000,		/* 1c000 */
-	fixup_any_bank_e000		/* 1e000 */
-};
-
-const Bank_func fixup_banke0_ptrs[] = {
-	fixup_banke0_e1_0000,
-	fixup_banke0_e1_2_4000,
-	fixup_banke0_e1_2_4000,
-	fixup_banke0_e1_6_8000,
-	fixup_banke0_e1_6_8000,		/* 08000 */
-	fixup_banke0_e1_a000,		/* 0a000 */
-	fixup_any_bank_c000,		/* 0c000 */
-	fixup_any_bank_e000		/* 0e000 */
-};
-
-const Bank_func fixup_banke1_ptrs[] = {
-	fixup_banke0_e1_0000,
-	fixup_banke0_e1_2_4000,
-	fixup_banke0_e1_2_4000,
-	fixup_banke0_e1_6_8000,
-	fixup_banke0_e1_6_8000,		/* 08000 */
-	fixup_banke0_e1_a000,		/* 0a000 */
-	fixup_any_bank_c000,		/* 0c000 */
-	fixup_any_bank_e000		/* 0e000 */
-};
-
-word32 bank0_adjust_mask[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-word32 bank1_adjust_mask[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-word32 banke0_adjust_mask[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-word32 banke1_adjust_mask[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-
-void
-fixup_bank0()
-{
-	word32	mask;
-	word32	mem0;
-	int	i;
-
-	mem0 = (word32)&(g_memory_ptr[0]);
-	for(i = 0; i < 8; i++) {
-		mask = bank0_adjust_mask[i];
-		if(mask == 0) {
-			continue;
-		}
-		bank0_adjust_mask[i] = 0;
-		(*fixup_bank0_ptrs[i])(mask, i*32, mem0, mem0);
-	}
-}
-
-void
-fixup_bank1()
-{
-	word32	mem1;
-	word32	mask;
-	int	i;
-
-	mem1 = (word32)&(g_memory_ptr[0x10000]);
-	for(i = 0; i < 8; i++) {
-		mask = bank1_adjust_mask[i];
-		if(mask == 0) {
-			continue;
-		}
-		bank1_adjust_mask[i] = 0;
-		(*fixup_bank1_ptrs[i])(mask, 0x100 + i*32, mem1, mem1);
-	}
-}
-
-void
-fixup_banke0()
-{
-	word32	mask;
-	word32	mem0;
-	int	i;
-
-	mem0 = (word32)&(g_slow_memory_ptr[0]);
-	for(i = 0; i < 8; i++) {
-		mask = banke0_adjust_mask[i];
-		if(mask == 0) {
-			continue;
-		}
-		banke0_adjust_mask[i] = 0;
-		(*fixup_banke0_ptrs[i])(mask, 0xe000 + i*32, mem0, mem0);
-	}
-}
-
-void
-fixup_banke1()
-{
-	word32	mask;
-	word32	mem1;
-	int	i;
-
-	mem1 = (word32)&(g_slow_memory_ptr[0x10000]);
-	for(i = 0; i < 8; i++) {
-		mask = banke1_adjust_mask[i];
-		if(mask == 0) {
-			continue;
-		}
-		banke1_adjust_mask[i] = 0;
-		(*fixup_banke1_ptrs[i])(mask, 0xe100 + i*32, mem1, mem1);
-	}
-}
-
-void
-fixup_intcx(int call_fixups)
-{
-	bank0_adjust_mask[6] |= 0xffff;
-	bank1_adjust_mask[6] |= 0xffff;
-	banke0_adjust_mask[6] |= 0xffff;
-	banke1_adjust_mask[6] |= 0xffff;
-
-	if(call_fixups) {
-		fixup_bank0();
-		fixup_bank1();
-		fixup_banke0();
-		fixup_banke1();
-		fixup_brks();
-	}
-}
-
-void
-fixup_st80col(double dcycs, int call_fixups)
-{
-	/* pages 4 - 7 */
-	bank0_adjust_mask[0] |= 0xf0;
-
-	/* 2000-4000 also */
-	if((g_cur_a2_stat & ALL_STAT_HIRES) && PAGE2) {
-		bank0_adjust_mask[1] = -1;
+	if((cur_a2_stat & ALL_STAT_HIRES) && PAGE2) {
+		fixup_bank0_2000_4000();
 	}
 
 	if(PAGE2) {
 		change_display_mode(dcycs);
 	}
 
-	if(call_fixups) {
-		fixup_bank0();
-		fixup_brks();
-	}
+	fixup_brks();
 }
 
 void
-fixup_hires_on(int call_fixups)
+fixup_altzp()
 {
-	if(g_cur_a2_stat & ALL_STAT_ST80) {
-		/* 2000-4000 also */
-		bank0_adjust_mask[1] = -1;
-		if(call_fixups) {
-			fixup_bank0();
-			fixup_brks();
-		}
+	byte	*mem0rd, *mem0wr;
+	int	altzp;
+
+	altzp = ALTZP;
+	mem0rd = &(g_memory_ptr[0]);
+	if(altzp) {
+		mem0rd += 0x10000;
 	}
+	SET_PAGE_INFO_RD(0, mem0rd);
+	SET_PAGE_INFO_RD(1, mem0rd + 0x100);
+	SET_PAGE_INFO_WR(0, mem0rd);
+	SET_PAGE_INFO_WR(1, mem0rd + 0x100);
+
+	mem0rd = &(g_memory_ptr[0xd000]);
+	mem0wr = mem0rd;
+
+	if(shadow_reg & 0x40) {
+		if(ALTZP) {
+			mem0rd += 0x10000;
+		}
+		fixup_any_bank_any_page(0xd0, 0x10, mem0rd - 0x1000,
+						mem0rd - 0x1000);
+	} else {
+		if(!wrdefram) {
+			mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
+		}
+		if(ALTZP) {
+			mem0rd += 0x10000;
+			mem0wr += 0x10000;
+		}
+		if(! LCBANK2) {
+			mem0rd -= 0x1000;
+			mem0wr -= 0x1000;
+		}
+		if(RDROM) {
+			mem0rd = &(g_rom_fc_ff_ptr[0x3d000]);
+		}
+		fixup_any_bank_any_page(0xd0, 0x10, mem0rd, mem0wr);
+	}
+
+	mem0rd = &(g_memory_ptr[0xe000]);
+	mem0wr = mem0rd;
+	if(!wrdefram) {
+		mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
+	}
+	if(ALTZP) {
+		mem0rd += 0x10000;
+		mem0wr += 0x10000;
+	}
+	if(RDROM) {
+		mem0rd = &(g_rom_fc_ff_ptr[0x3e000]);
+	}
+	fixup_any_bank_any_page(0xe0, 0x20, mem0rd, mem0wr);
 }
 
 void
-fixup_page2(double dcycs, int call_fixups)
+fixup_page2(double dcycs)
 {
 	if((g_cur_a2_stat & ALL_STAT_ST80)) {
-		/* pages 4 - 7 */
-		bank0_adjust_mask[0] |= 0xf0;
-
-		/* 2000-4000 also */
+		fixup_bank0_0400_0800();
 		if((g_cur_a2_stat & ALL_STAT_HIRES)) {
-			bank0_adjust_mask[1] = -1;
-		}
-		if(call_fixups) {
-			fixup_bank0();
-			fixup_brks();
+			fixup_bank0_2000_4000();
 		}
 	} else {
 		change_display_mode(dcycs);
@@ -857,197 +452,390 @@ fixup_page2(double dcycs, int call_fixups)
 }
 
 void
-fixup_wrdefram(int new_wrdefram, int call_fixups)
+fixup_ramrd()
 {
-	wrdefram = new_wrdefram;
+	byte	*mem0rd;
+	int	cur_a2_stat;
+	int	j;
 
-	/* called if wrdefram changes */
-	bank0_adjust_mask[6] = 0xffff0000;
-	bank0_adjust_mask[7] = 0xffffffff;
-	bank1_adjust_mask[6] = 0xffff0000;
-	bank1_adjust_mask[7] = 0xffffffff;
+	cur_a2_stat = g_cur_a2_stat;
 
-	if(call_fixups) {
-		fixup_bank0();
-		fixup_bank1();
-		fixup_brks();
+	if((cur_a2_stat & ALL_STAT_ST80) == 0) {
+		fixup_bank0_0400_0800();
 	}
+	if( ((cur_a2_stat & ALL_STAT_ST80) == 0) ||
+				((cur_a2_stat & ALL_STAT_HIRES) == 0) ) {
+		fixup_bank0_2000_4000();
+	}
+
+	mem0rd = &(g_memory_ptr[0x0000]);
+	if(RAMRD) {
+		mem0rd += 0x10000;
+	}
+
+	SET_PAGE_INFO_RD(2, mem0rd + 0x200);
+	SET_PAGE_INFO_RD(3, mem0rd + 0x300);
+
+	for(j = 8; j < 0x20; j++) {
+		SET_PAGE_INFO_RD(j, mem0rd + j*0x100);
+	}
+
+	for(j = 0x40; j < 0xc0; j++) {
+		SET_PAGE_INFO_RD(j, mem0rd + j*0x100);
+	}
+}
+
+void
+fixup_ramwrt()
+{
+	byte	*mem0wr;
+	int	cur_a2_stat;
+	int	shadow;
+	int	ramwrt;
+	int	j;
+
+	cur_a2_stat = g_cur_a2_stat;
+
+	if((cur_a2_stat & ALL_STAT_ST80) == 0) {
+		fixup_bank0_0400_0800();
+	}
+	if( ((cur_a2_stat & ALL_STAT_ST80) == 0) ||
+				((cur_a2_stat & ALL_STAT_HIRES) == 0) ) {
+		fixup_bank0_2000_4000();
+	}
+
+	mem0wr = &(g_memory_ptr[0x0000]);
+	ramwrt = RAMWRT;
+	if(ramwrt) {
+		mem0wr += 0x10000;
+	}
+
+	SET_PAGE_INFO_WR(2, mem0wr + 0x200);
+	SET_PAGE_INFO_WR(3, mem0wr + 0x300);
+
+	shadow = BANK_SHADOW;
+	if(ramwrt) {
+		shadow = BANK_SHADOW2;
+	}
+	if(((shadow_reg & 0x20) != 0) || g_rom_version < 3) {
+		shadow = 0;
+	}
+	for(j = 8; j < 0x0c; j++) {
+		SET_PAGE_INFO_WR(j, mem0wr + j*0x100 + shadow);
+	}
+
+	for(j = 0xc; j < 0x20; j++) {
+		SET_PAGE_INFO_WR(j, mem0wr + j*0x100);
+	}
+
+	shadow = 0;
+	if(ramwrt) {
+		if((shadow_reg & 0x14) == 0 || (shadow_reg & 0x08) == 0) {
+			shadow = BANK_SHADOW2;
+		}
+	} else if((shadow_reg & 0x04) == 0) {
+		shadow = BANK_SHADOW;
+	}
+	for(j = 0x40; j < 0x60; j++) {
+		SET_PAGE_INFO_WR(j, mem0wr + j*0x100 + shadow);
+	}
+
+	shadow = 0;
+	if(ramwrt && (shadow_reg & 0x08) == 0) {
+		/* shr shadowing */
+		shadow = BANK_SHADOW2;
+	}
+	for(j = 0x60; j < 0xa0; j++) {
+		SET_PAGE_INFO_WR(j, mem0wr + j*0x100 + shadow);
+	}
+
+	for(j = 0xa0; j < 0xc0; j++) {
+		SET_PAGE_INFO_WR(j, mem0wr + j*0x100);
+	}
+}
+
+void
+fixup_lcbank2()
+{
+	byte	*mem0rd, *mem0wr;
+	int	off;
+	int	k;
+
+	for(k = 0; k < 4; k++) {
+		off = k;
+		if(k >= 2) {
+			off += (0xe0 - 2);
+		}
+		/* step off through 0x00, 0x01, 0xe0, 0xe1 */
+
+		if(k < 2) {
+			mem0rd = &(g_memory_ptr[k << 16]);
+		} else {
+			mem0rd = &(g_slow_memory_ptr[(k & 1) << 16]);
+		}
+		if((k == 0) && ALTZP) {
+			mem0rd += 0x10000;
+		}
+		if(! LCBANK2) {
+			mem0rd -= 0x1000;	/* lcbank1, use 0xc000-cfff */
+		}
+		mem0wr = mem0rd;
+		if((k < 2) && !wrdefram) {
+			mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
+		}
+		if((k < 2) && RDROM) {
+			mem0rd = &(g_rom_fc_ff_ptr[0x30000]);
+		}
+		fixup_any_bank_any_page(off*0x100 + 0xd0, 0x10,
+					mem0rd + 0xd000, mem0wr + 0xd000);
+	}
+}
+
+void
+fixup_rdrom()
+{
+	byte	*mem0rd;
+	int	j, k;
+
+	/* fixup_lcbank2 handles 0xd000-dfff for rd & wr*/
+	fixup_lcbank2();
+
+	for(k = 0; k < 2; k++) {
+		/* k is the bank */
+		mem0rd = &(g_memory_ptr[k << 16]);
+		if((k == 0) && ALTZP) {
+			mem0rd += 0x10000;
+		}
+		if((shadow_reg & 0x40) == 0) {
+			if(RDROM) {
+				mem0rd = &(g_rom_fc_ff_ptr[0x30000]);
+			}
+		}
+		for(j = 0xe0; j < 0x100; j++) {
+			SET_PAGE_INFO_RD(j + k*0x100, mem0rd + j*0x100);
+		}
+	}
+
 }
 
 void
 set_statereg(double dcycs, int val)
 {
 	int	xor;
-	int	must_fixup_e0e1;
-	int	must_fixup_1;
 
-	xor = val ^ statereg;
 	old_statereg = statereg;
 	statereg = val;
+	xor = val ^ old_statereg;
 	if(xor == 0) {
 		return;
 	}
 
-	must_fixup_e0e1 = 0;
-	must_fixup_1 = 0;
 	if(xor & 0x80) {
 		/* altzp */
-
-		bank0_adjust_mask[0] |= 0x3;
-
-		/* c000 since if state_reg & 0x40, it depends on altzp */
-		/* and d000-ffff is necessary */
-		bank0_adjust_mask[6] = 0xffffffff;
-		bank0_adjust_mask[7] = 0xffffffff;
+		fixup_altzp();
 	}
 	if(xor & 0x40) {
 		/* page2 */
-		fixup_page2(dcycs, 0);
+		fixup_page2(dcycs);
 	}
 
-	if(xor & 0x30) {
-		/* RAMRD/RAMWRT */
-		bank0_adjust_mask[0] |= 0xfffffffc;
-		bank0_adjust_mask[1] = -1;
-		bank0_adjust_mask[2] = -1;
-		bank0_adjust_mask[3] = -1;
-		bank0_adjust_mask[4] = -1;
-		bank0_adjust_mask[5] = -1;
+	if(xor & 0x20) {
+		/* RAMRD */
+		fixup_ramrd();
 	}
 
-	if(xor & 0x0c) {
-		/* RDROM/LCBANK2 */
-		bank0_adjust_mask[6] |= 0xffff0000;
-		bank1_adjust_mask[6] |= 0xffff0000;
-		banke0_adjust_mask[6] |= 0xffff0000;
-		banke1_adjust_mask[6] |= 0xffff0000;
-		bank0_adjust_mask[7] = -1;
-		bank1_adjust_mask[7] = -1;
-		banke0_adjust_mask[7] = -1;
-		banke1_adjust_mask[7] = -1;
-		must_fixup_e0e1 = 1;
-		must_fixup_1 = 1;
+	if(xor & 0x10) {
+		/* RAMWRT */
+		fixup_ramwrt();
+	}
+
+	if(xor & 0x08) {
+		/* RDROM */
+		fixup_rdrom();
+	}
+
+	if(xor & 0x04) {
+		/* LCBANK2 */
+		fixup_lcbank2();
 	}
 
 	if(xor & 0x02) {
-		halt_printf("just set rombank = %d\n", ROMB);
+		/* ROMBANK */
+		halt_printf("Just set rombank = %d\n", ROMB);
 	}
 
 	if(xor & 0x01) {
-		fixup_intcx(0);
-		must_fixup_e0e1 = 1;
-		must_fixup_1 = 1;
+		fixup_intcx();
 	}
 
-	fixup_bank0();
-	if(must_fixup_1) {
-		fixup_bank1();
+	if(xor) {
+		fixup_brks();
 	}
-	if(must_fixup_e0e1) {
-		fixup_banke0();
-		fixup_banke1();
-	}
-	fixup_brks();
-}
-
-
-void
-setup_bank0()
-{
-	int i;
-
-	shadow_printf("setup bank0!\n");
-
-	for(i = 0; i < 8; i++) {
-		bank0_adjust_mask[i] = -1;
-	}
-
-	fixup_bank0();
-	fixup_brks();
 }
 
 void
-setup_bank1()
+fixup_shadow_txt1()
 {
-	int i;
+	byte	*mem0wr;
+	int	j;
 
-	shadow_printf("setup bank1!\n");
+	fixup_bank0_0400_0800();
 
-	for(i = 0; i < 8; i++) {
-		bank1_adjust_mask[i] = -1;
+	mem0wr = &(g_memory_ptr[0x10000]);
+	if((shadow_reg & 0x01) == 0) {
+		mem0wr += BANK_SHADOW2;
 	}
-
-	fixup_bank1();
-	fixup_brks();
+	for(j = 4; j < 8; j++) {
+		SET_PAGE_INFO_WR(0x100 + j, mem0wr + j*0x100);
+	}
 }
 
 void
-setup_banke0()
+fixup_shadow_txt2()
 {
-	int i;
+	byte	*mem0wr;
+	int	shadow;
+	int	j;
 
-	shadow_printf("setup banke0!\n");
-
-	for(i = 0; i < 8; i++) {
-		banke0_adjust_mask[i] = -1;
+	/* bank 0 */
+	mem0wr = &(g_memory_ptr[0x00000]);
+	shadow = BANK_SHADOW;
+	if(RAMWRT) {
+		mem0wr += 0x10000;
+		shadow = BANK_SHADOW2;
+	}
+	if(((shadow_reg & 0x20) == 0) && (g_rom_version >= 3)) {
+		mem0wr += shadow;
+	}
+	for(j = 8; j < 0xc; j++) {
+		SET_PAGE_INFO_WR(j, mem0wr + j*0x100);
 	}
 
-	fixup_banke0();
-	fixup_brks();
+	/* and bank 1 */
+	mem0wr = &(g_memory_ptr[0x10000]);
+	if(((shadow_reg & 0x20) == 0) && (g_rom_version >= 3)) {
+		mem0wr += BANK_SHADOW2;
+	}
+	for(j = 8; j < 0xc; j++) {
+		SET_PAGE_INFO_WR(0x100 + j, mem0wr + j*0x100);
+	}
 }
 
 void
-setup_banke1()
+fixup_shadow_hires1()
 {
-	int i;
+	byte	*mem0wr;
+	int	j;
 
-	shadow_printf("setup banke1!\n");
+	fixup_bank0_2000_4000();
 
-	for(i = 0; i < 8; i++) {
-		banke1_adjust_mask[i] = -1;
+	/* and bank 1 */
+	mem0wr = &(g_memory_ptr[0x10000]);
+	if((shadow_reg & 0x12) == 0 || (shadow_reg & 0x8) == 0) {
+		mem0wr += BANK_SHADOW2;
 	}
-
-	fixup_banke1();
-	fixup_brks();
+	for(j = 0x20; j < 0x40; j++) {
+		SET_PAGE_INFO_WR(0x100 + j, mem0wr + j*0x100);
+	}
 }
 
 void
-setup_pageinfo()
+fixup_shadow_hires2()
 {
-	word32	new_addr;
-	word32	mem_size_pages;
-	int	i;
+	byte	*mem0wr;
+	int	j;
 
-	setup_bank0();
-	setup_bank1();
-
-	mem_size_pages = (g_mem_size_base + g_mem_size_exp) / 256;
-	/* bank 2 through last bank */
-	for(i = 0x0200; i < mem_size_pages; i++) {
-		SET_PAGE_INFO_RD(i, (word32)&g_memory_ptr[i*256]);
-		SET_PAGE_INFO_WR(i, (word32)&g_memory_ptr[i*256]);
+	/* bank 0 */
+	mem0wr = &(g_memory_ptr[0x00000]);
+	if(RAMWRT) {
+		mem0wr += 0x10000;
+		if((shadow_reg & 0x14) == 0 || (shadow_reg & 0x8) == 0) {
+			mem0wr += BANK_SHADOW2;
+		}
+	} else if((shadow_reg & 0x04) == 0) {
+		mem0wr += BANK_SHADOW;
 	}
-	for(i = mem_size_pages; i < 0xfc00; i++) {
-		SET_PAGE_INFO_RD(i, BANK_BAD_MEM);
-		SET_PAGE_INFO_WR(i, BANK_BAD_MEM);
+	for(j = 0x40; j < 0x60; j++) {
+		SET_PAGE_INFO_WR(j, mem0wr + j*0x100);
 	}
 
-	setup_banke0();
-	setup_banke1();
-
-	for(i = 0xfc00; i <= 0xffff; i++) {
-		new_addr = (i - 0xfc00)*256;
-		SET_PAGE_INFO_RD(i, (word32)(&g_rom_fc_ff_ptr[new_addr]));
-		SET_PAGE_INFO_WR(i, (word32)(&g_rom_fc_ff_ptr[new_addr]) |
-						(BANK_IO_TMP | BANK_IO2_TMP));
+	/* and bank 1 */
+	mem0wr = &(g_memory_ptr[0x10000]);
+	if((shadow_reg & 0x14) == 0 || (shadow_reg & 0x8) == 0) {
+		mem0wr += BANK_SHADOW2;
 	}
-	fixup_brks();
+	for(j = 0x40; j < 0x60; j++) {
+		SET_PAGE_INFO_WR(0x100 + j, mem0wr + j*0x100);
+	}
 }
 
 void
-fixup_all_banks()
+fixup_shadow_shr()
 {
-	setup_pageinfo();
+	byte	*mem0wr;
+	int	j;
+
+	/* bank 0, only pages 0x60 - 0xa0 */
+	mem0wr = &(g_memory_ptr[0x00000]);
+	if(RAMWRT) {
+		mem0wr += 0x10000;
+		if((shadow_reg & 0x8) == 0) {
+			mem0wr += BANK_SHADOW2;
+		}
+	}
+	for(j = 0x60; j < 0xa0; j++) {
+		SET_PAGE_INFO_WR(j, mem0wr + j*0x100);
+	}
+
+	/* and bank 1, only pages 0x60 - 0xa0 */
+	mem0wr = &(g_memory_ptr[0x10000]);
+	if((shadow_reg & 0x8) == 0) {
+		mem0wr += BANK_SHADOW2;
+	}
+	for(j = 0x60; j < 0xa0; j++) {
+		SET_PAGE_INFO_WR(0x100 + j, mem0wr + j*0x100);
+	}
+}
+
+void
+fixup_shadow_iolc()
+{
+	byte	*mem0rd, *mem0wr;
+	int	k;
+
+	for(k = 0; k < 2; k++) {
+		mem0rd = &(g_memory_ptr[k << 16]);
+		if(shadow_reg & 0x40) {
+			fixup_any_bank_any_page((k << 8) + 0xc0, 0x10,
+				mem0rd + 0xd000, mem0rd + 0xd000);
+			if(k == 0 && ALTZP) {
+				mem0rd += 0x10000;
+			}
+			fixup_any_bank_any_page((k << 8) + 0xd0, 0x10,
+				mem0rd + 0xc000, mem0rd + 0xc000);
+			fixup_any_bank_any_page((k << 8) + 0xe0, 0x20,
+				mem0rd + 0xe000, mem0rd + 0xe000);
+		} else {
+			/* 0xc000 area */
+			fixup_intcx();
+
+			/* 0xd000 area */
+			fixup_lcbank2();
+
+			if(k == 0 && ALTZP) {
+				mem0rd += 0x10000;
+			}
+			mem0wr = mem0rd;
+			if(!wrdefram) {
+				mem0wr += (BANK_IO_TMP | BANK_IO2_TMP);
+			}
+			if(RDROM) {
+				mem0rd = &(g_rom_fc_ff_ptr[0x30000]);
+			}
+			fixup_any_bank_any_page((k << 8) + 0xe0, 0x20,
+				mem0rd + 0xe000, mem0wr + 0xe000);
+		}
+	}
 }
 
 void
@@ -1059,28 +847,119 @@ update_shadow_reg(int val)
 		return;
 	}
 
-#if 0
-	/* eddy@cs.ucdavis.edu has a demo which write bit 7, but just */
-	/*  ignore it */
-	if((val & 0x80) != 0) {
-		halt_printf("shadow_reg: %02x is illegal!\n", val);
-	}
-#endif
-
 	xor = shadow_reg ^ val;
-
 	shadow_reg = val;
-	/* Note, even if just superhires changing, must update bank 0 */
-	/*  to handle case where AUXCARD on, so that 0x2000-0xa000 = bank 1 */
 
-	shadow_printf("shadow_reg: %02x\n", val);
+	if(xor & 8) {
+		fixup_shadow_hires1();
+		fixup_shadow_hires2();
+		fixup_shadow_shr();
+		xor = xor & (~0x16);
+	}
+	if(xor & 0x10) {
+		fixup_shadow_hires1();
+		fixup_shadow_hires2();
+		xor = xor & (~0x6);
+	}
+	if(xor & 2) {
+		fixup_shadow_hires1();
+	}
+	if(xor & 4) {
+		fixup_shadow_hires2();
+	}
+	if(xor & 1) {
+		fixup_shadow_txt1();
+	}
+	if((xor & 0x20) && g_rom_version >= 3) {
+		fixup_shadow_txt2();
+	}
+	if(xor & 0x40) {
+		fixup_shadow_iolc();
+	}
+}
 
-	/* HACK:  CAN DO THIS BETTER! */
-	setup_bank0();
-	setup_bank1();
+void
+fixup_shadow_all_banks()
+{
+	byte	*mem0rd;
+	int	shadow;
+	int	num_banks;
+	int	j, k;
 
-	HALT_ON(HALT_ON_SHADOW_REG, "Shadow reg changed\n");
+	/* Assume Ninja Force Megademo */
+	/* only do banks 3 - num_banks by 2, shadowing into e1 */
 
+	shadow = 0;
+	if(g_shadow_all_banks && ((shadow_reg & 0x08) == 0)) {
+		shadow = BANK_SHADOW2;
+	}
+	num_banks = g_mem_size_exp >> 16;	/* short a few, but it's ok */
+	for(k = 3; k < num_banks; k += 2) {
+		mem0rd = &(g_memory_ptr[k*0x10000 + 0x2000]) + shadow;
+		for(j = 0x20; j < 0xa0; j++) {
+			SET_PAGE_INFO_WR(k*0x100 + j, mem0rd);
+			mem0rd += 0x100;
+		}
+	}
+}
+
+void
+setup_pageinfo()
+{
+	byte	*mem0rd;
+	word32	mem_size_pages;
+
+	/* first, set all of memory to point to itself */
+	mem_size_pages = (g_mem_size_base + g_mem_size_exp)/256;
+	mem0rd = &(g_memory_ptr[0]);
+	fixup_any_bank_any_page(0, mem_size_pages, mem0rd, mem0rd);
+
+	/* mark unused memory as BAD_MEM */
+	fixup_any_bank_any_page(mem_size_pages, 0xfc00-mem_size_pages,
+			BANK_BAD_MEM, BANK_BAD_MEM);
+
+	fixup_shadow_all_banks();
+
+	/* ROM */
+	mem0rd = &(g_rom_fc_ff_ptr[0]);
+	fixup_any_bank_any_page(0xfc00, 0x400, mem0rd,
+				mem0rd + (BANK_IO_TMP | BANK_IO2_TMP));
+
+	/* banks e0, e1 */
+	mem0rd = &(g_slow_memory_ptr[0]);
+	fixup_any_bank_any_page(0xe000, 0x04, mem0rd + 0x0000, mem0rd + 0x0000);
+	fixup_any_bank_any_page(0xe004, 0x08, mem0rd + 0x0400,
+						mem0rd + 0x0400 + BANK_SHADOW);
+	fixup_any_bank_any_page(0xe00c, 0x14, mem0rd + 0x0c00, mem0rd + 0x0c00);
+	fixup_any_bank_any_page(0xe020, 0x40, mem0rd + 0x2000,
+						mem0rd + 0x2000 + BANK_SHADOW);
+	fixup_any_bank_any_page(0xe060, 0xa0, mem0rd + 0x6000, mem0rd + 0x6000);
+
+	mem0rd = &(g_slow_memory_ptr[0x10000]);
+	fixup_any_bank_any_page(0xe100, 0x04, mem0rd + 0x0000, mem0rd + 0x0000);
+	fixup_any_bank_any_page(0xe104, 0x08, mem0rd + 0x0400,
+						mem0rd + 0x0400 + BANK_SHADOW2);
+	fixup_any_bank_any_page(0xe10c, 0x14, mem0rd + 0x0c00, mem0rd + 0x0c00);
+	fixup_any_bank_any_page(0xe120, 0x80, mem0rd + 0x2000,
+						mem0rd + 0x2000 + BANK_SHADOW2);
+	fixup_any_bank_any_page(0xe1a0, 0x60, mem0rd + 0xa000, mem0rd + 0xa000);
+
+	fixup_intcx();	/* correct banks 0xe0,0xe1, 0xc000-0xcfff area */
+	fixup_lcbank2(); /* correct 0xd000-0xdfff area */
+
+	fixup_bank0_2000_4000();
+	fixup_bank0_0400_0800();
+	fixup_wrdefram(wrdefram);
+	fixup_altzp();
+	fixup_ramrd();
+	fixup_ramwrt();
+	fixup_rdrom();
+	fixup_shadow_txt1();
+	fixup_shadow_txt2();
+	fixup_shadow_hires1();
+	fixup_shadow_hires2();
+	fixup_shadow_shr();
+	fixup_shadow_iolc();
 	fixup_brks();
 }
 
@@ -1228,11 +1107,7 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x22: /* 0xc022 */
 			return (g_cur_a2_stat >> BIT_ALL_STAT_BG_COLOR) & 0xff;
 		case 0x23: /* 0xc023 */
-			tmp = ( (c023_vgc_int << 7) + (c023_1sec_int << 6) +
-				(c023_scan_int << 5) + (c023_ext_int << 4) +
-				(c023_1sec_en << 2) + (c023_scan_en << 1) +
-				(c023_ext_en) );
-			return tmp;
+			return g_c023_val;
 		case 0x24: /* 0xc024 */
 			return mouse_read_c024();
 		case 0x25: /* 0xc025 */
@@ -1284,7 +1159,7 @@ io_read(word32 loc, double *cyc_ptr)
 			return shadow_reg;
 		case 0x36: /* 0xc036 = CYAREG */
 			tmp = (speed_fast << 7) + (power_on_clear << 6) +
-				g_slot_motor_detect;
+				(g_shadow_all_banks << 4) + g_slot_motor_detect;
 			return tmp;
 		case 0x37: /* 0xc037 */
 			return 0;
@@ -1320,15 +1195,8 @@ io_read(word32 loc, double *cyc_ptr)
 			halt_printf("Mega II mouse read: c045\n");
 			return 0;
 		case 0x46: /* 0xc046 */
-			tmp = c046_mouse_last;
-			c046_mouse_last = c046_mouse_down;
-			tmp = ((c046_mouse_down << 7) | (tmp << 6) |
-				(c046_an3_status << 5) |
-				(c046_25sec_int_status << 4) |
-				(c046_vbl_int_status << 3) |
-				(c046_switch_int_status << 2) |
-				(c046_move_int_status << 1) |
-				(c046_system_irq_status) );
+			tmp = g_c046_val;
+			g_c046_val = (tmp & 0xbf) + ((tmp & 0x80) >> 1);
 			return tmp;
 		case 0x47: /* 0xc047 */
 			if(c046_vbl_irq_pending) {
@@ -1339,8 +1207,7 @@ io_read(word32 loc, double *cyc_ptr)
 				remove_irq();
 				c046_25sec_irq_pend = 0;
 			}
-			c046_vbl_int_status = 0;
-			c046_25sec_int_status = 0;
+			g_c046_val &= 0xe7;	/* clear vbl_int, 1/4sec int*/
 			return 0;
 		case 0x42: /* 0xc042 */
 		case 0x43: /* 0xc043 */
@@ -1390,14 +1257,14 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x56: /* 0xc056 */
 			if(g_cur_a2_stat & ALL_STAT_HIRES) {
 				g_cur_a2_stat &= (~ALL_STAT_HIRES);
-				fixup_hires_on(1);
+				fixup_hires_on();
 				change_display_mode(dcycs);
 			}
 			return 0;
 		case 0x57: /* 0xc057 */
 			if((g_cur_a2_stat & ALL_STAT_HIRES) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_HIRES);
-				fixup_hires_on(1);
+				fixup_hires_on();
 				change_display_mode(dcycs);
 			}
 			return 0;
@@ -1512,7 +1379,7 @@ io_read(word32 loc, double *cyc_ptr)
 			new_lcbank2 = ((loc & 0x8) >> 1) ^ 0x4;
 			new_wrdefram = (loc & 1);
 			if(new_wrdefram != wrdefram) {
-				fixup_wrdefram(new_wrdefram, 1);
+				fixup_wrdefram(new_wrdefram);
 			}
 			switch(loc & 0x3) {
 			case 0x1: /* 0xc081 */
@@ -1645,13 +1512,13 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x00: /* 0xc000 */
 			if(g_cur_a2_stat & ALL_STAT_ST80) {
 				g_cur_a2_stat &= (~ALL_STAT_ST80);
-				fixup_st80col(dcycs, 1);
+				fixup_st80col(dcycs);
 			}
 			return;
 		case 0x01: /* 0xc001 */
 			if((g_cur_a2_stat & ALL_STAT_ST80) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_ST80);
-				fixup_st80col(dcycs, 1);
+				fixup_st80col(dcycs);
 			}
 			return;
 		case 0x02: /* 0xc002 */
@@ -1681,13 +1548,13 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x0a: /* 0xc00a */
 			if(int_crom[3] != 0) {
 				int_crom[3] = 0;
-				fixup_intcx(1);
+				fixup_intcx();
 			}
 			return;
 		case 0x0b: /* 0xc00b */
 			if(int_crom[3] == 0) {
 				int_crom[3] = 1;
-				fixup_intcx(1);
+				fixup_intcx();
 			}
 			return;
 		case 0x0c: /* 0xc00c */
@@ -1748,33 +1615,29 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			if((val & 0x19) != 0) {
 				halt_printf("c023 write of %02x!!!\n",val);
 			}
-			c023_1sec_en = ((val & 0x4) != 0);
-			c023_scan_en = ((val & 2) != 0);
-			if(c023_scan_en && c023_scan_int &&
-					!c023_scan_int_irq_pending) {
+			tmp = (g_c023_val & 0x70) | (val & 0x0f);
+			if(((tmp & 0x22)==0x22) && !c023_scan_int_irq_pending){
 				c023_scan_int_irq_pending = 1;
 				add_irq();
 			}
-			if(!c023_scan_en && c023_scan_int_irq_pending) {
+			if(!(tmp & 2) && c023_scan_int_irq_pending) {
 				c023_scan_int_irq_pending = 0;
 				remove_irq();
 			}
-			if(c023_1sec_en && c023_1sec_int &&
-					!c023_1sec_int_irq_pending) {
+			if(((tmp & 0x44)==0x44)&& !c023_1sec_int_irq_pending){
 				c023_1sec_int_irq_pending = 1;
 				add_irq();
 			}
-			if(!c023_1sec_en && c023_1sec_int_irq_pending) {
+			if(!(tmp & 0x4) && c023_1sec_int_irq_pending) {
 				c023_1sec_int_irq_pending = 0;
 				remove_irq();
 			}
 
 			if(c023_1sec_int_irq_pending ||
 					c023_scan_int_irq_pending) {
-				c023_vgc_int = 1;
-			} else {
-				c023_vgc_int = 0;
+				tmp |= 0x80;
 			}
+			g_c023_val = tmp;
 			return;
 		case 0x24: /* 0xc024 */
 			/* Write to mouse reg: Throw it away */
@@ -1823,7 +1686,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			}
 			if(fixup) {
 				vid_printf("Write c02d of %02x\n", val);
-				fixup_intcx(1);
+				fixup_intcx();
 			}
 			return;
 		case 0x25: /* 0xc025 */
@@ -1852,34 +1715,30 @@ io_write(word32 loc, int val, double *cyc_ptr)
 				val, head_35, g_apple35_sel);
 			return;
 		case 0x32: /* 0xc032 */
-			if((val & 0x40) == 0) {
+			tmp = g_c023_val & 0x7f;
+			if(((val & 0x40) == 0) && (tmp & 0x40)) {
 				/* clear 1 sec int */
-				if(c023_1sec_int) {
-					irq_printf("Clear 1sec int\n");
-					if(c023_1sec_int_irq_pending) {
-						remove_irq();
-					}
-					c023_1sec_int = 0;
-					c023_1sec_int_irq_pending = 0;
+				irq_printf("Clear 1sec int\n");
+				if(c023_1sec_int_irq_pending) {
+					remove_irq();
 				}
+				tmp &= 0xbf;
+				g_c023_val = tmp;
+				c023_1sec_int_irq_pending = 0;
 			}
-			if((val & 0x20) == 0) {
+			if(((val & 0x20) == 0) && (tmp & 0x20)) {
 				/* clear scan line int */
-				if(c023_scan_int) {
-					irq_printf("Clear scn int1\n");
-					if(c023_scan_int_irq_pending) {
-						remove_irq();
-					}
-					c023_scan_int_irq_pending = 0;
-					c023_scan_int = 0;
-					check_for_new_scan_int(dcycs);
+				irq_printf("Clear scn int1\n");
+				if(c023_scan_int_irq_pending) {
+					remove_irq();
 				}
+				c023_scan_int_irq_pending = 0;
+				g_c023_val = tmp & 0xdf;
+				check_for_new_scan_int(dcycs);
 			}
 			if(c023_1sec_int_irq_pending ||
 					c023_scan_int_irq_pending) {
-				c023_vgc_int = 1;
-			} else {
-				c023_vgc_int = 0;
+				g_c023_val |= 0x80;
 			}
 			if((val & 0x9f) != 0x9f) {
 				irq_printf("c032: wrote %02x!\n", val);
@@ -1916,8 +1775,14 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			if((val & 0x60) != 0) {
 				halt_printf("c036: %2x\n", val);
 			}
-			if((val & 0x10) != 0) {
-				printf("c036: %2x\n", val);
+			tmp = (val >> 4) & 1;
+			if(tmp != g_shadow_all_banks) {
+				if(g_num_shadow_all_banks++ == 0) {
+					printf("Shadowing all banks...This "
+						"must be the NFC Megademo\n");
+				}
+				g_shadow_all_banks = tmp;
+				fixup_shadow_all_banks();
 			}
 			return;
 		case 0x37: /* 0xc037 */
@@ -1986,8 +1851,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 				remove_irq();
 				c046_25sec_irq_pend = 0;
 			}
-			c046_vbl_int_status = 0;
-			c046_25sec_int_status = 0;
+			g_c046_val &= 0xe7;	/* clear vblint, 1/4sec int*/
 			return;
 		case 0x48: /* c048 */
 			/* diversitune writes this--ignore it */
@@ -2041,14 +1905,14 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x56: /* 0xc056 */
 			if(g_cur_a2_stat & ALL_STAT_HIRES) {
 				g_cur_a2_stat &= (~ALL_STAT_HIRES);
-				fixup_hires_on(1);
+				fixup_hires_on();
 				change_display_mode(dcycs);
 			}
 			return;
 		case 0x57: /* 0xc057 */
 			if((g_cur_a2_stat & ALL_STAT_HIRES) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_HIRES);
-				fixup_hires_on(1);
+				fixup_hires_on();
 				change_display_mode(dcycs);
 			}
 			return;
@@ -2174,7 +2038,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			new_lcbank2 = ((loc & 0x8) >> 1) ^ 0x4;
 			new_wrdefram = (loc & 1);
 			if(new_wrdefram != wrdefram) {
-				fixup_wrdefram(new_wrdefram, 1);
+				fixup_wrdefram(new_wrdefram);
 			}
 			switch(loc & 0xf) {
 			case 0x1: /* 0xc081 */

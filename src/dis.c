@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.74 99/09/06 20:47:27 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.75 99/10/23 02:06:19 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -456,7 +456,7 @@ delete_bp(word32 addr)
 			g_breakpts[i-1] = g_breakpts[i];
 		}
 		g_num_breakpoints = count - 1;
-		fixup_all_banks();
+		setup_pageinfo();
 	}
 
 	show_bp();

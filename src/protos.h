@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.132 99/10/13 00:32:09 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.134 99/10/31 01:11:49 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -225,38 +225,29 @@ void joystick_update(void);
 
 /* moremem.c */
 void fixup_brks(void);
-void fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_bank1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_bank0_2000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_bank1_2000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_bank0_1_4000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_bank0_1_6000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_bank0_1_8000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_bank0_1_a000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_any_bank_c000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_any_bank_e000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_banke0_e1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_banke0_e1_2_4000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_banke0_e1_6_8000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_banke0_e1_a000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_any_bank_any_page(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
-void fixup_bank0(void);
-void fixup_bank1(void);
-void fixup_banke0(void);
-void fixup_banke1(void);
-void fixup_intcx(int call_fixups);
-void fixup_st80col(double dcycs, int call_fixups);
-void fixup_hires_on(int call_fixups);
-void fixup_page2(double dcycs, int call_fixups);
-void fixup_wrdefram(int new_wrdefram, int call_fixups);
+void fixup_hires_on(void);
+void fixup_bank0_2000_4000(void);
+void fixup_bank0_0400_0800(void);
+void fixup_any_bank_any_page(int start_page, int num_pages, byte *mem0rd, byte *mem0wr);
+void fixup_intcx(void);
+void fixup_wrdefram(int new_wrdefram);
+void fixup_st80col(double dcycs);
+void fixup_altzp(void);
+void fixup_page2(double dcycs);
+void fixup_ramrd(void);
+void fixup_ramwrt(void);
+void fixup_lcbank2(void);
+void fixup_rdrom(void);
 void set_statereg(double dcycs, int val);
-void setup_bank0(void);
-void setup_bank1(void);
-void setup_banke0(void);
-void setup_banke1(void);
-void setup_pageinfo(void);
-void fixup_all_banks(void);
+void fixup_shadow_txt1(void);
+void fixup_shadow_txt2(void);
+void fixup_shadow_hires1(void);
+void fixup_shadow_hires2(void);
+void fixup_shadow_shr(void);
+void fixup_shadow_iolc(void);
 void update_shadow_reg(int val);
+void fixup_shadow_all_banks(void);
+void setup_pageinfo(void);
 void show_bankptrs_bank0rdwr(void);
 void show_bankptrs(int bnk);
 void show_addr(byte *ptr);
@@ -351,7 +342,7 @@ void sound_play(double dsamps);
 void doc_handle_event(int osc, double dcycs);
 void doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps);
 void add_sound_irq(int osc);
-void remove_sound_irq(int osc);
+void remove_sound_irq(int osc, int must);
 void start_sound(int osc, double eff_dsamps, double dsamps);
 void wave_end_estimate(int osc, double eff_dsamps, double dsamps);
 void remove_sound_event(int osc);

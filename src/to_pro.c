@@ -120,6 +120,11 @@ main(int argc, char **argv)
 					aux_type = 0x8002;
 					break;
 				}
+				if(strcmp(new_name_end - 4, ".SDK") == 0) {
+					file_type = 0xe0;
+					aux_type = 0x8002;
+					break;
+				}
 			}
 			file_type = 0x04;	/* TXT */
 			aux_type = 0;
