@@ -974,7 +974,14 @@ Kent Dickey
 kadickey@alumni.princeton.edu
 
 X Window (Linux/HP-UX) interface information:
-------------------------------
+--------------------------------------------
+
+Every version of Linux is different.  Supporting this is very difficult
+especially since I do not run Linux myself.
+
+If KEGS fails to start, try the following options:
+
+kegs -audio 0 -noshm
 
 There may be a bug with drawing the border on x86 Linux with Shared Memory--
 add the options "-noshm -skip 0" to fix this up (but lose some graphics
