@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.96 99/05/31 20:56:24 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.98 99/08/03 22:55:51 kentd Exp $";
 
 #include <time.h>
 
@@ -87,6 +87,8 @@ int	g_status_refresh_needed = 1;
 
 int	g_vbl_border_color = 0;
 int	g_border_last_vbl_changes = 0;
+
+int	g_use_dhr140 = 1;		/* HACK */
 
 #define A2_MAX_ALL_STAT		34
 
@@ -385,6 +387,11 @@ video_init()
 				col[j] = (i >> (4 + j)) & 0xf;
 				prev_col = col[j];
 				match_col = col[j] >> 1;
+			}
+		}
+		if(g_use_dhr140) {
+			for(j = 0; j < 4; j++) {
+				col[j] = (i >> 4) & 0xf;
 			}
 		}
 		val0 = g_dhires_colors_16[col[0] & 0xf];

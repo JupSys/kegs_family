@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.141 99/06/22 22:37:53 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.142 99/07/12 23:50:06 kentd Exp $"
 
 	.code
 
@@ -113,18 +113,17 @@ rcsid_engine_s_s
 
 
 
-#define	CYCLES_PLUS_1		fadd,sgl fr_plus_1,fcycles,fcycles
-#define	CYCLES_PLUS_2		fadd,sgl fr_plus_2,fcycles,fcycles
-#define	CYCLES_PLUS_3		fadd,sgl fr_plus_3,fcycles,fcycles
-#define	CYCLES_MINUS_1		fsub,sgl fcycles,fr_plus_1,fcycles
-#define	CYCLES_MINUS_2		fsub,sgl fcycles,fr_plus_2,fcycles
+#define	CYCLES_PLUS_1		fadd,dbl fr_plus_1,fcycles,fcycles
+#define	CYCLES_PLUS_2		fadd,dbl fr_plus_2,fcycles,fcycles
+#define	CYCLES_PLUS_3		fadd,dbl fr_plus_3,fcycles,fcycles
+#define	CYCLES_MINUS_1		fsub,dbl fcycles,fr_plus_1,fcycles
+#define	CYCLES_MINUS_2		fsub,dbl fcycles,fr_plus_2,fcycles
 
-#define CYCLES_FINISH		fadd,sgl fcycles_stop,fr_plus_1,fcycles
+#define CYCLES_FINISH		fadd,dbl fcycles_stop,fr_plus_1,fcycles
 
-#define FCYCLES_ROUND_1		fadd,sgl fcycles,fr_plus_x_m1,ftmp1
-#define FCYCLES_ROUND_2		fcnvfxt,sgl,sgl ftmp1,ftmp1
-#define FCYCLES_ROUND_3		fcnvxf,sgl,sgl ftmp1,fcycles
-
+#define FCYCLES_ROUND_1		fadd,dbl fcycles,fr_plus_x_m1,ftmp1
+#define FCYCLES_ROUND_2		fcnvfxt,dbl,dbl ftmp1,ftmp1
+#define FCYCLES_ROUND_3		fcnvxf,dbl,dbl ftmp1,fcycles
 
 
 #define get_mem_b0_8	get_memory_asm
@@ -205,26 +204,29 @@ enter_asm
 	stw	link,-STACK_ENGINE_SIZE+4(sp)
 	ldo	-STACK_ENGINE_SIZE+16(sp),scratch2
 	stw	addr_latch,-STACK_ENGINE_SIZE+8(sp)
-	fstds,ma fr_dbl_1,8(scratch2)
-	fstds,ma fr_dbl_2,8(scratch2)
-	fcpy,dbl 0,fr_dbl_1
-	fstds,ma fr_dbl_3,8(scratch2)
-	fstds,ma fr_dbl_4,8(scratch2)
+	fstds,ma fcycles,8(scratch2)
+	fstds,ma fr_plus_1,8(scratch2)
+	fcpy,dbl 0,fcycles
+	fstds,ma fr_plus_2,8(scratch2)
+	fstds,ma fr_plus_3,8(scratch2)
+	fcpy,dbl 0,fr_plus_1
+	fstds,ma fr_plus_x_m1,8(scratch2)
+	fstds,ma fcycles_stop,8(scratch2)
+	fcpy,dbl 0,fr_plus_2
 	ldil	l%g_cur_dcycs,scratch2
 
 	ldil	l%g_last_vbl_dcycs,scratch3
-	fcpy,dbl 0,fr_dbl_2
+	fcpy,dbl 0,fr_plus_3
 	ldo	r%g_cur_dcycs(scratch2),scratch2
-	fcpy,dbl 0,fr_dbl_3
+	fcpy,dbl 0,fr_plus_x_m1
 	ldo	r%g_last_vbl_dcycs(scratch3),scratch3
 	fldds	0(scratch2),ftmp1
 	ldil	l%page_info_rd_wr,page_info_ptr
 	fldds	0(scratch3),ftmp2
-	fcpy,dbl 0,fr_dbl_4
+	fcpy,dbl 0,fcycles_stop
 	ldo	r%page_info_rd_wr(page_info_ptr),page_info_ptr
-	fsub,dbl ftmp1,ftmp2,ftmp1
 	bv	0(scratch1)
-	fcnvff,dbl,sgl	ftmp1,fcycles
+	fsub,dbl ftmp1,ftmp2,fcycles
 
 
 	.export leave_asm,data
@@ -232,10 +234,12 @@ leave_asm
 	ldw	-STACK_ENGINE_SIZE+4(sp),link
 	ldo	-STACK_ENGINE_SIZE+16(sp),scratch2
 	ldw	-STACK_ENGINE_SIZE+8(sp),addr_latch
-	fldds,ma 8(scratch2),fr_dbl_1
-	fldds,ma 8(scratch2),fr_dbl_2
-	fldds,ma 8(scratch2),fr_dbl_3
-	fldds,ma 8(scratch2),fr_dbl_4
+	fldds,ma 8(scratch2),fcycles
+	fldds,ma 8(scratch2),fr_plus_1
+	fldds,ma 8(scratch2),fr_plus_2
+	fldds,ma 8(scratch2),fr_plus_3
+	fldds,ma 8(scratch2),fr_plus_x_m1
+	fldds,ma 8(scratch2),fcycles_stop
 
 	bv	(link)
 	ldwm	-STACK_ENGINE_SIZE(sp),page_info_ptr
@@ -365,12 +369,12 @@ get_memory_io_stub_asm
 	FCYCLES_ROUND_2
 	FCYCLES_ROUND_3
 	bl	get_memory_io,link
-	fstws	fcycles,(arg1)
+	fstds	fcycles,(arg1)
 
 	ldw	STACK_GET_MEMORY_SAVE_LINK(sp),link
 	ldo	STACK_SAVE_CYCLES(sp),arg1
 	bv	(link)
-	fldws	(arg1),fcycles
+	fldds	(arg1),fcycles
 
 
 
@@ -560,12 +564,12 @@ set_memory_io_stub_asm
 	stw	link,STACK_SET_MEMORY_SAVE_LINK(sp)
 	FCYCLES_ROUND_3
 	bl	set_memory_io,link
-	fstws	fcycles,(arg2)
+	fstds	fcycles,(arg2)
 
 	ldw	STACK_SET_MEMORY_SAVE_LINK(sp),link
 	ldo	STACK_SAVE_CYCLES(sp),arg2
 	bv	(link)
-	fldws	(arg2),fcycles
+	fldds	(arg2),fcycles
 
 	.align	8
 	.export set_memory16_asm
@@ -1215,15 +1219,16 @@ enter_engine
 	.enter
 
 	ldw	ENGINE_FPLUS_PTR(arg0),scratch1		;fplus ptr
-	fldds	ENGINE_FDBL_1(arg0),fr_dbl_1
+	fldds	ENGINE_FCYCLES(arg0),fcycles
 
 	ldil	l%g_fcycles_stop,fcycles_stop_ptr
 	ldw	ENGINE_REG_ACC(arg0),acc
 	ldo	r%g_fcycles_stop(fcycles_stop_ptr),fcycles_stop_ptr
-	fldds	FPLUS_DBL_1(scratch1),fr_dbl_2
-	ldo	FPLUS_DBL_3(scratch1),ret0
-	fldds	FPLUS_DBL_2(scratch1),fr_dbl_3
-	fldds	0(ret0),fr_dbl_4
+	fldds	FPLUS_PLUS_1(scratch1),fr_plus_1
+	ldo	FPLUS_PLUS_3(scratch1),ret0
+	fldds	FPLUS_PLUS_2(scratch1),fr_plus_2
+	fldds	FPLUS_PLUS_3-FPLUS_PLUS_3(ret0),fr_plus_3
+	fldds	FPLUS_PLUS_X_M1-FPLUS_PLUS_3(ret0),fr_plus_x_m1
 	ldil	l%table8,ret0
 	ldw	ENGINE_REG_XREG(arg0),xreg
 	ldil	l%table16,inst_tab_ptr
@@ -1298,7 +1303,7 @@ refresh_engine_struct
 	stw	direct,ENGINE_REG_DIRECT(arg0)
 	stw	psr,ENGINE_REG_PSR(arg0)
 	stw	pc,ENGINE_REG_PC(arg0)
-	fstws	fcycles,ENGINE_FCYCLES(arg0)
+	fstds	fcycles,ENGINE_FCYCLES(arg0)
 	bv	0(link)
 	stw	kbank,ENGINE_REG_KBANK(arg0)
 
@@ -1359,14 +1364,14 @@ dispatch
 	dep	kbank,23,8,scratch2
 no_debug_toolbox
 #endif
-	fldws	0(fcycles_stop_ptr),fcycles_stop
+	fldds	0(fcycles_stop_ptr),fcycles_stop
 	dep	kbank,15,16,pc
 
 	ldi	0xfd,scratch3
 	extru	pc,23,16,arg2
 
 	ldwx,s	arg2(page_info_ptr),scratch2
-	fcmp,<=,sgl fcycles,fcycles_stop		;C=1 if can cont
+	fcmp,<=,dbl fcycles,fcycles_stop		;C=1 if can cont
 
 	extru	pc,31,8,scratch4
 
@@ -1439,7 +1444,7 @@ log_pc_asm
 	.export dispatch_instr_io,code
 dispatch_instr_io
 ; check if we're here because of timeout or halt required
-	fcmp,<=,sgl fcycles,fcycles_stop	;C=1 if we can cont
+	fcmp,<=,dbl fcycles,fcycles_stop	;C=1 if we can cont
 	ldwx,s	arg2(page_info_ptr),scratch2
 
 	ftest					;do next instr if must stop

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.128 99/06/22 22:39:03 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.129 99/07/12 23:51:02 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -259,8 +259,8 @@ void update_shadow_reg(int val);
 void show_bankptrs_bank0rdwr(void);
 void show_bankptrs(int bnk);
 void show_addr(byte *ptr);
-int io_read(word32 loc, Cyc *cyc_ptr);
-void io_write(word32 loc, int val, Cyc *cyc_ptr);
+int io_read(word32 loc, double *cyc_ptr);
+void io_write(word32 loc, int val, double *cyc_ptr);
 word32 get_lines_since_vbl(double dcycs);
 int in_vblank(double dcycs);
 int read_vid_counters(int loc, double dcycs);
@@ -274,10 +274,10 @@ int read_paddles(int paddle, double dcycs);
 /* sim65816.c */
 void show_pc_log(void);
 word32 toolbox_debug_4byte(word32 addr);
-void toolbox_debug_c(word32 xreg, word32 stack, Cyc *cyc_ptr);
+void toolbox_debug_c(word32 xreg, word32 stack, double *cyc_ptr);
 void show_toolbox_log(void);
-word32 get_memory_io(word32 loc, Cyc *cyc_ptr);
-void set_memory_io(word32 loc, int val, Cyc *cyc_ptr);
+word32 get_memory_io(word32 loc, double *cyc_ptr);
+void set_memory_io(word32 loc, int val, double *cyc_ptr);
 void show_regs_act(Engine_reg *eptr);
 void show_regs(void);
 void my_exit(int ret);

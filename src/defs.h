@@ -15,7 +15,7 @@
 	.data
 	.export rcsdif_defs_h,data
 rcsdif_defs_h
-	.stringz "@(#)$Header: defs.h,v 1.16 99/06/22 22:38:44 kentd Exp $"
+	.stringz "@(#)$Header: defs.h,v 1.17 99/07/12 23:49:54 kentd Exp $"
 	.code
 #endif
 
@@ -48,19 +48,12 @@ scratch3	.reg	%r21
 scratch4	.reg	%r22
 instr		.reg	%r23		; arg3
 
-fr_dbl_1	.reg	%fr12
-fr_dbl_2	.reg	%fr13
-fr_dbl_3	.reg	%fr14
-fr_dbl_4	.reg	%fr15
-
-fcycles		.reg	%fr12L
-ftmp_unused1	.reg	%fr12R
-fr_plus_1	.reg	%fr13L
-fr_plus_2	.reg	%fr13R
-fr_plus_3	.reg	%fr14L
-fr_plus_x_m1	.reg	%fr14R
-fcycles_stop	.reg	%fr15L
-ftmp_unused2	.reg	%fr15R
+fcycles		.reg	%fr12
+fr_plus_1	.reg	%fr13
+fr_plus_2	.reg	%fr14
+fr_plus_3	.reg	%fr15
+fr_plus_x_m1	.reg	%fr16
+fcycles_stop	.reg	%fr17
 
 ftmp1		.reg	%fr4
 ftmp2		.reg	%fr5

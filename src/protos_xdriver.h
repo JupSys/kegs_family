@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_protos_x_h[] = "@(#)$Header: protos_xdriver.h,v 1.9 99/05/31 17:21:58 kentd Exp $";
+const char rcsid_protos_x_h[] = "@(#)$Header: protos_xdriver.h,v 1.10 99/07/17 10:41:41 kentd Exp $";
 
 /* END_HDR */
 
@@ -39,6 +39,8 @@ void x_convert_8to16(XImage *xim, XImage *xout, int startx, int starty, int widt
 void x_convert_8to24(XImage *xim, XImage *xout, int startx, int starty, int width, int height);
 void check_input_events(void);
 void handle_keysym(XEvent *xev_in);
+int x_keysym_to_a2code(int keysym, int is_up);
+void x_update_modifier_state(int state);
 void x_auto_repeat_on(int must);
 void x_auto_repeat_off(int must);
 

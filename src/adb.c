@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.34 99/05/04 23:37:58 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.35 99/07/25 01:10:18 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
@@ -1335,7 +1335,10 @@ adb_key_event(int a2code, int is_up)
 word32
 adb_read_c000()
 {
-
+	if( ((g_kbd_buf[0] & 0x80) == 0) && (g_key_down == 0)) {
+		/* nothing happening, just get out */
+		return g_kbd_buf[0];
+	}
 	if(g_kbd_buf[0] & 0x80) {
 		/* got one */
 		if((g_kbd_read_no_update++ > 5) && (g_kbd_chars_buffered > 1)) {
@@ -1343,7 +1346,7 @@ adb_read_c000()
 			printf("Read %02x 3 times, tossing\n", g_kbd_buf[0]);
 			adb_access_c010();
 		}
-	} else if(g_vbl_count >= g_adb_repeat_vbl && g_key_down) {
+	} else if(g_key_down && g_vbl_count >= g_adb_repeat_vbl) {
 		/* repeat the g_key_down */
 		g_c025_val |= 0x8;
 		adb_key_event(g_a2code_down, 0);

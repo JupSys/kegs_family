@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.70 99/06/22 22:38:25 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.71 99/07/12 23:49:31 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -49,8 +49,6 @@ void U_STACK_TRACE();
 # define GET_BE_WORD16(a)	(a)
 # define GET_BE_WORD32(a)	(a)
 #endif
-
-typedef float Cyc;
 
 #define MAXNUM_HEX_PER_LINE     32
 
@@ -94,17 +92,14 @@ STRUCT(Event) {
 };
 
 STRUCT(Fplus) {
-	float	plus_1;
-	float	plus_2;
-	float	plus_3;
-	float	plus_x_minus_1;
-	float	fcycles_stop;
-	float	ftmp_unused2;
+	double	plus_1;
+	double	plus_2;
+	double	plus_3;
+	double	plus_x_minus_1;
 };
 
 STRUCT(Engine_reg) {
-	float	fcycles;
-	float	ftmp_unused1;
+	double	fcycles;
 	Fplus	*fplus_ptr;
 
 	word32	kbank;

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.34 99/06/27 22:58:33 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.35 99/07/12 23:51:14 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -21,7 +21,7 @@ const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.34 99/06/27 22:58:3
 #endif
 
 extern int halt_sim;
-extern float g_fcycles_stop;
+extern double g_fcycles_stop;
 extern int g_wait_pending;
 extern int g_irq_pending;
 extern int g_testing;
@@ -314,10 +314,10 @@ check_breakpoints(word32 addr)
 }
 
 word32
-get_memory8_io_stub(word32 addr, word32 stat, float *fcycs_ptr,
-			float fplus_x_m1)
+get_memory8_io_stub(word32 addr, word32 stat, double *fcycs_ptr,
+			double fplus_x_m1)
 {
-	float	fcycles;
+	double	fcycles;
 	byte	*ptr;
 
 	if(stat & BANK_BREAK) {
@@ -335,13 +335,13 @@ get_memory8_io_stub(word32 addr, word32 stat, float *fcycs_ptr,
 }
 
 word32
-get_memory16_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr,
+get_memory16_pieces_stub(word32 addr, word32 stat, double *fcycs_ptr,
 		Fplus	*fplus_ptr)
 {
 	byte	*ptr;
-	float	fcycles, fcycles_tmp1;
-	float	fplus_1;
-	float	fplus_x_m1;
+	double	fcycles, fcycles_tmp1;
+	double	fplus_1;
+	double	fplus_x_m1;
 	word32	addr_latch;
 	word32	ret;
 	word32	tmp1;
@@ -356,13 +356,13 @@ get_memory16_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr,
 }
 
 word32
-get_memory24_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr,
+get_memory24_pieces_stub(word32 addr, word32 stat, double *fcycs_ptr,
 		Fplus *fplus_ptr)
 {
 	byte	*ptr;
-	float	fcycles, fcycles_tmp1;
-	float	fplus_1;
-	float	fplus_x_m1;
+	double	fcycles, fcycles_tmp1;
+	double	fplus_1;
+	double	fplus_x_m1;
 	word32	addr_latch;
 	word32	ret;
 	word32	tmp1;
@@ -379,10 +379,10 @@ get_memory24_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr,
 }
 
 void
-set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr,
-		float fplus_x_m1)
+set_memory8_io_stub(word32 addr, word32 val, word32 stat, double *fcycs_ptr,
+		double fplus_x_m1)
 {
-	float	fcycles;
+	double	fcycles;
 	word32	setmem_tmp1;
 	word32	tmp1, tmp2;
 	byte	*ptr;
@@ -422,13 +422,13 @@ set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr,
 }
 
 void
-set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
+set_memory16_pieces_stub(word32 addr, word32 val, double *fcycs_ptr,
 		Fplus	*fplus_ptr)
 {
 	byte	*ptr;
-	float	fcycles, fcycles_tmp1;
-	float	fplus_1;
-	float	fplus_x_m1;
+	double	fcycles, fcycles_tmp1;
+	double	fplus_1;
+	double	fplus_x_m1;
 	word32	stat;
 
 	fcycles = *fcycs_ptr;
@@ -441,13 +441,13 @@ set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
 }
 
 void
-set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
+set_memory24_pieces_stub(word32 addr, word32 val, double *fcycs_ptr,
 		Fplus	*fplus_ptr)
 {
 	byte	*ptr;
-	float	fcycles, fcycles_tmp1;
-	float	fplus_1;
-	float	fplus_x_m1;
+	double	fcycles, fcycles_tmp1;
+	double	fplus_1;
+	double	fplus_x_m1;
 	word32	stat;
 
 	fcycles = *fcycs_ptr;
@@ -464,9 +464,9 @@ set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
 word32
 get_memory_c(word32 addr, int cycs)
 {
-	float	fcycles, fcycles_tmp1;
-	float	fplus_1;
-	float	fplus_x_m1;
+	double	fcycles, fcycles_tmp1;
+	double	fplus_1;
+	double	fplus_x_m1;
 	word32	addr_latch;
 	word32	stat;
 	byte	*ptr;
@@ -490,7 +490,7 @@ get_memory_c(word32 addr, int cycs)
 word32
 get_memory16_c(word32 addr, int cycs)
 {
-	float	fcycs;
+	double	fcycs;
 
 	fcycs = 0;
 	return get_memory_c(addr, fcycs) +
@@ -500,7 +500,7 @@ get_memory16_c(word32 addr, int cycs)
 word32
 get_memory24_c(word32 addr, int cycs)
 {
-	float	fcycs;
+	double	fcycs;
 
 	fcycs = 0;
 	return get_memory_c(addr, fcycs) +
@@ -511,9 +511,9 @@ get_memory24_c(word32 addr, int cycs)
 void
 set_memory_c(word32 addr, word32 val, int cycs)
 {
-	float	fcycles, fcycles_tmp1;
-	float	fplus_1;
-	float	fplus_x_m1;
+	double	fcycles, fcycles_tmp1;
+	double	fplus_1;
+	double	fplus_x_m1;
 	word32	stat;
 	byte	*ptr;
 
@@ -671,7 +671,7 @@ void
 set_halt_act(int val)
 {
 	halt_sim |= val;
-	g_fcycles_stop = (float)0.0;
+	g_fcycles_stop = (double)0.0;
 }
 
 void
@@ -683,9 +683,9 @@ clr_halt_act()
 word32
 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 {
-	float	fcycles, fcycles_tmp1;
-	float	fplus_1, fplus_2, fplus_3;
-	float	fplus_x_m1;
+	double	fcycles, fcycles_tmp1;
+	double	fplus_1, fplus_2, fplus_3;
+	double	fplus_x_m1;
 	word32	addr_latch;
 	word32	stat;
 	word32	save_addr;
@@ -796,13 +796,13 @@ enter_engine(Engine_reg *engine_ptr)
 	word32	save_addr;
 	word32	pull_tmp;
 	word32	tmp_bytes;
-	float	fcycles;
+	double	fcycles;
 	Fplus	*fplus_ptr;
-	float	fplus_1;
-	float	fplus_2;
-	float	fplus_3;
-	float	fplus_x_m1;
-	float	fcycles_tmp1;
+	double	fplus_1;
+	double	fplus_2;
+	double	fplus_3;
+	double	fplus_x_m1;
+	double	fcycles_tmp1;
 
 	word32	opcode;
 	register word32	addr;

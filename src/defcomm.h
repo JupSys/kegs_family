@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.84 99/06/22 22:38:33 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.85 99/07/12 23:49:42 kentd Exp $";
 #endif
 
 #define USE_XIMAGE_CHANGED
@@ -82,9 +82,7 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.84 99/06/22 22:38:33
 
 
 
-#define ENGINE_FDBL_1		0x00
 #define ENGINE_FCYCLES		0x00
-#define ENGINE_FTMP_UNUSED1	0x04
 #define ENGINE_FPLUS_PTR	0x08
 #define ENGINE_REG_KBANK	0x0c
 #define ENGINE_REG_PC		0x10
@@ -105,15 +103,10 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.84 99/06/22 22:38:33
 #define LOG_PC_SIZE		0x14
 
 
-#define FPLUS_DBL_1		0x00
-#define FPLUS_1			0x00
-#define FPLUS_2			0x04
-#define FPLUS_DBL_2		0x08
-#define FPLUS_3			0x08
-#define FPLUS_X_MINUS_1		0x0c
-#define FPLUS_DBL_3		0x10
-#define FPLUS_FCYCLES_STOP	0x10
-#define FPLUS_FTMP_UNUSED2	0x14
+#define FPLUS_PLUS_1		0x00
+#define FPLUS_PLUS_2		0x08
+#define FPLUS_PLUS_3		0x10
+#define FPLUS_PLUS_X_M1		0x18
 
 #define RET_BREAK	0x1
 #define RET_COP		0x2

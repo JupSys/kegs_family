@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.288 99/06/22 22:38:07 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.291 99/07/18 22:35:13 kentd Exp $";
 
 #include <math.h>
 
@@ -86,7 +86,7 @@ extern int g_preferred_rate;
 
 void U_STACK_TRACE();
 
-float	g_fcycles_stop = 0.0;
+double	g_fcycles_stop = 0.0;
 int	halt_sim = 0;
 int	enter_debug = 0;
 int	g_rom_version = 0;
@@ -243,7 +243,7 @@ toolbox_debug_4byte(word32 addr)
 }
 
 void
-toolbox_debug_c(word32 xreg, word32 stack, Cyc *cyc_ptr)
+toolbox_debug_c(word32 xreg, word32 stack, double *cyc_ptr)
 {
 	int	pos;
 
@@ -321,7 +321,7 @@ get_memory_c(word32 loc, int diff_cycles)
 
 
 word32
-get_memory_io(word32 loc, Cyc *cyc_ptr)
+get_memory_io(word32 loc, double *cyc_ptr)
 {
 	int	tmp;
 
@@ -444,7 +444,7 @@ set_memory(word32 loc, int val, int diff_cycles)
 #endif
 
 void
-set_memory_io(word32 loc, int val, Cyc *cyc_ptr)
+set_memory_io(word32 loc, int val, double *cyc_ptr)
 {
 	word32	tmp;
 
@@ -622,10 +622,7 @@ check_engine_asm_defines()
 	word32	val2;
 
 	eptr = &ereg;
-	CHECK(eptr, eptr->fcycles, ENGINE_FDBL_1, val1, val2);
 	CHECK(eptr, eptr->fcycles, ENGINE_FCYCLES, val1, val2);
-	CHECK(eptr, eptr->ftmp_unused1, ENGINE_FDBL_1+4, val1, val2);
-	CHECK(eptr, eptr->ftmp_unused1, ENGINE_FTMP_UNUSED1, val1, val2);
 
 	CHECK(eptr, eptr->fplus_ptr, ENGINE_FPLUS_PTR, val1, val2);
 	CHECK(eptr, eptr->acc, ENGINE_REG_ACC, val1, val2);
@@ -651,16 +648,10 @@ check_engine_asm_defines()
 	}
 
 	fplusptr = &fplus;
-	CHECK(fplusptr, fplusptr->plus_1, FPLUS_DBL_1, val1, val2);
-	CHECK(fplusptr, fplusptr->plus_1, FPLUS_1, val1, val2);
-	CHECK(fplusptr, fplusptr->plus_2, FPLUS_DBL_1+4, val1, val2);
-	CHECK(fplusptr, fplusptr->plus_2, FPLUS_2, val1, val2);
-	CHECK(fplusptr, fplusptr->plus_3, FPLUS_DBL_2, val1, val2);
-	CHECK(fplusptr, fplusptr->plus_3, FPLUS_3, val1, val2);
-	CHECK(fplusptr, fplusptr->plus_x_minus_1, FPLUS_DBL_2+4, val1, val2);
-	CHECK(fplusptr, fplusptr->plus_x_minus_1, FPLUS_X_MINUS_1, val1, val2);
-	CHECK(fplusptr, fplusptr->fcycles_stop, FPLUS_DBL_3, val1, val2);
-	CHECK(fplusptr, fplusptr->fcycles_stop, FPLUS_FCYCLES_STOP, val1, val2);
+	CHECK(fplusptr, fplusptr->plus_1, FPLUS_PLUS_1, val1, val2);
+	CHECK(fplusptr, fplusptr->plus_2, FPLUS_PLUS_2, val1, val2);
+	CHECK(fplusptr, fplusptr->plus_3, FPLUS_PLUS_3, val1, val2);
+	CHECK(fplusptr, fplusptr->plus_x_minus_1, FPLUS_PLUS_X_M1, val1, val2);
 }
 
 byte *
@@ -695,6 +686,7 @@ memory_ptr_init()
 
 extern int g_screen_redraw_skip_amt;
 extern int g_use_shmem;
+extern int g_use_dhr140;
 
 char g_display_env[512];
 int	g_force_depth = -1;
@@ -786,6 +778,9 @@ main(int argc, char **argv)
 		} else if(!strcmp("-joystick", argv[i])) {
 			printf("Trying to use joystick\n");
 			joystick_init();
+		} else if(!strcmp("-dhr140", argv[i])) {
+			printf("Using simple dhires color map\n");
+			g_use_dhr140 = 1;
 		} else {
 			printf("Bad option: %s\n", argv[i]);
 			exit(3);
@@ -1111,9 +1106,9 @@ run_prog()
 	double	dcycs;
 	double	now_dtime;
 	double	prev_dtime;
-	float	prerun_fcycles;
-	float	fspeed_mult;
-	float	fcycles_stop;
+	double	prerun_fcycles;
+	double	fspeed_mult;
+	double	fcycles_stop;
 	word32	ret;
 	int	type;
 	int	motor_on;
@@ -1129,19 +1124,15 @@ run_prog()
 
 	g_cur_sim_dtime = 0.0;
 
-	g_recip_projected_pmhz_slow.plus_1 = (float)1.0;
-	g_recip_projected_pmhz_slow.plus_2 = (float)2.0;
-	g_recip_projected_pmhz_slow.plus_3 = (float)3.0;
-	g_recip_projected_pmhz_slow.plus_x_minus_1 = (float)0.9;
-	g_recip_projected_pmhz_slow.fcycles_stop = (float)0.0;
-	g_recip_projected_pmhz_slow.ftmp_unused2 = (float)0.0;
+	g_recip_projected_pmhz_slow.plus_1 = 1.0;
+	g_recip_projected_pmhz_slow.plus_2 = 2.0;
+	g_recip_projected_pmhz_slow.plus_3 = 3.0;
+	g_recip_projected_pmhz_slow.plus_x_minus_1 = 0.9;
 
-	g_recip_projected_pmhz_fast.plus_1 = (float)(1.0 / 2.5);
-	g_recip_projected_pmhz_fast.plus_2 = (float)(2.0 / 2.5);
-	g_recip_projected_pmhz_fast.plus_3 = (float)(3.0 / 2.5);
-	g_recip_projected_pmhz_fast.plus_x_minus_1 = (float)(1.98 - (1.0/2.5));
-	g_recip_projected_pmhz_fast.fcycles_stop = (float)0.0;
-	g_recip_projected_pmhz_fast.ftmp_unused2 = (float)0.0;
+	g_recip_projected_pmhz_fast.plus_1 = (1.0 / 2.5);
+	g_recip_projected_pmhz_fast.plus_2 = (2.0 / 2.5);
+	g_recip_projected_pmhz_fast.plus_3 = (3.0 / 2.5);
+	g_recip_projected_pmhz_fast.plus_x_minus_1 = (1.98 - (1.0/2.5));
 
 	if(g_cur_fplus_ptr == 0) {
 		g_recip_projected_pmhz_unl = g_recip_projected_pmhz_slow;
@@ -1171,11 +1162,11 @@ run_prog()
 			fspeed_mult = g_projected_pmhz;
 			fplus_ptr = &g_recip_projected_pmhz_unl;
 		} else if(fast && (iwm_25 || (!iwm_1 && limit_speed == 2)) ) {
-			fspeed_mult = (float)2.5;
+			fspeed_mult = 2.5;
 			fplus_ptr = &g_recip_projected_pmhz_fast;
 		} else {
 			/* else run slow */
-			fspeed_mult = (float)1.0;
+			fspeed_mult = 1.0;
 			fplus_ptr = &g_recip_projected_pmhz_slow;
 		}
 
@@ -1602,7 +1593,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.52");
+		update_status_line(6, "KEGS v0.53");
 
 		g_status_refresh_needed = 1;
 
@@ -1687,8 +1678,7 @@ update_60hz(double dcycs, double dtime_now)
 	g_recip_projected_pmhz_unl.plus_1 = 1.0*recip_predicted_pmhz;
 	g_recip_projected_pmhz_unl.plus_2 = 2.0*recip_predicted_pmhz;
 	g_recip_projected_pmhz_unl.plus_3 = 3.0*recip_predicted_pmhz;
-	g_recip_projected_pmhz_unl.plus_x_minus_1 =
-					(float)1.01 - recip_predicted_pmhz;
+	g_recip_projected_pmhz_unl.plus_x_minus_1 = 1.01 - recip_predicted_pmhz;
 
 	if(dtime_till_expected < -0.125) {
 		/* If we were way off, get back on track */

@@ -1,4 +1,17 @@
 
+Changes in KEGS v0.53 since v0.52 (8/3/99)
+- Move all the "fcycles" timing calculations to use double instead of float.
+- Fix display shadowing bug reported by "phoenyx" which caused the text
+	display to not always be updated correctly with funny bank switching.
+- Added the "Home" key as an alias for the '=' on the keypad.
+- Changed the way X modifiers are interpreted to increase compatibility of
+	Caps Lock to more X servers.
+- Add -dhr140 option to use old double-hires color mode that results in
+	exactly 140 horizontal pixels with no bleeding.  It's set default
+	to "on" for now while I work out double-hires colors.
+- Started adding some ZipGS compatibility--control panels run, but all
+	the controls are effectively ignored by KEGS.
+
 Changes in KEGS v0.52 since v0.51 (6/27/99)
 - Small speed-up of interpreter loop to avoid checking the global variable
 	"halt_sim" after every instruction.

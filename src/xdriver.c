@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.147 99/06/27 23:40:12 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.149 99/07/19 00:58:28 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -38,14 +38,6 @@ int XShmQueryExtension(Display *display);
 
 extern int Verbose;
 
-extern int shift_key_down;
-extern int ctrl_key_down;
-extern int capslock_key_down;
-extern int numlock_key_down;
-extern int option_key_down;
-extern int cmd_key_down;
-extern int keypad_key_down;
-extern int updated_mod_latch;
 extern int g_limit_speed;
 
 extern int g_fast_disk_emul;
@@ -61,8 +53,9 @@ extern int _Xdebug;
 
 extern int g_send_sound_to_file;
 
-int g_has_focus = 0;
-int g_auto_repeat_on = -1;
+int	g_has_focus = 0;
+int	g_auto_repeat_on = -1;
+int	g_x_shift_control_state = 0;
 
 
 Display *display = 0;
@@ -121,11 +114,6 @@ word32 g_palette_8to16[256];
 word32 g_a2palette_8to16[256];
 word32 g_palette_8to24[256];
 word32 g_a2palette_8to24[256];
-
-int g_Control_L_up = 1;
-int g_Control_R_up = 1;
-int g_Shift_L_up = 1;
-int g_Shift_R_up = 1;
 
 int	g_alt_left_up = 1;
 int	g_alt_right_up = 1;
@@ -214,10 +202,10 @@ int a2_key_to_xsym[][3] = {
 	{ 0x18,	'=', '+' },
 	{ 0x33,	XK_BackSpace, 0 },
 	{ 0x72,	XK_Insert, 0 },		/* Help? */
-	{ 0x73,	XK_Home, 0 },
+/*	{ 0x73,	XK_Home, 0 },		alias XK_Home to be XK_KP_Equal! */
 	{ 0x74,	XK_Page_Up, 0 },
 	{ 0x47,	XK_Num_Lock, XK_Clear },	/* Clear */
-	{ 0x51,	XK_KP_Equal, 0 },
+	{ 0x51,	XK_KP_Equal, XK_Home },		/* Note XK_Home alias! */
 	{ 0x4b,	XK_KP_Divide, 0 },
 	{ 0x43,	XK_KP_Multiply, 0 },
 
@@ -1628,11 +1616,11 @@ void
 handle_keysym(XEvent *xev_in)
 {
 	KeySym	keysym;
+	word32	state;
 	int	keycode;
+	int	a2code;
 	int	type;
 	int	is_up;
-	word32	state;
-	int	i;
 
 	keycode = xev_in->xkey.keycode;
 	type = xev_in->xkey.type;
@@ -1643,6 +1631,8 @@ handle_keysym(XEvent *xev_in)
 
 	vid_printf("keycode: %d, type: %d, state:%d, sym: %08x\n",
 		keycode, type, state, (word32)keysym);
+
+	x_update_modifier_state(state);
 
 	is_up = 0;
 	if(type == KeyRelease) {
@@ -1747,62 +1737,89 @@ handle_keysym(XEvent *xev_in)
 		}
 	}
 
+	a2code = x_keysym_to_a2code(keysym, is_up);
+	if(a2code >= 0) {
+		adb_physical_key_update(a2code, is_up);
+	} else if(a2code != -2) {
+		if((keysym >= XK_F7) && (keysym <= XK_F12)) {
+			/* just get out quietly */
+			return;
+		}
+		printf("Keysym: %04x of keycode: %02x unknown\n",
+			(word32)keysym, keycode);
+	}
+}
+
+int
+x_keysym_to_a2code(int keysym, int is_up)
+{
+	int	i;
+
+	if(keysym == 0) {
+		return -1;
+	}
+
+	if((keysym == XK_Shift_L) || (keysym == XK_Shift_R)) {
+		if(is_up) {
+			g_x_shift_control_state &= ~ShiftMask;
+		} else {
+			g_x_shift_control_state |= ShiftMask;
+		}
+	}
+	if(keysym == XK_Caps_Lock) {
+		if(is_up) {
+			g_x_shift_control_state &= ~LockMask;
+		} else {
+			g_x_shift_control_state |= LockMask;
+		}
+	}
+	if((keysym == XK_Control_L) || (keysym == XK_Control_R)) {
+		if(is_up) {
+			g_x_shift_control_state &= ~ControlMask;
+		} else {
+			g_x_shift_control_state |= ControlMask;
+		}
+	}
+
 	/* Look up Apple 2 keycode */
 	for(i = g_num_a2_keycodes - 1; i >= 0; i--) {
-		if(keysym && ((keysym == a2_key_to_xsym[i][1]) ||
-					(keysym == a2_key_to_xsym[i][2]))) {
+		if((keysym == a2_key_to_xsym[i][1]) ||
+					(keysym == a2_key_to_xsym[i][2])) {
 
 			vid_printf("Found keysym:%04x = a[%d] = %04x or %04x\n",
 				(int)keysym, i, a2_key_to_xsym[i][1],
 				a2_key_to_xsym[i][2]);
-			/* Special: handle shift, control multiple keys */
-			/* Make user hitting Shift_L, Shift_R, and then */
-			/*  releasing Shift_L work. */
-			if(keysym == XK_Shift_L) {
-				g_Shift_L_up = is_up;
-				if(is_up && (g_Shift_R_up == 0)) {
-					/* shift is still down, don't do it! */
-					is_up = 0;
-				}
-			}
-			if(keysym == XK_Shift_R) {
-				g_Shift_R_up = is_up;
-				if(is_up && (g_Shift_L_up == 0)) {
-					/* shift is still down, don't do it! */
-					is_up = 0;
-				}
-			}
-			if(keysym == XK_Control_L) {
-				g_Control_L_up = is_up;
-				if(is_up && (g_Control_R_up == 0)) {
-					/* shift is still down, don't do it! */
-					is_up = 0;
-				}
-			}
-			if(keysym == XK_Control_R) {
-				g_Control_R_up = is_up;
-				if(is_up && (g_Control_L_up == 0)) {
-					/* shift is still down, don't do it! */
-					is_up = 0;
-				}
-			}
 
-			adb_physical_key_update(a2_key_to_xsym[i][0], is_up);
-			return;
+			return a2_key_to_xsym[i][0];
 		}
 	}
 
-	switch(keysym) {
-	case XK_F7: case XK_F8: case XK_F9:
-	case XK_F10: case XK_F11: case XK_F12:
-	case XK_F13: case XK_F14: case XK_F15:
-		/* special keys, ignore */
-		break;
-	default:
-		printf("Keysym: %04x of keycode: %02x unknown\n",
-			(word32)keysym, keycode);
+	return -1;
+}
+
+void
+x_update_modifier_state(int state)
+{
+	int	state_xor;
+	int	is_up;
+
+	state = state & (ControlMask | LockMask | ShiftMask);
+	state_xor = g_x_shift_control_state ^ state;
+	is_up = 0;
+	if(state_xor & ControlMask) {
+		is_up = ((state & ControlMask) == 0);
+		adb_physical_key_update(0x36, is_up);
+	}
+	if(state_xor & LockMask) {
+		is_up = ((state & LockMask) == 0);
+		adb_physical_key_update(0x39, is_up);
+	}
+	if(state_xor & ShiftMask) {
+		is_up = ((state & ShiftMask) == 0);
+		adb_physical_key_update(0x38, is_up);
 	}
 
+	g_x_shift_control_state = state;
 }
 
 void

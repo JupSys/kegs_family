@@ -6,7 +6,7 @@ PROJROOT = .
 
 include vars
 
-all: specials $(NAME)$(SUFFIX) partls to_pro
+all: specials $(NAME)$(SUFFIX) partls to_pro dc2raw
 
 clean: specials_clean
 	rm -f *.o kegs
@@ -60,6 +60,9 @@ engine_c.o: 8inst_c 16inst_c
 
 partls: partls.c
 	$(CC) $(CCOPTS) -o partls$(SUFFIX) partls.c
+
+dc2raw: dc2raw.c
+	$(CC) $(CCOPTS) -o dc2raw$(SUFFIX) dc2raw.c
 
 to_pro: prodos.h prodos_protos.h to_pro.c
 	$(CC) $(CCOPTS) -o to_pro$(SUFFIX) to_pro.c

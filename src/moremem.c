@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.202 99/06/01 00:31:21 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.205 99/07/19 00:44:38 kentd Exp $";
 
 #include "defc.h"
 
@@ -51,6 +51,12 @@ extern int head_35;
 extern int g_apple35_sel;
 extern int cur_drive;
 
+int	g_zipgs_unlock = 0;
+int	g_zipgs_disabled = 0;
+int	g_zipgs_reg_c059 = 0x5f;
+int	g_zipgs_reg_c05a = 0x0f;
+int	g_zipgs_reg_c05b = 0x40;
+int	g_zipgs_reg_c05c = 0x00;
 
 int	statereg;
 int	old_statereg = 0xffff;
@@ -174,8 +180,10 @@ fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 	}
 
 	ramwrt_add_wr = 0;
+	shadow = BANK_SHADOW;
 	if(RAMWRT) {
 		ramwrt_add_wr = 0x10000;
+		shadow = BANK_SHADOW2;
 	}
 
 	if(mask & 0x000c) {
@@ -186,16 +194,30 @@ fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		SET_PAGE_INFO_WR(3, mem0wr + ramwrt_add_wr + 0x300);
 	}
 
+	if(mask & 0x00000f00) {
+		/* pages 8 - b */
+		add_rd = ramrd_add_rd + 0x800;
+		add_wr = ramwrt_add_wr + 0x800;
+		if((shadow_reg & 0x20) == 0 && g_rom_version >= 3) {
+			/* shadow */
+			add_wr += shadow;
+		}
+
+		for(j = 8; j < 0xc; j++) {
+			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
+			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
+			add_rd += 0x100;
+			add_wr += 0x100;
+		}
+	}
+
 	if(mask & 0x000000f0) {
 		/* pages 4-7 */
 		add_rd = ramrd_add_rd + 0x400;
 		add_wr = ramwrt_add_wr + 0x400;
-		shadow = BANK_SHADOW;
 		if(g_cur_a2_stat & ALL_STAT_ST80) {
+			shadow = BANK_SHADOW;
 			if(PAGE2) {
-
-/* What if superhires is on?? */
-
 				add_rd = 0x10400;
 				add_wr = 0x10400;
 				shadow = BANK_SHADOW2;
@@ -210,23 +232,6 @@ fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 		}
 		
 		for(j = 4; j < 8; j++) {
-			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
-			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
-			add_rd += 0x100;
-			add_wr += 0x100;
-		}
-	}
-	if(mask & 0x00000f00) {
-		/* pages 8 - b */
-		add_rd = ramrd_add_rd + 0x800;
-		add_wr = ramwrt_add_wr + 0x800;
-		shadow = BANK_SHADOW;
-		if((shadow_reg & 0x20) == 0 && g_rom_version >= 3) {
-			/* shadow */
-			add_wr += shadow;
-		}
-
-		for(j = 8; j < 0xc; j++) {
 			SET_PAGE_INFO_RD(j, mem0rd + add_rd);
 			SET_PAGE_INFO_WR(j, mem0wr + add_wr);
 			add_rd += 0x100;
@@ -311,9 +316,6 @@ fixup_bank0_2000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr)
 {
 	if((g_cur_a2_stat & ALL_STAT_ST80) && (g_cur_a2_stat & ALL_STAT_HIRES)){
 		if(PAGE2) {
-
-/* What if superhires is on?? */
-
 			mem0rd += 0x10000;
 			mem0wr += 0x10000;
 			if((shadow_reg & 0x12) == 0 || (shadow_reg & 0x8) == 0){
@@ -827,7 +829,7 @@ fixup_st80col(double dcycs, int call_fixups)
 void
 fixup_hires_on(int call_fixups)
 {
-	if((g_cur_a2_stat & ALL_STAT_ST80) && PAGE2) {
+	if(g_cur_a2_stat & ALL_STAT_ST80) {
 		/* 2000-4000 also */
 		bank0_adjust_mask[1] = -1;
 		if(call_fixups) {
@@ -1161,11 +1163,12 @@ show_addr(byte *ptr)
 int dummy = 0;
 
 int
-io_read(word32 loc, Cyc *cyc_ptr)
+io_read(word32 loc, double *cyc_ptr)
 {
 	double	dcycs;
+	word64	word64_tmp;
 #if 0
-	float	fcyc, new_fcyc;
+	double	fcyc, new_fcyc;
 #endif
 	int new_lcbank2;
 	int new_wrdefram;
@@ -1405,31 +1408,63 @@ io_read(word32 loc, Cyc *cyc_ptr)
 			}
 			return 0;
 		case 0x58: /* 0xc058 */
-			annunc_0 = 0;
+			if(g_zipgs_unlock < 4) {
+				annunc_0 = 0;
+			}
 			return 0;
 		case 0x59: /* 0xc059 */
-			annunc_0 = 1;
+			if(g_zipgs_unlock >= 4) {
+				return g_zipgs_reg_c059;
+			} else {
+				annunc_0 = 1;
+			}
 			return 0;
 		case 0x5a: /* 0xc05a */
-			annunc_1 = 0;
+			if(g_zipgs_unlock >= 4) {
+				return g_zipgs_reg_c05a;
+			} else {
+				annunc_1 = 0;
+			}
 			return 0;
 		case 0x5b: /* 0xc05b */
-			annunc_1 = 1;
+			if(g_zipgs_unlock >= 4) {
+				word64_tmp = (word64)dcycs;
+				tmp = (word64_tmp >> 9) & 1;
+				return (tmp << 7) + (g_zipgs_reg_c05b & 0x6f) +
+					(g_zipgs_disabled << 4);;
+			} else {
+				annunc_1 = 1;
+			}
 			return 0;
 		case 0x5c: /* 0xc05c */
-			annunc_2 = 0;
+			if(g_zipgs_unlock >= 4) {
+				return g_zipgs_reg_c05c;
+			} else {
+				annunc_2 = 0;
+			}
 			return 0;
 		case 0x5d: /* 0xc05d */
-			annunc_2 = 1;
+			if(g_zipgs_unlock >= 4) {
+				printf("Reading ZipGS $c05d!\n");
+				set_halt(1);
+			} else {
+				annunc_2 = 1;
+			}
 			return 0;
 		case 0x5e: /* 0xc05e */
-			if(g_cur_a2_stat & ALL_STAT_ANNUNC3) {
+			if(g_zipgs_unlock >= 4) {
+				printf("Reading ZipGS $c05e!\n");
+				set_halt(1);
+			} else if(g_cur_a2_stat & ALL_STAT_ANNUNC3) {
 				g_cur_a2_stat &= (~ALL_STAT_ANNUNC3);
 				change_display_mode(dcycs);
 			}
 			return 0;
 		case 0x5f: /* 0xc05f */
-			if((g_cur_a2_stat & ALL_STAT_ANNUNC3) == 0) {
+			if(g_zipgs_unlock >= 4) {
+				printf("Reading ZipGS $c05f!\n");
+				set_halt(1);
+			} else if((g_cur_a2_stat & ALL_STAT_ANNUNC3) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_ANNUNC3);
 				change_display_mode(dcycs);
 			}
@@ -1597,11 +1632,11 @@ io_read(word32 loc, Cyc *cyc_ptr)
 }
 
 void
-io_write(word32 loc, int val, Cyc *cyc_ptr)
+io_write(word32 loc, int val, double *cyc_ptr)
 {
 	double	dcycs;
 #if 0
-	float	fcyc, new_fcyc;
+	double	fcyc, new_fcyc;
 #endif
 	int	new_tmp;
 	int	new_lcbank2;
@@ -2031,31 +2066,64 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 			}
 			return;
 		case 0x58: /* 0xc058 */
-			annunc_0 = 0;
+			if(g_zipgs_unlock >= 4) {
+				g_zipgs_reg_c059 &= 0x4;  /* last reset cold */
+			} else {
+				annunc_0 = 0;
+			}
 			return;
 		case 0x59: /* 0xc059 */
-			annunc_0 = 1;
+			if(g_zipgs_unlock >= 4) {
+				g_zipgs_reg_c059 = (val & 0xf8) |
+						(g_zipgs_reg_c059 & 0x7);
+			} else {
+				annunc_0 = 1;
+			}
 			return;
 		case 0x5a: /* 0xc05a */
 			annunc_1 = 0;
+			if((val & 0xf0) == 0x50) {
+				g_zipgs_unlock++;
+			} else if(g_zipgs_unlock >= 4) {
+				g_zipgs_disabled = 1;
+			} else {
+				g_zipgs_unlock = 0;
+			}
 			return;
 		case 0x5b: /* 0xc05b */
-			annunc_1 = 1;
+			if(g_zipgs_unlock >= 4) {
+				g_zipgs_disabled = 0;
+			} else {
+				annunc_1 = 1;
+			}
 			return;
 		case 0x5c: /* 0xc05c */
-			annunc_2 = 0;
+			if(g_zipgs_unlock >= 4) {
+				g_zipgs_reg_c05c = val;
+			} else {
+				annunc_2 = 0;
+			}
 			return;
 		case 0x5d: /* 0xc05d */
-			annunc_2 = 1;
+			if(g_zipgs_unlock >= 4) {
+				g_zipgs_reg_c05a = val | 0xf;
+			} else {
+				annunc_2 = 1;
+			}
 			return;
 		case 0x5e: /* 0xc05e */
-			if(g_cur_a2_stat & ALL_STAT_ANNUNC3) {
+			if(g_zipgs_unlock >= 4) {
+				/* Zippy writes 0x80 and 0x00 here... */
+			} else if(g_cur_a2_stat & ALL_STAT_ANNUNC3) {
 				g_cur_a2_stat &= (~ALL_STAT_ANNUNC3);
 				change_display_mode(dcycs);
 			}
 			return;
 		case 0x5f: /* 0xc05f */
-			if((g_cur_a2_stat & ALL_STAT_ANNUNC3) == 0) {
+			if(g_zipgs_unlock >= 4) {
+				printf("Wrote ZipGS $c05f with: %02x\n", val);
+				set_halt(1);
+			} else if((g_cur_a2_stat & ALL_STAT_ANNUNC3) == 0) {
 				g_cur_a2_stat |= (ALL_STAT_ANNUNC3);
 				change_display_mode(dcycs);
 			}
