@@ -1,4 +1,13 @@
 
+Changes in KEGS v0.36 since v0.35
+
+- Linux x86 port completed and functional with help from Karl Pfleger
+- Linux clock fixes--should handle daylight savings better on Linux
+- LITTLE_ENDIAN defines
+- Start making fixes for NeXTStep due to Eric Sunshine
+- Fixed bug in HP asm code with I/O fetches--caused //gs selftests to fail
+  and a bug in scc.c was also causing self-tests to fail.
+
 Changes in KEGS v0.35 since v0.34
 
 - engine_c.c fully implemented--KEGS now has a version completely written

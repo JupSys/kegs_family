@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.6 98/01/13 22:44:44 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.7 98/05/30 22:39:33 kentd Exp $";
 
 #include "defc.h"
 
@@ -785,8 +785,12 @@ do_write_c7(int unit_num, word32 buf, int blk)
 		val1 = get_memory16_c(buf + i, 0);
 		val2 = get_memory16_c(buf + i + 2, 0);
 		/* reorder the little-endian bytes to be big-endian */
+#ifdef LITTLE_ENDIAN
+		val = (val2 << 16) + val1;
+#else
 		val = (val1 << 24) + ((val1 << 8) & 0xff0000) +
 			((val2 << 8) & 0xff00) + (val2 >> 8);
+#endif
 		*ptr++ = val;
 	}
 

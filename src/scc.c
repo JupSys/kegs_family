@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.17 98/05/17 12:19:59 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.19 98/05/26 00:08:51 kentd Exp $";
 
 #include "defc.h"
 
@@ -84,7 +84,11 @@ scc_init()
 		ret = listen(sockfd, 1);
 
 		on = 1;
+#ifdef FIOSNBIO
 		ret = ioctl(sockfd, FIOSNBIO, (char *)&on);
+#else
+		ret = ioctl(sockfd, FIONBIO, (char *)&on);
+#endif
 		if(ret == -1) {
 			printf("ioctl ret: %d, errno: %d\n", ret,errno);
 			exit(3);
@@ -458,7 +462,7 @@ scc_write_reg(int port, word32 val, double dcycs)
 				8+port, val);
 			set_halt(1);
 		}
-		if((val & 0x1c) != 0x0) {
+		if((val & 0x0c) != 0x0) {
 			printf("Write c03%x to wr14 of %02x!\n", 8+port, val);
 			set_halt(1);
 		}
@@ -619,7 +623,8 @@ scc_accept_socket(int port)
 
 	if(scc_ptr->socket_state == 0) {
 		scc_ptr->client_len = sizeof(scc_ptr->client_addr);
-		rdwrfd = accept(scc_ptr->accfd, &(scc_ptr->client_addr),
+		rdwrfd = accept(scc_ptr->accfd,
+			(struct sockaddr *)&(scc_ptr->client_addr),
 			&(scc_ptr->client_len));
 		if(rdwrfd < 0) {
 			return;
@@ -767,12 +772,12 @@ scc_write_data(int port, word32 val, double dcycs)
 	scc_printf("SCC write %04x: %02x\n", 0xc03b-port, val);
 	scc_log(SCC_REGNUM(1,port,8), val, dcycs);
 
-	val = val & 0x7f;
 	scc_ptr = &(scc_stat[port]);
 	if(scc_ptr->reg[14] & 0x10) {
 		/* local loopback! */
 		scc_add_to_readbuf(port, val);
 	} else {
+		val = val & 0x7f;
 		scc_add_to_writebuf(port, val);
 		scc_try_to_empty_writebuf(port);
 		//printf("Wrote to SCC data, port %d, val: %02x\n", port, val);

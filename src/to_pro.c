@@ -11,13 +11,11 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-#include <stdio.h>
-#include <fcntl.h>
-#include <sys/stat.h>
+#include "defc.h"
+#include <ctype.h>
 
 #include "prodos.h"
 
-#define MIN(a,b)	(((a) <= (b)) ? (a) : (b))
 
 extern int errno;
 
@@ -42,12 +40,11 @@ main(int argc, char **argv)
 	int	in;
 	int	in_size;
 	int	ret;
-	Disk	*disk;
+	ProDisk	*disk;
 	char	new_name[128];
 	byte	in_buf[1024];
-	File_entry *file_ptr;
 	int	disk_size;
-	int	i, j;
+	int	i;
 	int	done;
 	int	pos;
 	int	size;
@@ -160,6 +157,7 @@ main(int argc, char **argv)
 	}
 
 	flush_disk(disk);
+	return 0;
 }
 
 void
@@ -222,7 +220,7 @@ make_legal_prodos_name(char *new_name, char *old_name)
 }
 
 void
-flush_disk(Disk *disk)
+flush_disk(ProDisk *disk)
 {
 	disk_write_data(disk, 6, disk->bitmap_ptr,
 					disk->size_bitmap_blocks * 512);
@@ -231,7 +229,7 @@ flush_disk(Disk *disk)
 }
 
 void
-close_file(Disk *disk)
+close_file(ProDisk *disk)
 {
 	write_ind_block(disk);
 	write_master_ind_block(disk);
@@ -239,12 +237,11 @@ close_file(Disk *disk)
 	disk->file_ptr = 0;
 }
 
-Disk *
+ProDisk *
 allocate_memdisk(char *out_name, int size)
 {
-	Disk	*disk;
+	ProDisk	*disk;
 	int	out;
-	int	i;
 
 	out = open(out_name, O_RDWR | O_CREAT | O_TRUNC, 0x1b6);
 	if(out < 0) {
@@ -253,7 +250,7 @@ allocate_memdisk(char *out_name, int size)
 		exit(1);
 	}
 
-	disk = (Disk *)malloc(sizeof(Disk));
+	disk = (ProDisk *)malloc(sizeof(ProDisk));
 	if(disk == 0) {
 		printf("allocate_memdisk failed, errno: %d\n", errno);
 	}
@@ -271,7 +268,7 @@ allocate_memdisk(char *out_name, int size)
 }
 
 void
-format_memdisk(Disk *disk, char *name)
+format_memdisk(ProDisk *disk, char *name)
 {
 	byte	zero_buf[1024];
 	int	total_blocks;
@@ -299,7 +296,7 @@ format_memdisk(Disk *disk, char *name)
 	set_l2byte(&(dir->next_blk), 3);
 	vol_hdr = (Vol_hdr *)&(dir->file_entries[0]);
 	vol_hdr->storage_type_name_len = 0xf0 + strlen(name);
-	strncpy(vol_hdr->vol_name, name, strlen(name));
+	strncpy((char *)vol_hdr->vol_name, name, strlen(name));
 	vol_hdr->version = 0;
 	vol_hdr->min_version = 0;
 	vol_hdr->access = 0xc3;
@@ -355,7 +352,7 @@ format_memdisk(Disk *disk, char *name)
 }
 
 void
-disk_write_data(Disk *disk, int blk_num, byte *buf, int size)
+disk_write_data(ProDisk *disk, int blk_num, byte *buf, int size)
 {
 	int	size_in_blocks;
 	int	ret;
@@ -367,27 +364,29 @@ disk_write_data(Disk *disk, int blk_num, byte *buf, int size)
 	size_in_blocks = size >> 9;
 	if(size_in_blocks * 512 != size) {
 		printf("disk_write: blk: %04x, buf: %08x, size: %08x\n",
-			blk_num, buf, size);
+			blk_num, (word32)buf, size);
 		exit(1);
 	}
 
 	ret = lseek(disk->fd, 512*blk_num, SEEK_SET);
 	if(ret != 512*blk_num) {
 		printf("disk_write: seek: %d, errno: %d, blk: %04x, buf: "
-			"%08x, sz: %08x\n", ret, errno, blk_num, buf, size);
+			"%08x, sz: %08x\n", ret, errno, blk_num,
+			(word32)buf, size);
 		exit(1);
 	}
 
 	ret = write(disk->fd, buf, size);
 	if(ret != size) {
 		printf("disk_write: write: %d, errno: %d, blk: %04x, buf: "
-			"%08x, sz: %08x\n", ret, errno, blk_num, buf, size);
+			"%08x, sz: %08x\n", ret, errno, blk_num,
+			(word32)buf, size);
 		exit(1);
 	}
 }
 
 void
-disk_read_data(Disk *disk, int blk_num, byte *buf, int size)
+disk_read_data(ProDisk *disk, int blk_num, byte *buf, int size)
 {
 	int	size_in_blocks;
 	int	ret;
@@ -396,21 +395,23 @@ disk_read_data(Disk *disk, int blk_num, byte *buf, int size)
 	size_in_blocks = size >> 9;
 	if(size_in_blocks * 512 != size) {
 		printf("disk_read: blk: %04x, buf: %08x, size: %08x\n",
-			blk_num, buf, size);
+			blk_num, (word32)buf, size);
 		exit(1);
 	}
 
 	ret = lseek(disk->fd, 512*blk_num, SEEK_SET);
 	if(ret != 512*blk_num) {
 		printf("disk_read: seek: %d, errno: %d, blk: %04x, buf: "
-			"%08x, sz: %08x\n", ret, errno, blk_num, buf, size);
+			"%08x, sz: %08x\n", ret, errno, blk_num,
+			(word32)buf, size);
 		exit(1);
 	}
 
 	ret = read(disk->fd, buf, size);
 	if(ret != size) {
 		printf("disk_read: read: %d, errno: %d, blk: %04x, buf: "
-			"%08x, sz: %08x\n", ret, errno, blk_num, buf, size);
+			"%08x, sz: %08x\n", ret, errno, blk_num,
+			(word32)buf, size);
 		for(i = 0; i < size; i++) {
 			buf[i] = 0;
 		}
@@ -418,7 +419,7 @@ disk_read_data(Disk *disk, int blk_num, byte *buf, int size)
 }
 
 Directory *
-disk_read_dir(Disk *disk, int blk_num)
+disk_read_dir(ProDisk *disk, int blk_num)
 {
 	disk_write_dir(disk, blk_num);
 
@@ -429,7 +430,7 @@ disk_read_dir(Disk *disk, int blk_num)
 }
 
 void
-disk_write_dir(Disk *disk, int blk_num)
+disk_write_dir(ProDisk *disk, int blk_num)
 {
 	if(disk->dir_blk_num >= 0) {
 		if(disk->dir_blk_num != blk_num) {
@@ -443,7 +444,7 @@ disk_write_dir(Disk *disk, int blk_num)
 }
 
 void
-create_new_file(Disk *disk, int dir_block, int storage_type, char *name,
+create_new_file(ProDisk *disk, int dir_block, int storage_type, char *name,
 	int file_type, word32 creation_time, int version, int min_version,
 	int access, int aux_type, word32 last_mod, word32 eof)
 {
@@ -484,7 +485,7 @@ create_new_file(Disk *disk, int dir_block, int storage_type, char *name,
 			/* Got it! */
 			file_ptr->storage_type_name_len =
 				(storage_type << 4) | name_len;
-			strncpy(file_ptr->file_name, name, 15);
+			strncpy((char *)file_ptr->file_name, name, 15);
 			file_ptr->file_type = file_type;
 			set_l2byte(&(file_ptr->key_pointer),
 				find_next_free_block(disk));
@@ -540,7 +541,7 @@ create_new_file(Disk *disk, int dir_block, int storage_type, char *name,
 }
 
 int
-pro_write_file(Disk *disk, byte *in_buf, int pos, int size)
+pro_write_file(ProDisk *disk, byte *in_buf, int pos, int size)
 {
 	int	block;
 	int	i;
@@ -567,7 +568,7 @@ pro_write_file(Disk *disk, byte *in_buf, int pos, int size)
 
 
 int
-get_disk_block(Disk *disk, int pos, int create)
+get_disk_block(ProDisk *disk, int pos, int create)
 {
 	File_entry *file_ptr;
 	int	storage_type;
@@ -700,7 +701,7 @@ get_disk_block(Disk *disk, int pos, int create)
 }
 
 void
-get_new_ind_block(Disk *disk)
+get_new_ind_block(ProDisk *disk)
 {
 	int	ind_blk_num;
 	int	i;
@@ -716,7 +717,7 @@ get_new_ind_block(Disk *disk)
 }
 
 void
-write_ind_block(Disk *disk)
+write_ind_block(ProDisk *disk)
 {
 	int	ind_blk_num;
 
@@ -730,7 +731,7 @@ write_ind_block(Disk *disk)
 }
 
 void
-get_new_master_ind_block(Disk *disk)
+get_new_master_ind_block(ProDisk *disk)
 {
 	int	master_ind_blk_num;
 	int	i;
@@ -746,7 +747,7 @@ get_new_master_ind_block(Disk *disk)
 }
 
 void
-write_master_ind_block(Disk *disk)
+write_master_ind_block(ProDisk *disk)
 {
 	int	master_ind_blk_num;
 
@@ -760,7 +761,7 @@ write_master_ind_block(Disk *disk)
 }
 
 int
-find_next_free_block(Disk *disk)
+find_next_free_block(ProDisk *disk)
 {
 	byte	*bitmap_ptr;
 	int	pos;
@@ -825,7 +826,7 @@ set_file_entry(File_entry *entry, int storage_type_name_len, char *file_name,
 {
 
 	entry->storage_type_name_len = storage_type_name_len;
-	strncpy(entry->file_name, file_name, 15);
+	strncpy((char *)entry->file_name, file_name, 15);
 	entry->file_type = file_type;
 	set_l2byte(&(entry->key_pointer), key_pointer);
 	set_l2byte(&(entry->blocks_used), blocks_used);

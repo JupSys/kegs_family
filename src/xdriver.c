@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.131 98/05/11 21:37:13 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.133 98/05/30 22:40:57 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -778,7 +778,7 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 	if(extended_info == 1) {
 		/* border at top and bottom of screen */
 		width = X_A2_WINDOW_WIDTH;
-		height = X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT;
+		height = X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8;
 	}
 	if(extended_info == 2) {
 		/* border at sides of screen */
@@ -975,7 +975,9 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 		printf("a2_screen_buf_ch:%08x, g_full_refr:%08x\n",
 			a2_screen_buffer_changed, g_full_refresh_needed);
 		show_a2_line_stuff();
+#ifdef HPUX
 		U_STACK_TRACE();
+#endif
 		set_halt(1);
 	}
 
@@ -1139,6 +1141,11 @@ check_input_events()
 	while(len > 0) {
 		XNextEvent(display, &ev);
 		len--;
+		if(len == 0) {
+			/* Xaccel on linux only buffers one X event */
+			/*  must look for more now */
+			len = XPending(display);
+		}
 		switch(ev.type) {
 		case FocusIn:
 		case FocusOut:
@@ -1337,12 +1344,12 @@ handle_keysym(XEvent *xev_in)
 	switch(keysym) {
 	case XK_Alt_R:
 	case XK_Meta_R:
-	case XK_Menu:
+	case XK_Cancel:
 		keysym = XK_Print;		/* option */
 		break;
 	case XK_Alt_L:
 	case XK_Meta_L:
-	case XK_Cancel:
+	case XK_Menu:
 		keysym = XK_Scroll_Lock;	/* cmd */
 		break;
 	case NoSymbol:

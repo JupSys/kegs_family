@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.133 98/05/17 18:16:02 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.134 98/05/26 00:08:32 kentd Exp $"
 
 	.code
 
@@ -354,9 +354,9 @@ get_memory_io_stub_asm
 	FCYCLES_ROUND_1
 	ldo	STACK_SAVE_CYCLES(sp),arg1
 	FCYCLES_ROUND_2
-	fstws	fcycles,(arg1)
-	bl	get_memory_io,link
 	FCYCLES_ROUND_3
+	bl	get_memory_io,link
+	fstws	fcycles,(arg1)
 
 	ldw	STACK_GET_MEMORY_SAVE_LINK(sp),link
 	ldo	STACK_SAVE_CYCLES(sp),arg1

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.111 98/05/13 23:26:36 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.112 98/05/23 00:21:11 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -154,6 +154,26 @@ int do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize, int op_pr
 void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, char *string);
 
 /* engine_c.c */
+void check_breakpoints(word32 addr);
+word32 get_memory8_io_stub(word32 addr, word32 stat, float *fcycs_ptr, float fplus_x_m1);
+word32 get_memory16_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
+word32 get_memory24_pieces_stub(word32 addr, word32 stat, float *fcycs_ptr, Fplus *fplus_ptr);
+void set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr, float fplus_x_m1);
+void set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
+void set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr, Fplus *fplus_ptr);
+word32 get_memory_c(word32 addr, int cycs);
+word32 get_memory16_c(word32 addr, int cycs);
+word32 get_memory24_c(word32 addr, int cycs);
+void set_memory_c(word32 addr, word32 val, int cycs);
+void set_memory16_c(word32 addr, word32 val, int cycs);
+void set_memory24_c(word32 addr, word32 val, int cycs);
+word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
+word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
+byte *memalloc_align(int size);
+void memory_ptrs_init(void);
+void set_halt_act(int val);
+void clr_halt_act(void);
+word32 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr);
 int enter_engine(Engine_reg *engine_ptr);
 
 /* scc.c */
@@ -224,6 +244,7 @@ void eject_named_disk(Disk *dsk, char *name);
 void eject_disk(Disk *dsk);
 
 /* moremem.c */
+void fixup_brks(void);
 void fixup_bank0_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
 void fixup_bank1_0000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
 void fixup_bank0_2000(word32 mask, int start_page, word32 mem0rd, word32 mem0wr);
@@ -254,6 +275,7 @@ void setup_bank1(void);
 void setup_banke0(void);
 void setup_banke1(void);
 void setup_pageinfo(void);
+void fixup_all_banks(void);
 void update_shadow_reg(int val);
 void show_bankptrs_bank0rdwr(void);
 void show_bankptrs(int bnk);
@@ -271,7 +293,6 @@ void toolbox_debug_c(word32 xreg, word32 stack, Cyc *cyc_ptr);
 void show_toolbox_log(void);
 word32 get_memory_io(word32 loc, Cyc *cyc_ptr);
 void set_memory_io(word32 loc, int val, Cyc *cyc_ptr);
-void check_breakpoints_c(word32 loc);
 void show_regs_act(Engine_reg *eptr);
 void show_regs(void);
 void my_exit(int ret);

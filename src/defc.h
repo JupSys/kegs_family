@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.55 98/05/17 01:48:15 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.58 98/05/25 18:29:46 kentd Exp $";
 #endif
 
 #include "defcomm.h"
@@ -32,19 +32,33 @@ void U_STACK_TRACE();
 #define DCYCS_1_MHZ		((DCYCS_28_MHZ/28.0)*(65.0*7/(65.0*7+1.0)))
 #define CYCS_1_MHZ		((int)DCYCS_1_MHZ)
 
+#ifdef LITTLE_ENDIAN
+# define BIGEND(a)    ((((a) >> 24) & 0xff) +			\
+			(((a) >> 8) & 0xff00) + 		\
+			(((a) << 8) & 0xff0000) + 		\
+			(((a) << 24) & 0xff000000))
+#else
+# define BIGEND(a)	(a)
+#endif
 
 typedef float Cyc;
 
 #define MAXNUM_HEX_PER_LINE     32
 
+#ifdef __NeXT__
+# include <libc.h>
+#endif
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <machine/inline.h>		/* for GET_ITIMR */
+#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef HPUX
+# include <machine/inline.h>		/* for GET_ITIMER */
+#endif
 
 STRUCT(Pc_log) {
 	word32	dbank_kbank_pc;
@@ -176,17 +190,25 @@ extern int errno;
 #define vid_printf	if(DO_VERBOSE && (Verbose & VERBOSE_VIDEO)) printf
 
 
-#define MIN(a,b)	(((a) < (b)) ? (a) : (b))
-#define MAX(a,b)	(((a) < (b)) ? (b) : (a))
+#ifndef MIN
+# define MIN(a,b)	(((a) < (b)) ? (a) : (b))
+#endif
+#ifndef MAX
+# define MAX(a,b)	(((a) < (b)) ? (b) : (a))
+#endif
 
-#ifdef __GNUC__
+#ifdef HPUX
+# ifdef __GNUC__
 /* Assume GNU C doesn't know inline assembly */
-# define GET_ITIMER(dest)	\
+#  define GET_ITIMER(dest)	\
 	__asm__ volatile ("mfctl 16,%0" : "=r" (dest))
-#else
+# else
 /* Assume HP compiler with inline asm */
-# define GET_ITIMER(dest)		\
+#  define GET_ITIMER(dest)		\
 	_MFCTL(16,dest)
+# endif
+#else
+# define GET_ITIMER(dest)	dest = 0;
 #endif
 
 #include "iwm.h"

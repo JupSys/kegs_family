@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.65 98/05/17 01:49:44 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.66 98/05/23 00:29:48 kentd Exp $";
 
 #include <stdio.h>
 #include "defc.h"
@@ -422,8 +422,6 @@ void
 show_bp()
 {
 	int i;
-	int count;
-	int j;
 
 	printf("Showing breakpoints set\n");
 	for(i = 0; i < g_num_breakpoints; i++) {
@@ -434,7 +432,6 @@ show_bp()
 void
 delete_bp(word32 addr)
 {
-	int	index;
 	int	count;
 	int	hit;
 	int	i;
@@ -783,8 +780,7 @@ do_debug_unix()
 	localbuf[i] = 0;
 	
 
-	printf("About to open: %s,len: %d\n",
-		localbuf,strlen(localbuf));
+	printf("About to open: %s,len: %d\n", localbuf, (int)strlen(localbuf));
 	if(load) {
 		fd = open(localbuf,O_RDONLY);
 	} else {

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.65 98/05/06 23:22:49 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.69 98/05/25 18:29:17 kentd Exp $";
 
 #include "defc.h"
 
@@ -50,7 +50,12 @@ int	g_doc_saved_ctl = 0;
 int	g_queued_samps = 0;
 int	g_queued_nonsamps = 0;
 
+#ifdef HPUX
 int	g_audio_enable = -1;
+#else
+/* Default to sound off */
+int	g_audio_enable = 0;
+#endif
 
 Doc_reg g_doc_regs[32];
 
@@ -872,7 +877,11 @@ sound_play(double dcycs)
 	
 				outptr += 2;
 	
+#ifdef LITTLE_ENDIAN
+				sndptr[pos] = (val << 16) + (val0 & 0xffff);
+#else
 				sndptr[pos] = (val0 << 16) + (val & 0xffff);
+#endif
 				pos++;
 				if(pos >= SOUND_SHM_SAMP_SIZE) {
 					pos = 0;
@@ -1011,7 +1020,9 @@ doc_sound_end(int osc, int samps_to_do, double dcycs, int can_repeat)
 	if(ctl & 0x01) {
 		/* Oscillator already stopped. */
 		printf("Osc %d interrupt, but it was already stopped!\n",osc);
+#ifdef HPUX
 		U_STACK_TRACE();
+#endif
 		set_halt(1);
 		return osc;
 	}
@@ -1282,7 +1293,7 @@ wave_end_estimate(int osc, double dcycs, int samps_to_do)
 
 
 void
-remove_sound_event(osc)
+remove_sound_event(int osc)
 {
 	if(g_doc_regs[osc].event) {
 		g_doc_regs[osc].event = 0;

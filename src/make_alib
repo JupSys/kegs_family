@@ -1,4 +1,4 @@
-#!/bin/ksh
+#!/bin/sh
 
 if [ -f /usr/include/audio/Alib.h ]
 then

@@ -1,47 +1,10 @@
 
+#include "defc.h"
 #include <fcntl.h>
 #include <unistd.h>
 
 extern int errno;
 
-typedef unsigned short word16;
-typedef unsigned int word32;
-
-#define STRUCT(a)	typedef struct _ ## a a; struct _ ## a
-
-#define MIN(a, b)	((a < b) ? a : b)
-
-STRUCT(Driver_desc) {
-	word16	sig;
-	word16	blk_size;
-	word32	blk_count;
-	word16	dev_type;
-	word16	dev_id;
-	word32	data;
-	word16	drvr_count;
-};
-
-STRUCT(Part_map) {
-	word16	sig;
-	word16	sigpad;
-	word32	map_blk_cnt;
-	word32	phys_part_start;
-	word32	part_blk_cnt;
-	char	part_name[32];
-	char	part_type[32];
-	word32	data_start;
-	word32	data_cnt;
-	word32	part_status;
-	word32	log_boot_start;
-	word32	boot_size;
-	word32	boot_load;
-	word32	boot_load2;
-	word32	boot_entry;
-	word32	boot_entry2;
-	word32	boot_cksum;
-	char	processor[16];
-	char	junk[128];
-};
 
 #define BUF_SIZE	65536
 char	buf[BUF_SIZE];
@@ -71,7 +34,6 @@ main(int argc, char **argv)
 	Part_map *part_map_ptr;
 	double	dsize;
 	int	fd;
-	int	ret;
 	int	block_size;
 	word32	sig;
 	word32	map_blk_cnt;
@@ -167,4 +129,5 @@ main(int argc, char **argv)
 	}
 
 	close(fd);
+	return 0;
 }

@@ -1,21 +1,22 @@
 
-KEGS: Kent's Emulated GS version 0.35
+KEGS: Kent's Emulated GS version 0.36
 
 What is this?
 -------------
 
-KEGS is an Apple //gs emulator for Unix workstations.  New with KEGS
-v0.35 is portability to other platforms.  KEGS was originally
-written for HP Unix workstations using a hand-coded assembly language
-interpreter loop.  To open KEGS up to a wider audience, I recoded the
-assembly parts into a C-only version, which in theory can now be
-compiled and run on other platforms.  I have not tried porting it yet.
-See README.compile.
+KEGS is an Apple //gs emulator for X windows, but optimized for HP
+workstations.  New with KEGS v0.35 is portability to another platform--
+Linux on Intel x86.  KEGS was originally written for HP Unix
+workstations using a hand-coded assembly language interpreter loop.  To
+open KEGS up to a wider audience, I recoded the assembly parts into a
+C-only version, which can now be compiled and run on other platforms.
+The Linux port is probably the most demanding X window port, and only a
+few dozen lines of code needed to change.  See README.compile.
 
 KEGS uses X-Windows for its display (you can send the display to another
 machine) and uses the built-in audio on HP workstations to emulate all
 Apple //gs sounds.  It supports limited serial port emulation through
-sockets.
+sockets.  Audio does not work under x86 Linux yet.
 
 The ROMs and GS/OS (the Apple //gs operating system) are not included
 with KEGS since they are not freely distributable.  KEGS is a little
@@ -28,10 +29,10 @@ KEGS features:
 
 Fast 65816 emulation:
 	Assembly version: about 8MHz on a 712/80, and 17-20MHz on a C180.
-	C version: about 4MHz on a 712/80.
+	C version: about 4MHz on a 712/80, 12MHz on a 266MHz Pentium II.
 Emulates low-level 5.25" and 3.5" drive accesses (even nibble-copiers work!).
 Emulates classic Apple II sound and 32-voice Ensoniq sound.
-	All sound is played in 16-bit stereo at 48KHz.
+	All sound is played in 16-bit stereo at 48KHz.  (Not on Linux, yet).
 Emulates all Apple //gs graphics modes, including border effects.
 	Can handle mixed-displays (superhires at the top, lores at the bottom).
 	Always does 60 video updates per second.
@@ -61,6 +62,7 @@ Included files:
 	README.kegs	- you're here
 	README.compile	- Describes how to build KEGS
 	kegs		- the executable, for HP-UX 10.20+
+	kegs.linux	- Executable for x86 Linux 2.0.30.
 	font.65sim	- C-like description of the font KEGS uses.
 	disk_conf	- disk image configuration info
 	to_pro		- Hard-to-use ProDOS volume creator
@@ -97,11 +99,16 @@ language interpreter loop.  Full source and a makefile is provided
 to allow you to compile for other HP-UX revisions or for other platforms.
 See the README.compile file for more info about compiling.
 
+If you are on linux, run "kegs.linux" instead.  There is a temporary
+bug with drawing the border on Linux with Shared Memory--add the options
+"-noshm -skip 0" to fix this up (but lose some graphics performance,
+sorry).
+
 If you want the display to go somewhere different, make sure the shell
 environment variable $DISPLAY is set, or give the command-line argument
 "-display {foo}".
 
-By default, the audio will be active if the display is the local
+By default, the audio will be active if the display is the local HP
 workstation, else it will be disabled.  The command-line arguments
 "-audio 0" forces audio off, and "-audio 1" forces audio on (even if the
 display is remote).  Audio is sent to the internal workstation speaker
@@ -112,10 +119,20 @@ direct audio hardware using the command-line option "-hpdev", but this
 can cause panics on HPUX 10.X before 10.20ACE without some audio
 patches.
 
+Audio currently is not functional on Linux.
+
 KEGS will open a new window and use the terminal window you started it from
 as a "debug" window.  I've reduced the debug info it prints,
 but you may catch some I forgot to remove.  Let me know what you were
 running, and what it was saying, and I will fix it.
+
+KEGS requires an 8-bit graphics plane to operate correctly.  On HP
+workstations, this is always available, even if you have a 24-bit
+graphics card.  On Linux, it seems as if you must run the server in
+8-bit mode.  On Linux, moving the cursor into the KEGS window causes the
+rest of the screen to go "technicolor" due to KEGS needing the
+whole colormap to operate.  Can some Linux expert chime in on
+any ways to avoid this?
 
 KEGS also forks off a subprocess to help handle the sound if audio is
 active.  If KEGS crashes in a unusual way (a coredump, for instance),
@@ -288,6 +305,9 @@ s6d1 = image2.dsk
 
 ...and then you've "inserted" image2.dsk into s6d1.
 
+If a Linux user would chime in with any Linux specifics, I'd be happy
+to add them here in the future.
+
 
 Debugging KEGS:
 --------------
@@ -404,7 +424,7 @@ KEGS command-line option summary:
 	This switch can override the default.  -audio 0 causes KEGS to
 	not fork the background audio process, but Ensoniq emulation
 	is still 100% accurate, just the sound is not sent to the
-	workstation speaker.
+	workstation speaker.  Audio is always off on Linux for now.
 -display {machine:0.0}: Same as setting the environment variable DISPLAY.
 	Sends X display to {machine:0.0}.
 
@@ -417,9 +437,9 @@ use them as the command/option keys.  This is what I use.  Since most people
 don't have a PC keyboard, there are several alternatives.
 
 The following keys are Option (closed-apple) (not all keyboards have
-all keys):  Meta_R, Alt_R, Menu, Print_screen, and the Windows key just
+all keys):  Meta_R, Alt_R, Cancel, Print_screen, and the Windows key just
 to the right of the spacebar.  The following keys are Command (open-apple):
-Meta_L, Alt_L, Cancel, Scroll_lock, the Windows key left of the spacebar,
+Meta_L, Alt_L, Menu, Scroll_lock, the Windows key left of the spacebar,
 and the Windows key on the far right that looks like a pull-down menu.
 
 If you can't get any of these to work on your machine, let me know.
@@ -773,13 +793,16 @@ it plays the music just fine.
 Under GS/OS, the 5.25" drive emulation does not seem to work right.
 I'm working on fixing this.
 
+Linux draws the border all wrong with Shared Memory on--use -noshm
+on Linux to avoid this for now.
+
 Sound emulation:
 ---------------
 
 KEGS supports very accurate classic Apple II sound (clicking of the
 speaker using $C030) and fairly accurate Ensoniq sound.
 
-To send the sound to the external jack of you workstation (assuming your
+To send the sound to the external jack of your HP workstation (assuming your
 shell is ksh or sh):
 
 export SPEAKER=external
@@ -809,6 +832,8 @@ may panic the machine!
 
 If your display is not using shared memory, audio defaults to off unless
 you override it with "-audio 1".
+
+There is no sound on Linux yet.
 
 SCC emulation:
 -------------

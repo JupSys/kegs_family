@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.83 98/05/13 23:23:39 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.85 98/05/25 18:09:41 kentd Exp $";
 
 #include <time.h>
 
@@ -175,102 +175,102 @@ int hires_colors[] = {
 #endif
 
 const word32 bw_hires_convert[4] = {
-	0x00000000,
-	0x0f0f0000,
-	0x00000f0f,
-	0x0f0f0f0f
+	BIGEND(0x00000000),
+	BIGEND(0x0f0f0000),
+	BIGEND(0x00000f0f),
+	BIGEND(0x0f0f0f0f)
 };
 
 const word32 bw_dhires_convert[16] = {
-	0x00000000,
-	0x0f000000,
-	0x000f0000,
-	0x0f0f0000,
+	BIGEND(0x00000000),
+	BIGEND(0x0f000000),
+	BIGEND(0x000f0000),
+	BIGEND(0x0f0f0000),
 
-	0x00000f00,
-	0x0f000f00,
-	0x000f0f00,
-	0x0f0f0f00,
+	BIGEND(0x00000f00),
+	BIGEND(0x0f000f00),
+	BIGEND(0x000f0f00),
+	BIGEND(0x0f0f0f00),
 
-	0x0000000f,
-	0x0f00000f,
-	0x000f000f,
-	0x0f0f000f,
+	BIGEND(0x0000000f),
+	BIGEND(0x0f00000f),
+	BIGEND(0x000f000f),
+	BIGEND(0x0f0f000f),
 
-	0x00000f0f,
-	0x0f000f0f,
-	0x000f0f0f,
-	0x0f0f0f0f,
+	BIGEND(0x00000f0f),
+	BIGEND(0x0f000f0f),
+	BIGEND(0x000f0f0f),
+	BIGEND(0x0f0f0f0f),
 };
 
 const word32 hires_convert[64] = {
-	0x00000000,	/* 00,0000 = black, black, black, black */
-	0x00000000,	/* 00,0001 = black, black, black, black */
-	0x03030000,	/* 00,0010 = purp , purp , black, black */
-	0x0f0f0000,	/* 00,0011 = white, white, black, black */
-	0x00000c0c,	/* 00,0100 = black, black, green, green */
-	0x0c0c0c0c,	/* 00,0101 = green, green, green, green */
-	0x0f0f0f0f,	/* 00,0110 = white, white, white, white */
-	0x0f0f0f0f,	/* 00,0111 = white, white, white, white */
-	0x00000000,	/* 00,1000 = black, black, black, black */
-	0x00000000,	/* 00,1001 = black, black, black, black */
-	0x03030303,	/* 00,1010 = purp , purp , purp , purp */
-	0x0f0f0303,	/* 00,1011 = white ,white, purp , purp */
-	0x00000f0f,	/* 00,1100 = black ,black, white, white */
-	0x0c0c0f0f,	/* 00,1101 = green ,green, white, white */
-	0x0f0f0f0f,	/* 00,1110 = white ,white, white, white */
-	0x0f0f0f0f,	/* 00,1111 = white ,white, white, white */
+	BIGEND(0x00000000),	/* 00,0000 = black, black, black, black */
+	BIGEND(0x00000000),	/* 00,0001 = black, black, black, black */
+	BIGEND(0x03030000),	/* 00,0010 = purp , purp , black, black */
+	BIGEND(0x0f0f0000),	/* 00,0011 = white, white, black, black */
+	BIGEND(0x00000c0c),	/* 00,0100 = black, black, green, green */
+	BIGEND(0x0c0c0c0c),	/* 00,0101 = green, green, green, green */
+	BIGEND(0x0f0f0f0f),	/* 00,0110 = white, white, white, white */
+	BIGEND(0x0f0f0f0f),	/* 00,0111 = white, white, white, white */
+	BIGEND(0x00000000),	/* 00,1000 = black, black, black, black */
+	BIGEND(0x00000000),	/* 00,1001 = black, black, black, black */
+	BIGEND(0x03030303),	/* 00,1010 = purp , purp , purp , purp */
+	BIGEND(0x0f0f0303),	/* 00,1011 = white ,white, purp , purp */
+	BIGEND(0x00000f0f),	/* 00,1100 = black ,black, white, white */
+	BIGEND(0x0c0c0f0f),	/* 00,1101 = green ,green, white, white */
+	BIGEND(0x0f0f0f0f),	/* 00,1110 = white ,white, white, white */
+	BIGEND(0x0f0f0f0f),	/* 00,1111 = white ,white, white, white */
 
-	0x00000000,	/* 01,0000 = black, black, black, black */
-	0x00000000,	/* 01,0001 = black, black, black, black */
-	0x06060000,	/* 01,0010 = blue , blue , black, black */
-	0x0f0f0000,	/* 01,0011 = white, white, black, black */
-	0x00000c0c,	/* 01,0100 = black, black, green, green */
-	0x09090c0c,	/* 01,0101 = orang, orang, green, green */
-	0x0f0f0f0f,	/* 01,0110 = white, white, white, white */
-	0x0f0f0f0f,	/* 01,0111 = white, white, white, white */
-	0x00000000,	/* 01,1000 = black, black, black, black */
-	0x00000000,	/* 01,1001 = black, black, black, black */
-	0x06060303,	/* 01,1010 = blue , blue , purp , purp */
-	0x0f0f0303,	/* 01,1011 = white ,white, purp , purp */
-	0x00000f0f,	/* 01,1100 = black ,black, white, white */
-	0x09090f0f,	/* 01,1101 = orang ,orang, white, white */
-	0x0f0f0f0f,	/* 01,1110 = white ,white, white, white */
-	0x0f0f0f0f,	/* 01,1111 = white ,white, white, white */
+	BIGEND(0x00000000),	/* 01,0000 = black, black, black, black */
+	BIGEND(0x00000000),	/* 01,0001 = black, black, black, black */
+	BIGEND(0x06060000),	/* 01,0010 = blue , blue , black, black */
+	BIGEND(0x0f0f0000),	/* 01,0011 = white, white, black, black */
+	BIGEND(0x00000c0c),	/* 01,0100 = black, black, green, green */
+	BIGEND(0x09090c0c),	/* 01,0101 = orang, orang, green, green */
+	BIGEND(0x0f0f0f0f),	/* 01,0110 = white, white, white, white */
+	BIGEND(0x0f0f0f0f),	/* 01,0111 = white, white, white, white */
+	BIGEND(0x00000000),	/* 01,1000 = black, black, black, black */
+	BIGEND(0x00000000),	/* 01,1001 = black, black, black, black */
+	BIGEND(0x06060303),	/* 01,1010 = blue , blue , purp , purp */
+	BIGEND(0x0f0f0303),	/* 01,1011 = white ,white, purp , purp */
+	BIGEND(0x00000f0f),	/* 01,1100 = black ,black, white, white */
+	BIGEND(0x09090f0f),	/* 01,1101 = orang ,orang, white, white */
+	BIGEND(0x0f0f0f0f),	/* 01,1110 = white ,white, white, white */
+	BIGEND(0x0f0f0f0f),	/* 01,1111 = white ,white, white, white */
 
-	0x00000000,	/* 10,0000 = black, black, black, black */
-	0x00000000,	/* 10,0001 = black, black, black, black */
-	0x03030000,	/* 10,0010 = purp , purp , black, black */
-	0x0f0f0000,	/* 10,0011 = white, white, black, black */
-	0x00000909,	/* 10,0100 = black, black, orang, orang */
-	0x0c0c0909,	/* 10,0101 = green, green, orang, orang */
-	0x0f0f0f0f,	/* 10,0110 = white, white, white, white */
-	0x0f0f0f0f,	/* 10,0111 = white, white, white, white */
-	0x00000000,	/* 10,1000 = black, black, black, black */
-	0x00000000,	/* 10,1001 = black, black, black, black */
-	0x03030606,	/* 10,1010 = purp , purp , blue , blue */
-	0x0f0f0606,	/* 10,1011 = white ,white, blue , blue */
-	0x00000f0f,	/* 10,1100 = black ,black, white, white */
-	0x0c0c0f0f,	/* 10,1101 = green ,green, white, white */
-	0x0f0f0f0f,	/* 10,1110 = white ,white, white, white */
-	0x0f0f0f0f,	/* 10,1111 = white ,white, white, white */
+	BIGEND(0x00000000),	/* 10,0000 = black, black, black, black */
+	BIGEND(0x00000000),	/* 10,0001 = black, black, black, black */
+	BIGEND(0x03030000),	/* 10,0010 = purp , purp , black, black */
+	BIGEND(0x0f0f0000),	/* 10,0011 = white, white, black, black */
+	BIGEND(0x00000909),	/* 10,0100 = black, black, orang, orang */
+	BIGEND(0x0c0c0909),	/* 10,0101 = green, green, orang, orang */
+	BIGEND(0x0f0f0f0f),	/* 10,0110 = white, white, white, white */
+	BIGEND(0x0f0f0f0f),	/* 10,0111 = white, white, white, white */
+	BIGEND(0x00000000),	/* 10,1000 = black, black, black, black */
+	BIGEND(0x00000000),	/* 10,1001 = black, black, black, black */
+	BIGEND(0x03030606),	/* 10,1010 = purp , purp , blue , blue */
+	BIGEND(0x0f0f0606),	/* 10,1011 = white ,white, blue , blue */
+	BIGEND(0x00000f0f),	/* 10,1100 = black ,black, white, white */
+	BIGEND(0x0c0c0f0f),	/* 10,1101 = green ,green, white, white */
+	BIGEND(0x0f0f0f0f),	/* 10,1110 = white ,white, white, white */
+	BIGEND(0x0f0f0f0f),	/* 10,1111 = white ,white, white, white */
 
-	0x00000000,	/* 11,0000 = black, black, black, black */
-	0x00000000,	/* 11,0001 = black, black, black, black */
-	0x06060000,	/* 11,0010 = blue , blue , black, black */
-	0x0f0f0000,	/* 11,0011 = white, white, black, black */
-	0x00000909,	/* 11,0100 = black, black, orang, orang */
-	0x09090909,	/* 11,0101 = orang, orang, orang, orang */
-	0x0f0f0f0f,	/* 11,0110 = white, white, white, white */
-	0x0f0f0f0f,	/* 11,0111 = white, white, white, white */
-	0x00000000,	/* 11,1000 = black, black, black, black */
-	0x00000000,	/* 11,1001 = black, black, black, black */
-	0x06060606,	/* 11,1010 = blue , blue , blue , blue */
-	0x0f0f0606,	/* 11,1011 = white ,white, blue , blue */
-	0x00000f0f,	/* 11,1100 = black ,black, white, white */
-	0x09090f0f,	/* 11,1101 = orang ,orang, white, white */
-	0x0f0f0f0f,	/* 11,1110 = white ,white, white, white */
-	0x0f0f0f0f,	/* 11,1111 = white ,white, white, white */
+	BIGEND(0x00000000),	/* 11,0000 = black, black, black, black */
+	BIGEND(0x00000000),	/* 11,0001 = black, black, black, black */
+	BIGEND(0x06060000),	/* 11,0010 = blue , blue , black, black */
+	BIGEND(0x0f0f0000),	/* 11,0011 = white, white, black, black */
+	BIGEND(0x00000909),	/* 11,0100 = black, black, orang, orang */
+	BIGEND(0x09090909),	/* 11,0101 = orang, orang, orang, orang */
+	BIGEND(0x0f0f0f0f),	/* 11,0110 = white, white, white, white */
+	BIGEND(0x0f0f0f0f),	/* 11,0111 = white, white, white, white */
+	BIGEND(0x00000000),	/* 11,1000 = black, black, black, black */
+	BIGEND(0x00000000),	/* 11,1001 = black, black, black, black */
+	BIGEND(0x06060606),	/* 11,1010 = blue , blue , blue , blue */
+	BIGEND(0x0f0f0606),	/* 11,1011 = white ,white, blue , blue */
+	BIGEND(0x00000f0f),	/* 11,1100 = black ,black, white, white */
+	BIGEND(0x09090f0f),	/* 11,1101 = orang ,orang, white, white */
+	BIGEND(0x0f0f0f0f),	/* 11,1110 = white ,white, white, white */
+	BIGEND(0x0f0f0f0f),	/* 11,1111 = white ,white, white, white */
 };
 
 void
@@ -1306,7 +1306,11 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 						(val0 << 8) + val0;
 				val1_wd = (val1 << 24) + (val1 << 16) +
 						(val1 << 8) + val1;
+#ifdef LITTLE_ENDIAN
+				val01_wd = (val1_wd << 16) + (val0_wd & 0xffff);
+#else
 				val01_wd = (val0_wd << 16) + (val1_wd & 0xffff);
+#endif
 
 				for(y2 = 0; y2 < 8; y2++) {
 					img_ptr[0] = val0_wd + palette_add;
@@ -1422,9 +1426,15 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 						(val2 << 8) + val2;
 				val3_wd = (val3 << 24) + (val3 << 16) +
 						(val3 << 8) + val3;
+#ifdef LITTLE_ENDIAN
+				val01_wd = (val1_wd << 24) + (val0_wd&0xffffff);
+				val12_wd = (val2_wd << 16) + (val1_wd & 0xffff);
+				val23_wd = (val3_wd << 8) + (val2_wd & 0xff);
+#else
 				val01_wd = (val0_wd << 8) + (val1_wd & 0xff);
 				val12_wd = (val1_wd << 16) + (val2_wd & 0xffff);
 				val23_wd = (val2_wd << 24) + (val3_wd&0xffffff);
+#endif
 
 				for(y2 = 0; y2 < 8; y2++) {
 					img_ptr[0] = val0_wd + palette_add;
@@ -2308,7 +2318,9 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 				"init_right:%d\n", kd_tmp_debug,
 				a2_line_full_left_edge[start_line],
 				a2_line_full_right_edge[start_line]);
+#ifdef HPUX
 			U_STACK_TRACE();
+#endif
 			set_halt(1);
 		}
 	}

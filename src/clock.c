@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.11 97/05/03 22:09:46 kentd Exp $";
+const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.13 98/05/30 22:39:18 kentd Exp $";
 
 #include "defc.h"
 #include <time.h>
@@ -121,17 +121,23 @@ setup_bram()
 void
 update_cur_time()
 {
+	struct timeval tv;
+	struct timezone tz;
 	unsigned int secs;
 
-	tzset();
-	secs = time(NULL);
 
+	gettimeofday(&tv, &tz);
+	secs = tv.tv_sec;
 	/* add in secs to make date based on Apple Jan 1, 1904 instead of */
 	/*   Unix's Jan 1, 1970 */
 	/*  So add in 66 years and 17 leap year days (1904 is a leap year) */
 	secs += ((66*365) + 17) * (24*3600);
-	secs -= timezone;
-	/* secs += (daylight*3600); */
+	secs -= (tz.tz_minuteswest) * 60;
+
+#ifndef HPUX
+	/* attempt to do daylight savings time adjustment on Linux */
+	secs += ((tz.tz_dsttime != 0)*3600);
+#endif
 	
 	g_clk_cur_time = secs;
 

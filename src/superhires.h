@@ -2,7 +2,7 @@
 /* This file is included by video.c */
 
 #ifndef SUPERHIRES_INCLUDED
-const char rcsid_superhires_h[] = "@(#)$Header: superhires.h,v 1.4 98/05/13 23:23:38 kentd Exp $";
+const char rcsid_superhires_h[] = "@(#)$Header: superhires.h,v 1.6 98/05/30 22:40:44 kentd Exp $";
 # define SUPERHIRES_INCLUDED
 #endif
 
@@ -49,7 +49,11 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 			(pal << 4);
 
 		if(SUPER_MODE640 && !SUPER_A2VID) {
+#ifdef LITTLE_ENDIAN
+			pal_word += 0x04000c08;
+#else
 			pal_word += 0x080c0004;
+#endif
 		}
 
 
@@ -72,8 +76,13 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 					pix2 = g_a2vid_palette_remap[pix2+0];
 					pix3 = g_a2vid_palette_remap[pix3+4];
 				}
+#ifdef LITTLE_ENDIAN
+				tmp = (pix3 << 24) + (pix2 << 16) +
+					(pix1 << 8) + pix0 + pal_word;
+#else
 				tmp = (pix0 << 24) + (pix1 << 16) +
 					(pix2 << 8) + pix3 + pal_word;
+#endif
 				*img_ptr++ = tmp; *img_ptr2++ = tmp;
 
 				pix0 = (val1 >> 6) & 0x3;
@@ -86,8 +95,13 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 					pix2 = g_a2vid_palette_remap[pix2+0];
 					pix3 = g_a2vid_palette_remap[pix3+4];
 				}
+#ifdef LITTLE_ENDIAN
+				tmp = (pix3 << 24) + (pix2 << 16) +
+					(pix1 << 8) + pix0 + pal_word;
+#else
 				tmp = (pix0 << 24) + (pix1 << 16) +
 					(pix2 << 8) + pix3 + pal_word;
+#endif
 				*img_ptr++ = tmp; *img_ptr2++ = tmp;
 			} else {
 				pix0 = (val0 >> 4);
@@ -110,8 +124,13 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 					pix0 = g_a2vid_palette_remap[pix0];
 					pix1 = g_a2vid_palette_remap[pix1];
 				}
+#ifdef LITTLE_ENDIAN
+				tmp = (pix1 << 24) + (pix1 << 16) +
+					(pix0 << 8) + pix0 + pal_word;
+#else
 				tmp = (pix0 << 24) + (pix0 << 16) +
 					(pix1 << 8) + pix1 + pal_word;
+#endif
 				*img_ptr++ = tmp; *img_ptr2++ = tmp;
 
 				pix0 = (val1 >> 4);
@@ -134,8 +153,13 @@ SUPER_TYPE(byte *screen_data, int y, int scan, word32 ch_mask)
 					pix0 = g_a2vid_palette_remap[pix0];
 					pix1 = g_a2vid_palette_remap[pix1];
 				}
+#ifdef LITTLE_ENDIAN
+				tmp = (pix1 << 24) + (pix1 << 16) +
+					(pix0 << 8) + pix0 + pal_word;
+#else
 				tmp = (pix0 << 24) + (pix0 << 16) +
 					(pix1 << 8) + pix1 + pal_word;
+#endif
 				*img_ptr++ = tmp; *img_ptr2++ = tmp;
 			}
 		}

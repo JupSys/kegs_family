@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.70 97/11/16 17:40:22 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.71 98/05/23 22:38:03 kentd Exp $";
 
 #include "defc.h"
 
@@ -1810,7 +1810,11 @@ iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 
 
 	word_ptr = (word32 *)&(trk->nib_area[0]);
+#ifdef LITTLE_ENDIAN
+	val = 0xff08ff08;
+#else
 	val = 0x08ff08ff;
+#endif
 	for(i = 0; i < trk->track_len; i += 4) {
 		*word_ptr++ = val;
 	}

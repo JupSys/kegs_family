@@ -1,7 +1,7 @@
 
 OBJECTS1 = adb.o clock.o dis.o scc.o iwm.o moremem.o sim65816.o smartport.o sound.o video.o xdriver.o
-OBJECTS = $(OBJECTS1) engine_s.o sound_hp.o
-CC = cc -Ae -C
+OBJECTS = $(OBJECTS1) engine_c.o sound_dummy.o
+CC = gcc
 CCOPTS = -O
 OPTS =  -DNDEBUG
 SUFFIX =

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.189 98/05/17 01:50:19 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.190 98/05/23 00:30:12 kentd Exp $";
 
 #include "defc.h"
 
@@ -1132,16 +1132,17 @@ show_addr(byte *ptr)
 {
 
 	if(ptr >= g_memory_ptr && ptr < &g_memory_ptr[MEM_SIZE]) {
-		printf("%08x--memory[%06x]", (word32)ptr, ptr - g_memory_ptr);
+		printf("%08x--memory[%06x]", (word32)ptr,
+					(word32)(ptr - g_memory_ptr));
 	} else if(ptr >= g_rom_fc_ff_ptr && ptr < &g_rom_fc_ff_ptr[256*1024]) {
 		printf("%08x--rom_fc_ff[%06x]", (word32)ptr,
-							ptr - g_rom_fc_ff_ptr);
-	} else if(ptr >= g_slow_memory_ptr && ptr < &g_slow_memory_ptr[128*1024]) {
+					(word32)(ptr - g_rom_fc_ff_ptr));
+	} else if(ptr >= g_slow_memory_ptr && ptr<&g_slow_memory_ptr[128*1024]){
 		printf("%08x--slow_memory[%06x]", (word32)ptr,
-						ptr - g_slow_memory_ptr);
+					(word32)(ptr - g_slow_memory_ptr));
 	} else if(ptr >=g_dummy_memory1_ptr && ptr < &g_dummy_memory1_ptr[256]){
 		printf("%08x--dummy_memory[%06x]", (word32)ptr,
-						ptr - g_dummy_memory1_ptr);
+					(word32)(ptr - g_dummy_memory1_ptr));
 	} else {
 		printf("%08x--unknown", (word32)ptr);
 	}

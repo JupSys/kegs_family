@@ -12,13 +12,8 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: prodos.h,v 1.2 96/11/03 00:22:47 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Header: prodos.h,v 1.3 98/05/23 01:00:53 kentd Exp $";
 #endif
-
-#define STRUCT(a) typedef struct _ ## a a; struct _ ## a
-
-typedef unsigned char byte;
-typedef unsigned int word32;
 
 
 typedef struct l2byte_st L2byte;
@@ -97,7 +92,7 @@ struct directory_st {
 	File_entry file_entries[13];
 };
 
-STRUCT(Disk) {
+STRUCT(ProDisk) {
 	int	fd;
 	int	total_blocks;
 	int	size_bitmap_blocks;

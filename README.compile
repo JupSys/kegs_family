@@ -25,38 +25,45 @@ HP "C" build instructions:
 -------------------------
 
 If you want to try the C version of KEGS (about a factor of two slower),
-you need to edit the Makefile line:
+you need to use the Makefile_c:
 
-OBJECTS = $(OBJECTS1) engine_s.o
-
-to
-
-OBJECTS = $(OBJECTS1) engine_c.o
+mv Makefile_c Makefile
 
 And then type make.
 
-To use gcc instead, just change the 'CC = ' and 'LD = ' lines in the
-Makefile.
+This makefile uses gcc, since it takes over 2 hours and 650MB to compile with
+HP's C compiler.  I'm working on getting this fixed.  With gcc, it
+takes about 3 minutes to fully compile KEGS on a 712/80.
 
-Non-HP "C" build instructions:
------------------------------
+X86 Linux build instructions:
+----------------------------
 
-I don't know--you tell me.  You will have two problems I know about
-already--in defc.h, delete the definition for GET_ITIMER--it uses
-inline assembly now.  It's only for debug, so just define GET_ITIMER
-to return 0.
+Use the Makefile_linux makefile by:
 
-Second, in video.c, lots of code mucks with bytes using word32's
-(my 4-byte unsigned typedef), and it assumes a big-endian processor.
-This will mess up all of the graphics.  You should fix the text modes
-first.
+mv Makefile_x86linux Makefile
 
-If you're porting to a big-endian Unix machine running X, just changing
-GET_ITIMER may do the trick.  Let me know if you try this.
+and then:
+
+make
+
+KEGS assumes perl is in /usr/local/bin/perl.  If it is somewhere else, you
+need to edit the first line of make_inst and make_size to point to the
+correct place.
+
+Audio is currently disabled by using the sound_dummy.c file in
+place of code to really use /dev/audio on Linux.
+
+Other platform "C" build instructions:
+-------------------------------------
+
+I don't know--you tell me.  If you are porting to an X-windows and
+Unix-based machine, it should be easy.  Start with Makefile_x86linux.
+Don't define -DLITTLE_ENDIAN unless your processor is little-endian
+(x86, Alpha).  Sun, MIPS, HP, Motorola, and IBM are big-endian.
 
 If you want to port to a non-X-Windows environment, you'll need to
-rewrite xdriver.c and sound_hp.c.  You'll probably have to make changes
-to scc.c (BSD sockets) and smartport.c (Unix file handling).
-clock.c assumes gettimeofday() is accurate and fast, and also uses
-select() for a microsecond sleep operation.
+rewrite xdriver.c and sound_hp.c/sound_dummy.c.  You'll probably have
+to make changes to scc.c (BSD sockets) and smartport.c (Unix file
+handling).  clock.c assumes gettimeofday() is accurate and fast, and
+also uses select() for a microsecond sleep operation.
 

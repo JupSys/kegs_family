@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.252 98/05/17 18:17:42 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.256 98/05/26 00:09:35 kentd Exp $";
 
 #include <math.h>
 
@@ -651,7 +651,7 @@ check_engine_asm_defines()
 	CHECK(pcptr, pcptr->stack_direct, LOG_PC_STACK_DIRECT, val1, val2);
 	if(LOG_PC_SIZE != sizeof(pclog)) {
 		printf("LOG_PC_SIZE: %d != sizeof=%d\n", LOG_PC_SIZE,
-			sizeof(pclog));
+			(int)sizeof(pclog));
 		exit(2);
 	}
 
@@ -694,20 +694,34 @@ main(int argc, char **argv)
 			printf("Using /dev/audio\n");
 			g_use_alib = 0;
 		} else if(!strcmp("-skip", argv[i])) {
+			if((i+1) >= argc) {
+				printf("Missing argument\n");
+				exit(1);
+			}
 			skip_amt = strtol(argv[i+1], 0, 0);
 			printf("Using %d as skip_amt\n", skip_amt);
 			g_screen_redraw_skip_amt = skip_amt;
 			i++;
 		} else if(!strcmp("-audio", argv[i])) {
+			if((i+1) >= argc) {
+				printf("Missing argument\n");
+				exit(1);
+			}
 			tmp1 = strtol(argv[i+1], 0, 0);
 			printf("Using %d as audio enable val\n", tmp1);
 			g_audio_enable = tmp1;
 			i++;
+#ifndef __NeXT__
 		} else if(!strcmp("-display", argv[i])) {
+			if((i+1) >= argc) {
+				printf("Missing argument\n");
+				exit(1);
+			}
 			printf("Using %s as display\n", argv[i+1]);
 			sprintf(g_display_env, "DISPLAY=%s", argv[i+1]);
 			putenv(&g_display_env[0]);
 			i++;
+#endif
 		} else if(!strcmp("-noshm", argv[i])) {
 			printf("Not using X shared memory\n");
 			g_use_shmem = 0;
@@ -724,7 +738,8 @@ main(int argc, char **argv)
 	clear_halt();
 
 	if(sizeof(word32) != 4) {
-		printf("sizeof(word32) = %d, must be 4!\n", sizeof(word32));
+		printf("sizeof(word32) = %d, must be 4!\n",
+							(int)sizeof(word32));
 		exit(1);
 	}
 
@@ -911,7 +926,9 @@ remove_event_entry(int type)
 	if((type & 0xff) == EV_DOC_INT) {
 		printf("DOC, g_doc_saved_ctl = %02x\n", g_doc_saved_ctl);
 	}
+#ifdef HPUX
 	U_STACK_TRACE();
+#endif
 	set_halt(1);
 	show_all_events();
 
@@ -1077,7 +1094,7 @@ run_prog(word32 cycles)
 
 		this_type = g_event_start.next->type;
 
-		prerun_fcycles = g_cur_dcycs - g_last_vbl_dcycs + 0.01;
+		prerun_fcycles = g_cur_dcycs - g_last_vbl_dcycs + 0.001;
 		engine.fcycles = prerun_fcycles;
 		engine.fcycles_stop = g_event_start.next->dcycs -
 							g_last_vbl_dcycs;
@@ -1478,7 +1495,7 @@ vbl_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.35");
+		update_status_line(6, "KEGS v0.36");
 
 		g_status_refresh_needed = 1;
 

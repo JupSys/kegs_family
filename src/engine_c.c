@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.23 98/05/17 17:00:16 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.24 98/05/23 00:29:59 kentd Exp $";
 
 #include "defc.h"
 
@@ -118,7 +118,7 @@ extern word32 slow_mem_changed[];
 	save_addr = addr;					\
 	stat = GET_PAGE_INFO_RD(((addr) >> 8) & 0xffff);	\
 	ptr = (byte *)((stat & 0xffffff00) | ((addr) & 0xff));	\
-	if((stat & (1 << (31 - BANK_IO_BIT))) || ((addr & 0xff) == 0xff)) { \
+	if((stat & (1 << (31 - BANK_IO_BIT))) || (((addr) & 0xff) == 0xff)) { \
 		fcycles_tmp1 = fcycles;				\
 		dest = get_memory16_pieces_stub((addr), stat,	\
 			&fcycles_tmp1, fplus_ptr);		\
@@ -133,7 +133,7 @@ extern word32 slow_mem_changed[];
 	save_addr = addr;					\
 	stat = GET_PAGE_INFO_RD(((addr) >> 8) & 0xffff);	\
 	ptr = (byte *)((stat & 0xffffff00) | ((addr) & 0xff));	\
-	if((stat & (1 << (31 - BANK_IO_BIT))) || ((addr & 0xfe) == 0xfe)) { \
+	if((stat & (1 << (31 - BANK_IO_BIT))) || (((addr) & 0xfe) == 0xfe)) { \
 		fcycles_tmp1 = fcycles;				\
 		dest = get_memory24_pieces_stub((addr), stat,	\
 			&fcycles_tmp1, fplus_ptr);		\
@@ -151,7 +151,7 @@ extern word32 slow_mem_changed[];
 			save_addr = (save_addr & 0xff) + direct;	\
 		}							\
 	}								\
-	if((psr & 0x100) && ((addr & 0xff) == 0xff)) {			\
+	if((psr & 0x100) && (((addr) & 0xff) == 0xff)) {		\
 		GET_MEMORY8(save_addr, getmem_tmp);			\
 		save_addr++;						\
 		if((direct & 0xff) == 0) {				\
@@ -268,7 +268,7 @@ extern word32 slow_mem_changed[];
 #define SET_MEMORY16(addr, val)						\
 	stat = GET_PAGE_INFO_WR(((addr) >> 8) & 0xffff);		\
 	ptr = (byte *)((stat & 0xffffff00) | ((addr) & 0xff));		\
-	if((stat & 0xff) || ((addr & 0xff) == 0xff)) {			\
+	if((stat & 0xff) || (((addr) & 0xff) == 0xff)) {		\
 		fcycles_tmp1 = fcycles;					\
 		set_memory16_pieces_stub((addr), (val),			\
 			&fcycles_tmp1, fplus_ptr);			\
@@ -282,7 +282,7 @@ extern word32 slow_mem_changed[];
 #define SET_MEMORY24(addr, val)						\
 	stat = GET_PAGE_INFO_WR(((addr) >> 8) & 0xffff);		\
 	ptr = (byte *)((stat & 0xffffff00) | ((addr) & 0xff));		\
-	if((stat & 0xff) || ((addr & 0xfe) == 0xfe)) {			\
+	if((stat & 0xff) || (((addr) & 0xfe) == 0xfe)) {		\
 		fcycles_tmp1 = fcycles;					\
 		set_memory24_pieces_stub((addr), (val), 		\
 			&fcycles_tmp1, fplus_ptr);			\
@@ -417,7 +417,7 @@ set_memory8_io_stub(word32 addr, word32 val, word32 stat, float *fcycs_ptr,
 	}
 }
 
-word32
+void
 set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
 		Fplus	*fplus_ptr)
 {
@@ -425,10 +425,7 @@ set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
 	float	fcycles, fcycles_tmp1;
 	float	fplus_1;
 	float	fplus_x_m1;
-	word32	addr_latch;
 	word32	stat;
-	word32	ret;
-	word32	tmp1;
 
 	fcycles = *fcycs_ptr;
 	fplus_1 = fplus_ptr->plus_1;
@@ -439,7 +436,7 @@ set_memory16_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
 	*fcycs_ptr = fcycles;
 }
 
-word32
+void
 set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
 		Fplus	*fplus_ptr)
 {
@@ -447,10 +444,7 @@ set_memory24_pieces_stub(word32 addr, word32 val, float *fcycs_ptr,
 	float	fcycles, fcycles_tmp1;
 	float	fplus_1;
 	float	fplus_x_m1;
-	word32	addr_latch;
 	word32	stat;
-	word32	ret;
-	word32	tmp1;
 
 	fcycles = *fcycs_ptr;
 	fplus_1 = fplus_ptr->plus_1;
@@ -733,6 +727,10 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 			GET_MEMORY16(addr+1, arg);
 		}
 		break;
+	default:
+		printf("Unknown size: %d\n", size);
+		arg = 0;
+		exit(-2);
 	}
 
 	return arg;
@@ -810,9 +808,9 @@ enter_engine(Engine_reg *engine_ptr)
 	register word32	addr;
 	word32	addr_latch;
 	word32	tmp1, tmp2;
-	int	size;
 
 
+	tmp_pc_ptr = 0;
 
 	kbank = engine_ptr->kbank;
 	pc = engine_ptr->pc;
