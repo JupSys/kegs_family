@@ -1,4 +1,15 @@
 
+Changes in KEGS v0.32 since v0.31
+
+- Faster dispatch loop, for a 10-15% overall performance improvement
+- Fixed sound bug where Oversampler would make KEGS halt (Oversampler
+   said turn on 128 oscillators, and KEGS tried to...)
+- Fixed bug where KEGS would not work on 24-bit displays due to a typo.
+- Added frame skipping support (-skip n) and auto frame skipping if you
+   are not using shared memory (like displaying KEGS to a remote machine).
+- Added -noshm support for forcing off shared memory, so you can see how
+   much it helps.
+
 Changes in KEGS v0.31 since v0.30
 
 - New mouse handling--Press F8 to hide X windows cursor and constrain
@@ -7,7 +18,7 @@ Changes in KEGS v0.31 since v0.30
 - Add revision to status area.
 - Remove "slow memory" calculation.  KEGS was emulating slowing down to
 	1MHz to write to slow memory (bank $E0 or $E1).  But true //gs
-	accelerators have a smarter trick, so just removed it from
+	accelerators have a smarter trick, so I just removed it from
 	KEGS.  KEGS still slows down for I/O reads and writes.
 	This eliminates the confusing 40MHz speed numbers you'd sometimes get.
 	KEGS can also now run faster when it would have slowed down to

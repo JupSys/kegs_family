@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.61 97/09/11 23:05:22 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.62 97/11/08 12:06:52 kentd Exp $";
 
 #include "defc.h"
 
@@ -1532,6 +1532,7 @@ doc_write_c03d(int val, double dcycs)
 	int	osc;
 	int	type;
 	int	ctl;
+	int	tmp;
 	int	i;
 
 	val = val & 0xff;
@@ -1647,12 +1648,18 @@ doc_write_c03d(int val, double dcycs)
 				break;
 			case 0x01:	/* 0xe1 */
 				doc_printf("Writing doc 0xe1 with %02x\n", val);
-				g_doc_num_osc_en = (val >> 1) + 1;
-				UPDATE_G_DCYCS_PER_DOC_UPDATE((val >> 1) + 1);
-				if((val & 1) || (val > 0x40)) {
+				tmp = val & 0x3e;
+				tmp = (tmp >> 1) + 1;
+				if(tmp < 1) {
+					tmp = 1;
+				}
+				if(tmp > 32) {
 					printf("doc 0xe1: %02x!\n", val);
 					set_halt(1);
+					tmp = 32;
 				}
+				g_doc_num_osc_en = tmp;
+				UPDATE_G_DCYCS_PER_DOC_UPDATE(tmp);
 
 				/* Stop any oscs that were running but now */
 				/*   are disabled */

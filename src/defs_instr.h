@@ -16,7 +16,7 @@
 	.data
 	.export rcsdif_defs_instr_h,data
 rcsdif_defs_instr_h
-	.stringz "@(#)$Header: defs_instr.h,v 1.36 97/03/31 22:57:51 kentd Exp $"
+	.stringz "@(#)$Header: defs_instr.h,v 1.38 97/11/16 17:39:29 kentd Exp $"
 	.code
 # endif
 
@@ -35,13 +35,13 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DLOC_X_IND_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DLOC_X_IND_WR()			! \
 	bl	get_mem_long_8,link		! \
 	nop
 # else
 #  define GET_DLOC_X_IND_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DLOC_X_IND_WR()			! \
 	bl	get_mem_long_16,link		! \
 	nop
@@ -61,13 +61,13 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DISP8_S_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DISP8_S_WR()			! \
 	bl	get_mem_b0_8,link		! \
 	nop
 # else
 #  define GET_DISP8_S_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DISP8_S_WR()			! \
 	bl	get_mem_b0_16,link		! \
 	nop
@@ -93,16 +93,22 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DLOC_RD()				\
-	extru	ret0,31,8,arg0			! \
-	GET_DLOC_WR()				! \
+	ldb	1(scratch1),arg0		! \
+	extru,=	direct,31,8,0			! \
+	CYCLES_PLUS_1				! \
+	addi	2,pc,pc				! \
+	add	direct,arg0,arg0		! \
 	bl	get_mem_b0_8,link		! \
-	nop
+	extru	arg0,31,16,arg0
 # else
 #  define GET_DLOC_RD()				\
-	extru	ret0,31,8,arg0			! \
-	GET_DLOC_WR()				! \
+	ldb	1(scratch1),arg0		! \
+	extru,=	direct,31,8,0			! \
+	CYCLES_PLUS_1				! \
+	addi	2,pc,pc				! \
+	add	direct,arg0,arg0		! \
 	bl	get_mem_b0_16,link		! \
-	nop
+	extru	arg0,31,16,arg0
 # endif
 #else /* C */
 # ifdef ACC8
@@ -119,13 +125,13 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DLOC_L_IND_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DLOC_L_IND_WR()			! \
 	bl	get_mem_long_8,link		! \
 	nop
 # else
 #  define GET_DLOC_L_IND_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DLOC_L_IND_WR()			! \
 	bl	get_mem_long_16,link		! \
 	nop
@@ -146,13 +152,15 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_IMM_MEM()				\
-	extru	ret0,31,8,ret0			! \
+	ldb	1(scratch1),ret0		! \
 	addi	2,pc,pc
 # else
 #  define GET_IMM_MEM()				\
-	extru	ret0,31,16,ret0			! \
+	ldb	2(scratch1),scratch2		! \
 	CYCLES_PLUS_1				! \
-	addi	3,pc,pc
+	ldb	1(scratch1),ret0		! \
+	addi	3,pc,pc				! \
+	dep	scratch2,23,8,ret0
 # endif
 #else
 # ifdef ACC8
@@ -171,18 +179,22 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_ABS_RD()				\
-	extru	ret0,31,16,arg0			! \
-	bl	get_mem_long_8,link		! \
-	dep	dbank,15,16,arg0		! \
+	ldb	1(scratch1),arg0		! \
 	CYCLES_PLUS_1				! \
-	addi	3,pc,pc
+	ldb	2(scratch1),scratch2		! \
+	addi	3,pc,pc				! \
+	dep	dbank,15,16,arg0		! \
+	bl	get_mem_long_8,link		! \
+	dep	scratch2,23,8,arg0
 # else
 #  define GET_ABS_RD()				\
-	extru	ret0,31,16,arg0			! \
-	bl	get_mem_long_16,link		! \
-	dep	dbank,15,16,arg0		! \
+	ldb	1(scratch1),arg0		! \
 	CYCLES_PLUS_1				! \
-	addi	3,pc,pc
+	ldb	2(scratch1),scratch2		! \
+	addi	3,pc,pc				! \
+	dep	dbank,15,16,arg0		! \
+	bl	get_mem_long_16,link		! \
+	dep	scratch2,23,8,arg0
 # endif
 #else
 # ifdef ACC8
@@ -205,16 +217,24 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_LONG_RD()				\
+	ldb	1(scratch1),arg0		! \
 	CYCLES_PLUS_2				! \
+	ldb	2(scratch1),scratch2		! \
+	addi	4,pc,pc				! \
+	ldb	3(scratch1),scratch1		! \
+	dep	scratch2,23,8,arg0		! \
 	bl	get_mem_long_8,link		! \
-	extru	ret0,31,24,arg0			! \
-	addi	4,pc,pc
+	dep	scratch1,15,8,arg0
 # else
 #  define GET_LONG_RD()				\
+	ldb	1(scratch1),arg0		! \
 	CYCLES_PLUS_2				! \
+	ldb	2(scratch1),scratch2		! \
+	addi	4,pc,pc				! \
+	ldb	3(scratch1),scratch1		! \
+	dep	scratch2,23,8,arg0		! \
 	bl	get_mem_long_16,link		! \
-	extru	ret0,31,24,arg0			! \
-	addi	4,pc,pc
+	dep	scratch1,15,8,arg0
 # endif
 #else /* C */
 # ifdef ACC8
@@ -234,15 +254,41 @@ defs_instr_start_16	.word	0
 
 #undef GET_DLOC_IND_Y_RD
 
+#undef GET_DLOC_IND_Y_WR_SPECIAL2
+
+#define GET_DLOC_IND_Y_WR_SPECIAL2()	\
+	add	direct,arg0,arg0	! \
+	bl	get_mem_b0_direct_page_16,link	! \
+	extru	arg0,31,16,arg0		! \
+	dep	dbank,15,8,ret0		! \
+	extru,=	direct,31,8,0		! \
+	CYCLES_PLUS_1			! \
+	add	yreg,ret0,arg0			/* don't change this instr */
+						/*  or add any after */
+						/*  to preserve ret0 & arg0 */
+
+
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DLOC_IND_Y_RD()			\
-	bl	get_dloc_ind_y_rd_8,link	! \
-	extru	ret0,31,8,arg0
+	ldb	1(scratch1),arg0		! \
+	GET_DLOC_IND_Y_WR_SPECIAL2()		! \
+	xor	arg0,ret0,scratch1		! \
+	extru,=	psr,27,1,0			! \
+	extru,=	scratch1,23,8,0			! \
+	CYCLES_PLUS_1				! \
+	bl	get_mem_long_8,link		! \
+	addi	2,pc,pc
 # else
 #  define GET_DLOC_IND_Y_RD()			\
-	bl	get_dloc_ind_y_rd_16,link	! \
-	extru	ret0,31,8,arg0
+	ldb	1(scratch1),arg0		! \
+	GET_DLOC_IND_Y_WR_SPECIAL2()		! \
+	xor	arg0,ret0,scratch1		! \
+	extru,=	psr,27,1,0			! \
+	extru,=	scratch1,23,8,0			! \
+	CYCLES_PLUS_1				! \
+	bl	get_mem_long_16,link		! \
+	addi	2,pc,pc
 # endif
 #else /* C */
 # ifdef ACC8
@@ -260,16 +306,28 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DLOC_IND_RD()				\
-	extru	ret0,31,8,arg0			! \
-	GET_DLOC_IND_WR()			! \
+	ldb	1(scratch1),arg0		! \
+	extru,=	direct,31,8,0			! \
+	CYCLES_PLUS_1				! \
+	addi	2,pc,pc				! \
+	add	direct,arg0,arg0		! \
+	bl	get_mem_b0_direct_page_16,link	! \
+	extru	arg0,31,16,arg0			! \
+	copy	ret0,arg0			! \
 	bl	get_mem_long_8,link		! \
-	nop
+	dep	dbank,15,16,arg0
 # else
 #  define GET_DLOC_IND_RD()				\
-	extru	ret0,31,8,arg0			! \
-	GET_DLOC_IND_WR()			! \
+	ldb	1(scratch1),arg0		! \
+	extru,=	direct,31,8,0			! \
+	CYCLES_PLUS_1				! \
+	addi	2,pc,pc				! \
+	add	direct,arg0,arg0		! \
+	bl	get_mem_b0_direct_page_16,link	! \
+	extru	arg0,31,16,arg0			! \
+	copy	ret0,arg0			! \
 	bl	get_mem_long_16,link		! \
-	nop
+	dep	dbank,15,16,arg0
 # endif
 #else
 # ifdef ACC8
@@ -287,16 +345,16 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DLOC_X_RD()				\
-	extru	ret0,31,8,arg0			! \
-	GET_DLOC_X_WR()				! \
+	ldb	1(scratch1),arg0		! \
+	GET_DLOC_INDEX_WR_A(xreg)		! \
 	bl	get_mem_b0_8,link		! \
-	nop
+	GET_DLOC_INDEX_WR_B(xreg)
 # else
 #  define GET_DLOC_X_RD()				\
-	extru	ret0,31,8,arg0			! \
-	GET_DLOC_X_WR()				! \
+	ldb	1(scratch1),arg0		! \
+	GET_DLOC_INDEX_WR_A(xreg)		! \
 	bl	get_mem_b0_16,link		! \
-	nop
+	GET_DLOC_INDEX_WR_B(xreg)
 # endif
 #else
 # ifdef ACC8
@@ -314,13 +372,13 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DISP8_S_IND_Y_RD()		\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DISP8_S_IND_Y_WR()			! \
 	bl	get_mem_long_8,link		! \
 	nop
 # else
 #  define GET_DISP8_S_IND_Y_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DISP8_S_IND_Y_WR()			! \
 	bl	get_mem_long_16,link		! \
 	nop
@@ -341,13 +399,13 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_DLOC_L_IND_Y_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DLOC_L_IND_Y_WR()			! \
 	bl	get_mem_long_8,link		! \
 	nop
 # else
 #  define GET_DLOC_L_IND_Y_RD()			\
-	extru	ret0,31,8,arg0			! \
+	ldb	1(scratch1),arg0		! \
 	GET_DLOC_L_IND_Y_WR()			! \
 	bl	get_mem_long_16,link		! \
 	nop
@@ -412,10 +470,13 @@ defs_instr_start_16	.word	0
 /*   if (x is 16bit) || (carry into high byte), add another cycle */
 /* So, if x==16bit, add 1.  If x==8bit then add 1 if carry */
 #  define GET_ABS_INDEX_ADDR_FOR_RD(index_reg)	\
-	dep	dbank,15,16,ret0		! \
+	ldb	1(scratch1),ret0		! \
 	CYCLES_PLUS_1				! \
-	add	ret0,index_reg,arg0		! \
+	ldb	2(scratch1),scratch1		! \
+	dep	dbank,15,16,ret0		! \
 	addi	3,pc,pc				! \
+	dep	scratch1,23,8,ret0		! \
+	add	ret0,index_reg,arg0		! \
 	xor	arg0,ret0,scratch1		! \
 	extru,=	psr,27,1,0			! \
 	extru,=	scratch1,23,8,0			! \
@@ -455,10 +516,13 @@ defs_instr_start_16	.word	0
 	extru	arg0,31,24,arg0
 
 #  define GET_ABS_X_RD_WR()			\
-	dep	dbank,15,16,ret0		! \
+	ldb	1(scratch1),ret0		! \
 	addi	3,pc,pc				! \
-	add	ret0,xreg,arg0			! \
+	ldb	2(scratch1),scratch1		! \
+	dep	dbank,15,16,ret0		! \
 	CYCLES_PLUS_2				! \
+	dep	scratch1,23,8,ret0		! \
+	add	ret0,xreg,arg0			! \
 	bl	get_mem_long_8,link		! \
 	extru	arg0,31,24,arg0	
 # else
@@ -468,10 +532,13 @@ defs_instr_start_16	.word	0
 	extru	arg0,31,24,arg0
 
 #  define GET_ABS_X_RD_WR()			\
-	dep	dbank,15,16,ret0		! \
+	ldb	1(scratch1),ret0		! \
 	addi	3,pc,pc				! \
-	add	ret0,xreg,arg0			! \
+	ldb	2(scratch1),scratch1		! \
+	dep	dbank,15,16,ret0		! \
 	CYCLES_PLUS_2				! \
+	dep	scratch1,23,8,ret0		! \
+	add	ret0,xreg,arg0			! \
 	bl	get_mem_long_16,link		! \
 	extru	arg0,31,24,arg0
 # endif
@@ -488,16 +555,26 @@ defs_instr_start_16	.word	0
 #ifdef ASM
 # ifdef ACC8
 #  define GET_LONG_X_RD()			\
+	ldb	1(scratch1),ret0		! \
+	ldb	2(scratch1),scratch2		! \
 	CYCLES_PLUS_2				! \
-	add	ret0,xreg,arg0			! \
+	ldb	3(scratch1),scratch1		! \
 	addi	4,pc,pc				! \
+	dep	scratch2,23,8,ret0		! \
+	dep	scratch1,15,8,ret0		! \
+	add	ret0,xreg,arg0			! \
 	bl	get_mem_long_8,link		! \
 	extru	arg0,31,24,arg0
 # else
 #  define GET_LONG_X_RD()			\
+	ldb	1(scratch1),ret0		! \
+	ldb	2(scratch1),scratch2		! \
 	CYCLES_PLUS_2				! \
-	add	ret0,xreg,arg0			! \
+	ldb	3(scratch1),scratch1		! \
 	addi	4,pc,pc				! \
+	dep	scratch2,23,8,ret0		! \
+	dep	scratch1,15,8,ret0		! \
+	add	ret0,xreg,arg0			! \
 	bl	get_mem_long_16,link		! \
 	extru	arg0,31,24,arg0
 # endif
@@ -1123,24 +1200,26 @@ defs_instr_start_16	.word	0
 
 #ifdef ASM
 # define COND_BR1			\
-	extrs	ret0,31,8,arg0
+	ldb	1(scratch1),arg0
 
-/* addi 2,pc,scratch1 MUST be first instr for COND_BRUNTAKEN to work! */
-/*  since it is in the delay slot of a branch */
+/* be careful not to modify pc as first instr of COND_Br2 since it */
+/*  is in the delay slot of a branch! */
 # define COND_BR2			\
-	addi	2,pc,scratch1		! \
-	extrs	psr,23,1,scratch3	! \
-	add	arg0,scratch1,pc	! \
-	depi	0,31,8,scratch3		! \
-	xor	scratch1,pc,scratch2	! \
-	and,=	scratch2,scratch3,scratch2	! \
+	extru	pc,31,8,scratch4	! \
+	extrs	arg0,31,8,ret0		! \
+	add	arg0,scratch4,scratch4	! \
+	CYCLES_PLUS_1			! \
+	depi	0,31,8,scratch4		! \
+	addi	2,pc,pc			! \
+	and,=	psr,scratch4,0		! \
 	CYCLES_PLUS_1			! \
 	b	dispatch		! \
-	CYCLES_PLUS_1
+	add	ret0,pc,pc
+
 
 # define COND_BR_UNTAKEN		\
 	b	dispatch		! \
-	copy	scratch1,pc
+	addi	2,pc,pc
 #else /* C */
 #endif
 

@@ -13,12 +13,13 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$Header: instable.h,v 1.77 97/07/27 14:24:18 kentd Exp $"
+	.stringz "@(#)$Header: instable.h,v 1.78 97/11/11 23:52:35 kentd Exp $"
 # endif
 #endif
 
 inst00_SYM		/*  brk */
 #ifdef ASM
+	ldb	1(scratch1),ret0
 	ldil	l%g_testing,arg3
 	ldil	l%g_num_brk,arg1
 	ldw	r%g_testing(arg3),arg3
@@ -81,7 +82,6 @@ brk_native_SYM
 	depi	1,29,2,psr		;ints masked, decimal off
 
 brk_testing_SYM
-	extru	ret0,31,8,ret0
 	addi	-2,pc,pc
 	CYCLES_PLUS_2
 	b	dispatch_done
@@ -353,13 +353,15 @@ inst1f_SYM		/*  ORA Long,X */
 
 inst20_SYM		/*  JSR abs */
 #ifdef ASM
-	addi	2,pc,pc
+	addi	2,pc,arg0
+	ldb	1(scratch1),pc
 	CYCLES_PLUS_2
-	extru	pc,31,16,arg0
+	ldb	2(scratch1),scratch1
 	ldil	l%dispatch,link
-	extru	ret0,31,16,pc
-	b	push_16
+	extru	arg0,31,16,arg0
 	ldo	r%dispatch(link),link
+	b	push_16
+	dep	scratch1,23,8,pc
 #else
 	C_JSR_ABS();
 #endif
@@ -371,16 +373,19 @@ inst21_SYM		/*  AND (Dloc,X) */
 
 inst22_SYM		/*  JSL Long */
 #ifdef ASM
-	addi	3,pc,pc
+	ldb	3(scratch1),scratch2
+	addi	3,pc,arg0
+	ldb	1(scratch1),pc
+	dep	kbank,15,16,arg0
+	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_3
-	extru	pc,31,16,arg0
-	stw	ret0,STACK_SAVE_INSTR_TMP1(sp)
-	extru	ret0,31,16,pc
+	dep	scratch2,15,8,pc
+	stw	scratch2,STACK_SAVE_INSTR_TMP1(sp)
 	bl	push_24_unsafe,link
-	dep	kbank,15,8,arg0
+	dep	scratch1,23,8,pc
 
 	b	change_kbank
-	ldb	STACK_SAVE_INSTR_TMP1+1(sp),arg0	/* new val for kbank */
+	ldw	STACK_SAVE_INSTR_TMP1(sp),arg0	/* new val for kbank */
 #else
 	C_JSL_LONG();
 #endif
@@ -643,7 +648,7 @@ inst41_SYM		/*  EOR (Dloc,X) */
 
 inst42_SYM		/*  WDM */
 #ifdef ASM
-	extru	ret0,31,8,ret0
+	ldb	1(scratch1),ret0
 	b	dispatch_done
 	depi	RET_WDM,3,4,ret0
 #else
@@ -658,11 +663,11 @@ inst43_SYM		/*  EOR Disp8,S */
 
 inst44_SYM		/*  MVP */
 #ifdef ASM
-	extru	ret0,23,8,scratch2		/* src bank */
+	ldb	2(scratch1),scratch2		/* src bank */
 	bb,<	psr,23,inst44_notnat_SYM
-	stw	scratch2,STACK_SRC_BANK(sp)
+	ldb	1(scratch1),dbank		/* dest bank */
 	bb,<	psr,27,inst44_notnat_SYM
-	extru	ret0,31,8,dbank			/* dest bank */
+	stw	scratch2,STACK_SRC_BANK(sp)
 
 inst44_loop_SYM
 	CYCLES_PLUS_3
@@ -696,7 +701,8 @@ inst44_loop_SYM
 	addi	3,pc,pc
 
 inst44_notnat_SYM
-	extru	ret0,31,16,ret0
+	copy	dbank,ret0
+	dep	scratch2,23,8,ret0
 	CYCLES_PLUS_3
 	depi	RET_MVP,3,4,ret0
 	b	dispatch_done
@@ -784,9 +790,11 @@ inst4b_SYM		/*  PHK */
 
 inst4c_SYM		/*  JMP abs */
 #ifdef ASM
-	extru	ret0,31,16,pc
-	b	dispatch
+	ldb	1(scratch1),pc
 	CYCLES_PLUS_1
+	ldb	2(scratch1),scratch1
+	b	dispatch
+	dep	scratch1,23,8,pc
 #else
 	C_JMP_ABS();
 #endif
@@ -832,11 +840,11 @@ inst53_SYM		/*  EOR (Disp8,s),y */
 
 inst54_SYM		/*  MVN  */
 #ifdef ASM
-	extru	ret0,23,8,scratch2		/* src bank */
+	ldb	2(scratch1),scratch2		/* src bank */
 	bb,<	psr,23,inst54_notnat_SYM
-	stw	scratch2,STACK_SRC_BANK(sp)
+	ldb	1(scratch1),dbank		/* dest bank */
 	bb,<	psr,27,inst54_notnat_SYM
-	extru	ret0,31,8,dbank			/* dest bank */
+	stw	scratch2,STACK_SRC_BANK(sp)
 
 /*  even in 8bit acc mode, use 16-bit accumulator! */
 
@@ -876,7 +884,8 @@ inst54_out_of_time_SYM
 	b,n	dispatch
 
 inst54_notnat_SYM
-	extru	ret0,31,16,ret0
+	copy	dbank,ret0
+	dep	scratch2,23,8,ret0
 	CYCLES_PLUS_3
 	depi	RET_MVN,3,4,ret0
 	b	dispatch_done
@@ -941,10 +950,12 @@ inst5b_SYM		/*  TCD */
 
 inst5c_SYM		/*  JMP Long */
 #ifdef ASM
-	extru	ret0,31,16,pc
+	ldb	1(scratch1),pc
+	ldb	2(scratch1),scratch2
 	CYCLES_PLUS_1
+	ldb	3(scratch1),arg0		/* new bank */
 	b	change_kbank
-	extru	ret0,15,8,arg0
+	dep	scratch2,23,8,pc
 #else
 	C_JMP_LONG();
 #endif
@@ -981,13 +992,16 @@ inst61_SYM		/*  ADC (Dloc,X) */
 
 inst62_SYM		/*  PER */
 #ifdef ASM
+	ldb	1(scratch1),ret0
 	addi	3,pc,pc
+	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_2
-	add	pc,ret0,arg0
 	ldil	l%dispatch,link
-	extru	arg0,31,16,arg0
-	b	push_16_unsafe
+	dep	scratch1,23,8,ret0
 	ldo	r%dispatch(link),link
+	add	pc,ret0,arg0
+	b	push_16_unsafe
+	extru	arg0,31,16,arg0
 #else
 	C_PER();
 #endif
@@ -1082,9 +1096,11 @@ inst6b_SYM		/*  RTL */
 
 inst6c_SYM		/*  JMP (abs) */
 #ifdef ASM
-	extru	ret0,31,16,arg0
-	bl	get_mem_long_16,link
+	ldb	1(scratch1),arg0
 	CYCLES_PLUS_1
+	ldb	2(scratch1),scratch1
+	bl	get_mem_long_16,link
+	dep	scratch1,23,8,arg0
 /*  ret0 is addr to jump to */
 	b	dispatch
 	extru	ret0,31,16,pc
@@ -1131,7 +1147,7 @@ inst73_SYM		/*  ADC (Disp8,s),y */
 
 inst74_SYM		/*  STZ Dloc,x */
 #ifdef ASM
-	extru	ret0,31,8,arg0
+	ldb	1(scratch1),arg0
 	GET_DLOC_X_WR();
 	STZ_INST();
 #else
@@ -1203,9 +1219,13 @@ inst7b_SYM		/*  TDC */
 inst7c_SYM		/*  JMP (Abs,x) */
 /*  is this right?  Should xreg allow wrapping into next bank? */
 #ifdef ASM
-	dep	kbank,15,16,ret0
+	ldb	1(scratch1),ret0
+	copy	xreg,scratch2
+	ldb	2(scratch1),scratch1
+	dep	kbank,15,16,scratch2
 	CYCLES_PLUS_2
-	add	xreg,ret0,arg0
+	dep	scratch1,23,8,ret0
+	add	ret0,scratch2,arg0
 	bl	get_mem_long_16,link
 	extru	arg0,31,24,arg0
 	b	dispatch
@@ -1242,10 +1262,13 @@ inst81_SYM		/*  STA (Dloc,X) */
 
 inst82_SYM		/*  BRL disp16 */
 #ifdef ASM
-	add	ret0,pc,pc
+	ldb	1(scratch1),ret0
 	CYCLES_PLUS_1
-	b	dispatch
+	ldb	2(scratch1),scratch1
 	addi	3,pc,pc				/*  yup, this is needed */
+	dep	scratch1,23,8,ret0
+	b	dispatch
+	add	ret0,pc,pc
 #else
 	C_BRL_DISP16();
 #endif
@@ -1471,18 +1494,19 @@ inst9f_SYM		/*  STA Long,X */
 
 insta0_SYM		/*  LDY #imm */
 #ifdef ASM
-	extru	ret0,31,8,zero
+	ldb	1(scratch1),zero
 	bb,>=	psr,27,insta0_16bit_SYM
 	addi	2,pc,pc
 
-	extru	ret0,24,1,neg
+	extru	zero,24,1,neg
 	b	dispatch
 	copy	zero,yreg
 insta0_16bit_SYM
-	extru	ret0,31,16,zero
+	ldb	2(scratch1),scratch1
 	addi	1,pc,pc
-	extru	ret0,16,1,neg
 	CYCLES_PLUS_1
+	extru	scratch1,24,1,neg
+	dep	scratch1,23,8,zero
 	b	dispatch
 	copy	zero,yreg
 #else
@@ -1497,18 +1521,19 @@ insta1_SYM		/*  LDA (Dloc,X) */
 
 insta2_SYM		/*  LDX #imm */
 #ifdef ASM
-	extru	ret0,31,8,zero
+	ldb	1(scratch1),zero
 	bb,>=	psr,27,insta2_16bit_SYM
 	addi	2,pc,pc
 
-	extru	ret0,24,1,neg
+	extru	zero,24,1,neg
 	b	dispatch
 	copy	zero,xreg
 insta2_16bit_SYM
-	extru	ret0,31,16,zero
+	ldb	2(scratch1),scratch1
 	addi	1,pc,pc
-	extru	ret0,16,1,neg
 	CYCLES_PLUS_1
+	extru	scratch1,24,1,neg
+	dep	scratch1,23,8,zero
 	b	dispatch
 	copy	zero,xreg
 #else
@@ -1522,7 +1547,7 @@ insta3_SYM		/*  LDA Disp8,S */
 
 insta4_SYM		/*  LDY Dloc */
 #ifdef ASM
-	extru	ret0,31,8,arg0
+	ldb	1(scratch1),arg0
 	GET_DLOC_WR()
 	b	get_yreg_from_mem
 	nop
@@ -1537,7 +1562,7 @@ insta5_SYM		/*  LDA Dloc */
 
 insta6_SYM		/*  LDX Dloc */
 #ifdef ASM
-	extru	ret0,31,8,arg0
+	ldb	1(scratch1),arg0
 	GET_DLOC_WR()
 	b	get_xreg_from_mem
 	nop
@@ -1659,7 +1684,7 @@ instb3_SYM		/*  LDA (Disp8,s),y */
 
 instb4_SYM		/*  LDY Dloc,x */
 #ifdef ASM
-	extru	ret0,31,8,arg0
+	ldb	1(scratch1),arg0
 	GET_DLOC_X_WR();
 	b	get_yreg_from_mem
 	nop
@@ -1673,7 +1698,7 @@ instb5_SYM		/*  LDA Dloc,x */
 
 instb6_SYM		/*  LDX Dloc,y */
 #ifdef ASM
-	extru	ret0,31,8,arg0
+	ldb	1(scratch1),arg0
 	GET_DLOC_Y_WR();
 	b	get_xreg_from_mem
 	nop
@@ -1763,12 +1788,15 @@ instbf_SYM		/*  LDA Long,X */
 
 instc0_SYM		/*  CPY #imm */
 #ifdef ASM
+	ldb	1(scratch1),ret0
 	bb,>=	psr,27,instc0_16bit_SYM
 	addi	2,pc,pc
 	CMP_INDEX_REG_MEAT8(yreg)
 instc0_16bit_SYM
+	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_1
 	addi	1,pc,pc
+	dep	scratch1,23,8,ret0
 	CMP_INDEX_REG_MEAT16(yreg)
 #else
 	C_CPY_IMM();
@@ -1782,6 +1810,7 @@ instc1_SYM		/*  CMP (Dloc,X) */
 
 instc2_SYM		/*  REP #imm */
 #ifdef ASM
+	ldb	1(scratch1),ret0
 	extru	psr,27,2,arg0		/* save old x & m */
 	addi	2,pc,pc
 	dep	neg,24,1,psr
@@ -1808,8 +1837,7 @@ instc3_SYM		/*  CMP Disp8,S */
 
 instc4_SYM		/*  CPY Dloc */
 #ifdef ASM
-	extru	ret0,31,8,arg0
-	GET_DLOC_WR()
+	GET_DLOC_ADDR()
 	CMP_INDEX_REG_LOAD(instc4_16bit_SYM, yreg)
 #else
 	C_CPY_DLOC();
@@ -1885,7 +1913,6 @@ instcb_SYM		/*  WAI */
 
 instcc_SYM		/*  CPY abs */
 #ifdef ASM
-	extru	ret0,31,8,arg0
 	GET_ABS_ADDR()
 	CMP_INDEX_REG_LOAD(instcc_16bit_SYM, yreg)
 #else
@@ -1993,7 +2020,7 @@ instda_16bit_SYM
 
 instdb_SYM		/*  STP */
 #ifdef ASM
-	extru	ret0,31,8,ret0
+	ldb	1(scratch1),ret0
 	CYCLES_PLUS_1
 	b	dispatch_done
 	depi	RET_STP,3,4,ret0
@@ -2003,9 +2030,11 @@ instdb_SYM		/*  STP */
 
 instdc_SYM		/*  JML (Abs) */
 #ifdef ASM
+	ldb	1(scratch1),arg0
+	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_1
 	bl	get_mem_long_24,link
-	extru	ret0,31,16,arg0
+	dep	scratch1,23,8,arg0
 
 	extru	ret0,31,16,pc
 	b	change_kbank
@@ -2029,12 +2058,15 @@ instdf_SYM		/*  CMP Long,X */
 
 inste0_SYM		/*  CPX #imm */
 #ifdef ASM
+	ldb	1(scratch1),ret0
 	bb,>=	psr,27,inste0_16bit_SYM
 	addi	2,pc,pc
 	CMP_INDEX_REG_MEAT8(xreg)
 inste0_16bit_SYM
+	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_1
 	addi	1,pc,pc
+	dep	scratch1,23,8,ret0
 	CMP_INDEX_REG_MEAT16(xreg)
 #else
 	C_CPX_IMM();
@@ -2048,6 +2080,7 @@ inste1_SYM		/*  SBC (Dloc,X) */
 
 inste2_SYM		/*  SEP #imm */
 #ifdef ASM
+	ldb	1(scratch1),ret0
 	extru	psr,27,2,arg0		/* save old x & m */
 	addi	2,pc,pc
 	dep	neg,24,1,psr
@@ -2074,8 +2107,7 @@ inste3_SYM		/*  SBC Disp8,S */
 
 inste4_SYM		/*  CPX Dloc */
 #ifdef ASM
-	extru	ret0,31,8,arg0
-	GET_DLOC_WR()
+	GET_DLOC_ADDR()
 	CMP_INDEX_REG_LOAD(inste4_16bit_SYM, xreg)
 #else
 	C_CPX_DLOC();
@@ -2143,7 +2175,6 @@ insteb_SYM		/*  XBA */
 
 instec_SYM		/*  CPX abs */
 #ifdef ASM
-	extru	ret0,31,8,arg0
 	GET_ABS_ADDR()
 	CMP_INDEX_REG_LOAD(instec_16bit_SYM, xreg)
 #else
@@ -2193,12 +2224,14 @@ instf3_SYM		/*  SBC (Disp8,s),y */
 
 instf4_SYM		/*  PEA Abs */
 #ifdef ASM
-	addi	3,pc,pc
-	extru	ret0,31,16,arg0
-	CYCLES_PLUS_1
+	ldb	1(scratch1),arg0
 	ldil	l%dispatch,link
-	b	push_16_unsafe
+	ldb	2(scratch1),scratch1
+	addi	3,pc,pc
+	CYCLES_PLUS_1
 	ldo	r%dispatch(link),link
+	b	push_16_unsafe
+	dep	scratch1,23,8,arg0
 #else
 	C_PEA_ABS();
 #endif
@@ -2267,8 +2300,11 @@ instfb_SYM		/*  XCE */
 
 instfc_SYM		/*  JSR (Abs,X) */
 #ifdef ASM
-	dep	kbank,15,16,ret0
+	ldb	1(scratch1),ret0
 	addi	2,pc,pc
+	ldb	2(scratch1),scratch1
+	dep	kbank,15,16,ret0
+	dep	scratch1,23,8,ret0
 	add	xreg,ret0,arg0
 	bl	get_mem_long_16,link
 	extru	arg0,31,24,arg0

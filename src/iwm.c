@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.69 97/09/23 00:19:48 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.70 97/11/16 17:40:22 kentd Exp $";
 
 #include "defc.h"
 
@@ -821,6 +821,8 @@ read_iwm(int loc, double dcycs)
 						g_fast_disk_emul, dcycs);
 				} else {
 					iwm_printf("read iwm st 0, m off!\n");
+// HACK!!!!
+					return 0xff;
 					return (((int)dcycs) & 0x7f) + 0x80;
 				}
 			}

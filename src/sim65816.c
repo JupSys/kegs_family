@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.238 97/09/23 21:08:51 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.242 97/11/16 19:46:35 kentd Exp $";
 
 #include <math.h>
 
@@ -151,7 +151,7 @@ byte kbd_in_buf[LEN_KBD_BUF];
 
 #define PC_LOG_LEN	(16*1024)
 
-Pc_log pc_log_array[PC_LOG_LEN];
+Pc_log pc_log_array[PC_LOG_LEN + 2];
 
 Pc_log	*log_pc_ptr = &(pc_log_array[0]);
 Pc_log	*log_pc_start_ptr = &(pc_log_array[0]);
@@ -584,6 +584,7 @@ do_reset()
 	video_reset();
 	adb_reset();
 	iwm_reset();
+	scc_reset();
 	sound_reset(g_cur_dcycs);
 	setup_pageinfo();
 	change_display_mode(g_cur_dcycs);
@@ -655,9 +656,13 @@ check_engine_asm_defines()
 	CHECK(fplusptr, fplusptr->plus_x_minus_1, FPLUS_X_MINUS_1, val1, val2);
 }
 
+extern int g_screen_redraw_skip_amt;
+extern int g_use_shmem;
+
 int
 main(int argc, char **argv)
 {
+	int	skip_amt;
 	int	diff;
 	int	i;
 
@@ -675,6 +680,14 @@ main(int argc, char **argv)
 		} else if(!strcmp("-hpdev", argv[i])) {
 			printf("Using /dev/audio\n");
 			g_use_alib = 0;
+		} else if(!strcmp("-skip", argv[i])) {
+			skip_amt = strtol(argv[i+1], 0, 0);
+			printf("Using %d as skip_amt\n", skip_amt);
+			g_screen_redraw_skip_amt = skip_amt;
+			i++;
+		} else if(!strcmp("-noshm", argv[i])) {
+			printf("Not using X shared memory\n");
+			g_use_shmem = 0;
 		} else {
 			printf("Bad option: %s\n", argv[i]);
 			exit(3);
@@ -717,6 +730,7 @@ main(int argc, char **argv)
 
 	video_init();
 	iwm_init();
+	scc_init();
 	setup_bram();		/* load_roms must be called first! */
 	adb_init();
 
@@ -993,7 +1007,7 @@ run_prog(word32 cycles)
 	g_recip_projected_pmhz_fast.plus_1 = (float)(1.0 / 2.5);
 	g_recip_projected_pmhz_fast.plus_2 = (float)(2.0 / 2.5);
 	g_recip_projected_pmhz_fast.plus_3 = (float)(3.0 / 2.5);
-	g_recip_projected_pmhz_fast.plus_x_minus_1 = (float)(1.9 - (1.0/2.5));
+	g_recip_projected_pmhz_fast.plus_x_minus_1 = (float)(1.98 - (1.0/2.5));
 
 	if(g_cur_fplus_ptr == 0) {
 		g_recip_projected_pmhz_unl = g_recip_projected_pmhz_slow;
@@ -1436,7 +1450,7 @@ vbl_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.31");
+		update_status_line(6, "KEGS v0.32");
 
 		g_status_refresh_needed = 1;
 
@@ -1523,7 +1537,7 @@ vbl_60hz(double dcycs, double dtime_now)
 	g_recip_projected_pmhz_unl.plus_2 = 2.0*recip_predicted_pmhz;
 	g_recip_projected_pmhz_unl.plus_3 = 3.0*recip_predicted_pmhz;
 	g_recip_projected_pmhz_unl.plus_x_minus_1 =
-					(float)1.9 - recip_predicted_pmhz;
+					(float)1.01 - recip_predicted_pmhz;
 
 
 	planned_dcycs = (DCYCS_1_MHZ) / 60.0;
@@ -1613,6 +1627,7 @@ vbl_60hz(double dcycs, double dtime_now)
 	video_update();
 	sound_update(dcycs);
 	clock_update();
+	scc_update();
 }
 
 

@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.102 97/09/21 15:30:32 kentd Exp $";
+const char rcsid_protos_h[] = "@(#)$Header: protos.h,v 1.103 97/11/02 16:41:38 kentd Exp $";
 #endif
 
 /* xdriver.c */
@@ -98,6 +98,7 @@ int adb_read_c027(void);
 void adb_write_c027(int val);
 int read_adb_ram(word32 addr);
 void write_adb_ram(word32 addr, int val);
+int update_mouse(int x, int y, int button_state, int button_valid);
 int mouse_read_c024(void);
 int read_paddles(int paddle, double dcycs);
 void adb_key_event(int a2code, int is_up);
@@ -146,6 +147,8 @@ int do_dis(FILE *outfile, int bank, word32 pc, int accsize, int xsize, int op_pr
 void show_line(FILE *outfile, int bank, word32 addr, word32 operand, int size, char *string);
 
 /* scc.c */
+void scc_init(void);
+void scc_reset(void);
 void show_scc_state(void);
 word32 scc_read_reg(int port);
 void scc_write_reg(int port, word32 val);

@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.121 97/09/21 15:29:44 kentd Exp $"
+	.stringz "@(#)$Header: engine_s.s,v 1.122 97/11/11 23:51:27 kentd Exp $"
 
 	.code
 
@@ -29,9 +29,9 @@ rcsid_engine_s_s
 
 
 #if 0
-# define ACCURATE_SLOW_MEM
-# define CHECK_BREAKPOINTS
 # define LOG_PC
+# define CHECK_BREAKPOINTS
+# define ACCURATE_SLOW_MEM
 # define DEBUG_TOOLBOX
 # define DEBUG_CYCLES
 #endif
@@ -99,6 +99,11 @@ rcsid_engine_s_s
 #define STACK_SAVE_PULL24_RET0			-228
 
 #define STACK_SAVE_COP_ARG0			-232
+#define STACK_SAVE_TMP_INST0			-236
+#define STACK_SAVE_TMP_INST			-240
+#define STACK_SAVE_TMP_INST1			-244
+#define STACK_SAVE_DISP_PIECES_LINK		-248
+#define STACK_SAVE_DISPATCH_SCRATCH1		-252
 
 
 
@@ -1233,7 +1238,7 @@ enter_engine
 	dep	kbank,15,16,pc
 	stw	arg0,STACK_SAVE_ARG0(sp)
 	b	dispatch2
-	ldi	0,scratch4
+	fcpy,sgl 0,fscr1
 
 	.export resize_acc_to8,code
 resize_acc_to8
@@ -1341,7 +1346,7 @@ dispatch
 	dep	kbank,15,8,arg0
 #endif
 
-	ldw	(halt_sim_ptr),scratch4
+	fldw	(halt_sim_ptr),fscr1
 
 
 
@@ -1375,37 +1380,34 @@ no_debug_toolbox
 #endif
 	dep	kbank,15,16,pc
 
-	fcmp,<,sgl fcycles,fcycles_stop
+	fcmp,>=,sgl fcycles,fcycles_stop		;C=0 if can cont
 
 	extru	pc,23,16,scratch2
 
+	fcmp,!=,sgl fscr1,0				;C=0 if can cont
+
 	sh3add	scratch2,0,scratch2
 
-	extrs	pc,29,6,scratch3
-
+	extru	pc,31,8,scratch4
 	ldwx	scratch2(page_info_ptr),scratch1
-	comib,<>,n 0,scratch4,dispatch_done_clr_ret0
-	ftest
-	b,n	dispatch_done_clr_ret0
-	bb,<,n	scratch1,BANK_IO_BIT,dispatch_instr_io
-	dep	pc,31,8,scratch1
+	ftest,acc2			;null next if can cont
+	b,n	dispatch_done_clr_ret0			;done if must stop
 
-	.export dispatch_normal_mem,code
-dispatch_normal_mem
-	ldb	(scratch1),instr
-	comib,=,n -1,scratch3,dispatch_instr_pieces
-	ldb	1(scratch1),ret0
+	bb,<,n	scratch1,BANK_IO_BIT,dispatch_instr_io
+	ldbx	scratch4(scratch1),instr
+
+	extrs	pc,29,6,scratch3
+	add	scratch4,scratch1,scratch1
 	ldwx,s	instr(inst_tab_ptr),link
-	CYCLES_PLUS_2
-	ldb	2(scratch1),scratch3
+
+	comib,=,n -1,scratch3,dispatch_instr_pieces
 	depi	0,31,3,link
-	ldb	3(scratch1),scratch4
-	dep	scratch3,23,8,ret0
+
 #ifndef LOG_PC
 	bv	0(link)
-	dep	scratch4,15,8,ret0
+	CYCLES_PLUS_2
 #else
-	dep	scratch4,15,8,ret0
+	CYCLES_PLUS_2
 
 	.import	log_pc_ptr,data
 	.import	log_pc_start_ptr,data
@@ -1414,43 +1416,48 @@ dispatch_normal_mem
 log_pc_asm
 ; save regs into log_pc_ptr, wrap around to log_pc_start_ptr if
 ;  log_pc_ptr gets > log_pc_end_ptr
+	stw	scratch1,STACK_SAVE_DISPATCH_SCRATCH1(sp)
+	ldb	1(scratch1),scratch3
 	dep	neg,24,1,psr				;set neg
+	ldb	2(scratch1),ret0
 	ldil	l%log_pc_ptr,scratch4
-	copy	ret0,scratch3
+	ldb	3(scratch1),scratch2
+	dep	ret0,23,8,scratch3
 	ldo	r%log_pc_ptr(scratch4),scratch4
 	dep	instr,7,8,scratch3
-	ldw	0(scratch4),scratch1
+	dep	scratch2,15,8,scratch3
+	ldw	0(scratch4),scratch2
 	depi	0,30,1,psr				;zero
-	copy	pc,scratch2
+	copy	pc,scratch1
 	comiclr,<> 0,zero,0
 	depi	1,30,1,psr				;set zero
-	dep	dbank,7,8,scratch2
-	stw	scratch3,LOG_PC_INSTR(scratch1)
+	dep	dbank,7,8,scratch1
+	stw	scratch3,LOG_PC_INSTR(scratch2)
 	copy	acc,scratch3
-	dep	kbank,15,8,scratch2
+	dep	kbank,15,8,scratch1
 	dep	psr,15,16,scratch3
-	stw	scratch2,LOG_PC_DBANK_KBANK_PC(scratch1)
-	copy	yreg,scratch2
-	stw	scratch3,LOG_PC_PSR_ACC(scratch1)
+	stw	scratch1,LOG_PC_DBANK_KBANK_PC(scratch2)
+	copy	yreg,scratch1
+	stw	scratch3,LOG_PC_PSR_ACC(scratch2)
 	copy	direct,scratch3
-	dep	xreg,15,16,scratch2
-	stw	scratch2,LOG_PC_XREG_YREG(scratch1)
+	dep	xreg,15,16,scratch1
+	stw	scratch1,LOG_PC_XREG_YREG(scratch2)
 	dep	stack,15,16,scratch3
-	ldw	rs%log_pc_end_ptr-log_pc_ptr(scratch4),scratch2
-	stw	scratch3,LOG_PC_STACK_DIRECT(scratch1)
+	ldw	rs%log_pc_end_ptr-log_pc_ptr(scratch4),scratch1
+	stw	scratch3,LOG_PC_STACK_DIRECT(scratch2)
 
-	addi	LOG_PC_SIZE,scratch1,scratch1
-	comclr,< scratch1,scratch2,0
+	addi	LOG_PC_SIZE,scratch2,scratch2
+	comclr,< scratch2,scratch1,0
 ; reload log_pc with log_pc_start_ptr
-	ldw	rs%log_pc_start_ptr-log_pc_ptr(scratch4),scratch1
+	ldw	rs%log_pc_start_ptr-log_pc_ptr(scratch4),scratch2
+	ldw	STACK_SAVE_DISPATCH_SCRATCH1(sp),scratch1
 	bv	0(link)
-	stw	scratch1,0(scratch4)
+	stw	scratch2,0(scratch4)
 #endif
 
 
 	.export dispatch_instr_io,code
 dispatch_instr_io
-
 	ldil	l%0xc700,scratch1
 	ldo	r%0xc700(scratch1),scratch1
 	addi	0x0a,scratch1,scratch2
@@ -1478,7 +1485,7 @@ dispatch_instr_pieces
 	extru	link,31,3,scratch1
 	ldo	r%size_tab(scratch4),scratch4
 	dep	0,31,3,link
-	ldwx,s	scratch1(scratch4),scratch1
+	ldwx,s	scratch1(scratch4),scratch2
 #ifdef LOG_PC
 ; save "real" link so call_log_pc can restore it
 
@@ -1486,8 +1493,12 @@ dispatch_instr_pieces
 	LDC(call_log_pc,link)
 	stw	instr,STACK_SAVE_INSTR(sp)
 #endif
+	stw	link,STACK_SAVE_DISP_PIECES_LINK(sp)
+
 	ldi	0x1bea,ret0
-	blr	scratch1,0
+	sh2add	scratch2,0,scratch2
+	ldo	STACK_SAVE_TMP_INST-1(sp),scratch1
+	blr	scratch2,0
 	dep	kbank,15,16,arg0
 
 /* must correct cycle count so all instrs are called with cycls += 2 */
@@ -1497,17 +1508,39 @@ dispatch_instr_pieces
 ; 0
 	bv	0(link)
 	CYCLES_PLUS_1
+	nop
+	nop
+	nop ! nop ! nop ! nop
 ; 1
-	b	get_mem_long_8
+	bl	get_mem_long_8,link
+	nop
+	ldw	STACK_SAVE_DISP_PIECES_LINK(sp),link
+	ldo	STACK_SAVE_TMP_INST-1(sp),scratch1
+	dep	ret0,7,8,scratch2
+	bv	0(link)
+	stw	scratch2,1(scratch1)
 	nop
 ; 2
-	b	get_mem_long_16
+	bl	get_mem_long_16,link
 	CYCLES_MINUS_1
+	ldw	STACK_SAVE_DISP_PIECES_LINK(sp),link
+	dep	ret0,23,16,scratch2
+	ldo	STACK_SAVE_TMP_INST-1(sp),scratch1
+	dep	ret0,7,8,scratch2
+	bv	0(link)
+	stw	scratch2,STACK_SAVE_TMP_INST(sp)
 ; 3
-	b	get_mem_long_24
+	bl	get_mem_long_24,link
 	CYCLES_MINUS_2
-
+	ldw	STACK_SAVE_DISP_PIECES_LINK(sp),link
+	shd	ret0,ret0,8,scratch2
+	ldo	STACK_SAVE_TMP_INST-1(sp),scratch1
+	dep	scratch2,15,8,scratch2
+	bv	0(link)
+	stw	scratch2,STACK_SAVE_TMP_INST(sp)
 ; 4?
+	nop
+	nop
 	break
 
 

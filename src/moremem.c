@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.180 97/09/07 14:27:27 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.181 97/11/02 16:41:44 kentd Exp $";
 
 #include "defc.h"
 
@@ -1243,13 +1243,13 @@ io_read(word32 loc, Cyc *cyc_ptr)
 		case 0x37: /* 0xc037 */
 			return 0;
 		case 0x38: /* 0xc038 */
-			return scc_read_reg(0);
-		case 0x39: /* 0xc039 */
 			return scc_read_reg(1);
+		case 0x39: /* 0xc039 */
+			return scc_read_reg(0);
 		case 0x3a: /* 0xc03a */
-			return scc_read_data(0);
-		case 0x3b: /* 0xc03b */
 			return scc_read_data(1);
+		case 0x3b: /* 0xc03b */
+			return scc_read_data(0);
 		case 0x3c: /* 0xc03c */
 			/* doc control */
 			return doc_read_c03c(dcycs);
@@ -1876,16 +1876,16 @@ io_write(word32 loc, int val, Cyc *cyc_ptr)
 			}
 			return;
 		case 0x38: /* 0xc038 */
-			scc_write_reg(0, val);
-			return;
-		case 0x39: /* 0xc039 */
 			scc_write_reg(1, val);
 			return;
+		case 0x39: /* 0xc039 */
+			scc_write_reg(0, val);
+			return;
 		case 0x3a: /* 0xc03a */
-			scc_write_data(0, val);
+			scc_write_data(1, val);
 			return;
 		case 0x3b: /* 0xc03b */
-			scc_write_data(1, val);
+			scc_write_data(0, val);
 			return;
 		case 0x3c: /* 0xc03c */
 			/* doc ctl */

@@ -1,5 +1,5 @@
 
-KEGS: Kent's Emulated GS version 0.31
+KEGS: Kent's Emulated GS version 0.32
 
 What the heck is this?
 ----------------------
@@ -44,7 +44,7 @@ all text.
 Included files:
 	CHANGES		- Description of changes since last release
 	README.kegs	- you're here
-	kegs		- the executable
+	kegs		- the executable, for HP-UX 10.20+
 	font.65sim	- C-like description of the font KEGS uses.
 	disk_conf	- disk image configuration info
 	to_pro		- Hard-to-use ProDOS volume creator
@@ -106,7 +106,9 @@ Use "partls" to list the partitions on the CD.  For instance,
 partls /dev/dsk/c201d2s0
 
 if your CD is at that address (that's SCSI ID 2 on the SCSI bus of a
-712 workstation).
+712 workstation).  (Partls was compiled for HP-UX 10.20.  If you have an
+earlier version or HP-UX, you need to recompile to get it to work.
+See README.compile).
 
 The output will list the various partition names in the first column.  You can
 mount any partition, but look at the "type" for Apple_PRODOS or
@@ -174,13 +176,20 @@ names.
 Running KEGS:
 ------------
 
-Just type "kegs".  It needs no options.  If you want the display to go
-somewhere different, make sure the shell environment variable $DISPLAY is set.
-By default, the audio will be sent to the internal workstation speaker
-unless $SPEAKER=external.  Audio will be sent through the HP Alib routines
-(see audio(5)).  You can get KEGS to use the direct audio hardware using
-the command-line option "-hpdev", but this can cause panics on HPUX
-10.X without the latest audio patches.
+Just type "kegs", it needs no options.  Unfortunately, it's only convenient
+for me to compile kegs on HP-UX 10.20, so the provided executable only works
+on HP-UX 10.20 or later.  If you are on an earlier OS revision, you will
+have to compile KEGS and the utilities yourself.  This is as easy as
+cd'ing into the src directory and typing "make".  See the README.compile
+file for more info about compiling.
+
+If you want the display to go somewhere different, make sure the shell
+environment variable $DISPLAY is set.  By default, the audio will be
+sent to the internal workstation speaker unless $SPEAKER=external.
+Audio will be sent through the HP Alib routines (see audio(5)).  You can
+get KEGS to use the direct audio hardware using the command-line option
+"-hpdev", but this can cause panics on HPUX 10.X without the latest
+audio patches.
 
 KEGS will open a new window and use the terminal window you started it from
 for debug control.  I will call this the "debug" window.
@@ -257,6 +266,35 @@ Quitting KEGS:
 Either ctrl-C in the debugger window at any time, or press the right-mouse
 button in the emulation window, and then type "q" return in the debug window.
 
+KEGS command-line option summary:
+--------------------------------
+
+-badrd:	Causes KEGS to halt on any access to invalid memory addresses.
+	Useful for debugging.  By default, KEGS allows reads to invalid
+	memory since the Finder does some (especially when you open the
+	About window, and then close it).  But KEGS warns you about these
+	accesses in the debug window.  In general, these warnings
+	indicate buggy programs.  If the warnings get severe, it's
+	a good sign you should quit KEGS and start over before the
+	emulated program crashes.  -badrd would be the default for KEGS
+	if it wasn't for the Finder's About window's problem.
+-ignbadacc:	Causes KEGS to allow reads & writes to invalid memory
+	addresses without printing any warnings.  Useful for running
+	extremely buggy programs so you don't have to see all the warning
+	messages scroll by.
+-hpdev:	KEGS will try to open /dev/audio directly, instead of using the
+	Aserver.
+-skip:	KEGS will "skip" that many screen redraws between refreshes.
+	-skip 0 will do 60 frames per second, -skip 1 will do 30 fps,
+	-skip 5 will do 10 fps.
+-noshm:	KEGS will not try to used shared memory for the X graphics display.
+	This will make KEGS much slower on graphics-intensive tasks,
+	by as much as a factor of 10!  By default, -noshm causes an
+	effective -skip of 7 which is 7.5 fps.  You can override this
+	default by specifying a -skip explicitly.  A skip of 7 leads
+	to fairly jerky animation.
+
+
 Command/Option keys:
 -------------------
 
@@ -286,7 +324,8 @@ The reset key is Pause/Break.  You must hit it with Ctrl to get it to
 take effect (just like a real Apple //gs).  Ctrl-open_apple-Reset
 forces a reboot.  Ctrl-Close_apple-Open_apple-Reset enters selftests.
 Selftests will pass if you force speed to 2.5MHz using the middle
-button.
+button.  Watch out for ctrl-shift-Break--it will likely kill your
+Unix session since VUE will interpret that key sequence.
 
 Control Panel:
 -------------
@@ -310,7 +349,9 @@ to_pro -800 wolfdemo.bxy
 
 which creates an 800K Unix file called "POOF1".  POOF1 is now an
 image that can be loaded into KEGS, and when you catalog it, it will
-have wolfdemo.bxy on it.
+have wolfdemo.bxy on it.  Warning: to_pro was compiled on HP-UX 10.20,
+and will not run on earlier versions of HP-UX--you have to compile it
+to make it work.  Sorry.
 
 To create a 4MB image:
 
@@ -426,7 +467,7 @@ modes.
 
 KEGS will always run at 1.024MHz at least.  If it is unable to keep up,
 it will extend the emulated time to maintain the illusion of running
-at 1MHz.  That is, it may do just 40 screen refleshes per real second,
+at 1MHz.  That is, it may do just 40 screen refreshes per real second,
 instead of the usual 60.  It is difficult to get KEGS so bogged down
 in overhead that it cannot maintain 1MHz.  Let me know if you find an
 application which does.
@@ -613,6 +654,11 @@ sound and video overhead.
 In Rastan, the music plays at a slow tempo UNLESS you are moving--then
 it plays the music just fine.
 
+The Merlin 16 assembler does not seem to work right.  I fixed a bug
+with this once, but I appear to have broken it again.
+
+Under GS/OS, the 5.25" drive emulation does not seem to work right.
+I'm working on fixing this.
 
 Sound emulation:
 ---------------
@@ -754,7 +800,9 @@ X-Windows interactions:
 To provide low-level ADB emulation, KEGS turns off Unix keyrepeat when the
 focus is in the KEGS window.  It should be turned back on every time
 the pointer leaves the KEGS window, but sometimes it doesn't.  Re-running
-KEGS (and then quitting it quickly) should turn key-repeat back on.
+KEGS (and then quitting it quickly) should turn key-repeat back on,
+or you can type 'xset r'.
+
 Sometimes the converse is true--key repeat is "on" when the cursor is
 in the KEGS window.  Moving the cursor out of the window and then
 back in should solve it.  This is sometimes noticeable when running

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.81 97/09/23 22:59:58 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.82 97/11/16 19:46:46 kentd Exp $";
 
 #include <time.h>
 
@@ -407,19 +407,30 @@ video_reset()
 }
 
 int	g_screen_redraw_skip_count = 0;
-int	g_screen_redraw_skip_amt = 0;
+int	g_screen_redraw_skip_amt = -1;
 int	g_show_screen = 1;
+
+word32	g_cycs_in_check_input = 0;
 
 void
 video_update()
 {
+	register word32 start_time;
+	register word32 end_time;
+
 	update_a2_line_info();
 
 	update_border_info();
 
+	GET_ITIMER(start_time);
+	check_input_events();
+	GET_ITIMER(end_time);
+
+	g_cycs_in_check_input += (end_time - start_time);
+
 	if(g_show_screen) {
 		g_screen_redraw_skip_count--;
-		if(g_screen_redraw_skip_count <= 0) {
+		if(g_screen_redraw_skip_count < 0) {
 			refresh_screen();
 			g_screen_redraw_skip_count = g_screen_redraw_skip_amt;
 		}
@@ -2319,7 +2330,6 @@ display_screen()
 	refresh_screen();
 }
 
-word32 g_cycs_in_check_input = 0;
 word32 g_cycs_in_refresh_line = 0;
 word32 g_cycs_in_refresh_line2 = 0;
 word32 g_cycs_in_refresh_ximage = 0;
@@ -2334,11 +2344,6 @@ refresh_screen()
 	register word32 end_time, end_time2;
 	int	i;
 
-	GET_ITIMER(start_time);
-	check_input_events();
-	GET_ITIMER(end_time);
-
-	g_cycs_in_check_input += (end_time - start_time);
 
 	GET_ITIMER(start_time);
 	g_num_lines_superhires = 0;

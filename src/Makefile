@@ -15,7 +15,7 @@ PROJROOT = .
 AS = cc -Ae
 
 XOPTS = -I/usr/include/X11R5
-XLIBS = -L/usr/lib/X11R5
+XLIBS = -L/usr/lib/X11R5 -L/opt/audio/lib
 
 all: specials $(NAME)$(SUFFIX) partls to_pro
 
@@ -63,9 +63,6 @@ engine_c.o: 8inst_c 16inst_c
 .c.o:
 	$(CC) $(CCOPTS) $(XOPTS) -c $(OPTS) -I. $*.c
 
-.C.o:
-	$(CCC) $(CCCOPTS) $(XOPTS) -c $(OPTS) -I. $*.C
-
 partls: partls.c
 	$(CC) $(CCOPTS) -o partls partls.c
 
@@ -74,3 +71,34 @@ to_pro: prodos.h prodos_protos.h to_pro.c
 
 compile_time.o: $(OBJECTS)
 
+# DO NOT DELETE
+
+adb.o: adb.h defc.h defcomm.h  
+adb.o:  iwm.h protos.h
+clock.o: defc.h defcomm.h  
+clock.o:  iwm.h protos.h 
+dis.o:   defc.h
+dis.o: defcomm.h  
+dis.o:  iwm.h protos.h disas.h
+scc.o: defc.h defcomm.h  
+scc.o:  iwm.h protos.h
+iwm.o: defc.h defcomm.h  
+iwm.o:  iwm.h protos.h iwm_35_525.h
+moremem.o: defc.h defcomm.h  
+moremem.o:   iwm.h protos.h
+sim65816.o:   defc.h defcomm.h
+sim65816.o:  iwm.h protos.h
+smartport.o: defc.h defcomm.h  
+smartport.o:   iwm.h protos.h
+sound.o: defc.h defcomm.h  
+sound.o:  iwm.h protos.h sound.h 
+sound_hp.o: defc.h defcomm.h  
+sound_hp.o:   iwm.h protos.h
+sound_hp.o: sound.h  
+sound_hp.o:  Alib.h 
+video.o:   defc.h defcomm.h
+video.o:  iwm.h protos.h superhires.h
+xdriver.o:  defc.h defcomm.h 
+xdriver.o:  iwm.h protos.h protos_xdriver.h
+engine_s.o: defs.h defcomm.h op_routs.h defs_instr.h 8inst_s 16inst_s 8size
+engine_s.o: 16size

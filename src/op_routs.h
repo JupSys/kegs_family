@@ -16,7 +16,7 @@
 	.data
 	.export rcsdif_op_routs_h,data
 rcsdif_op_routs_h
-	.stringz "@(#)$Header: op_routs.h,v 1.27 97/03/31 22:55:03 kentd Exp $"
+	.stringz "@(#)$Header: op_routs.h,v 1.29 97/11/16 17:40:00 kentd Exp $"
 	.code
 # endif
 
@@ -66,14 +66,14 @@ op_routs_start	.word	0
 #ifdef ASM
 #define GET_DLOC_X_IND_WR()		\
 	CYCLES_PLUS_1			! \
-	add	xreg,arg0,arg0		! \
+	add	xreg,direct,scratch2	! \
 	addi	2,pc,pc			! \
-	add	direct,arg0,arg0	! \
-	extru,=	direct,31,8,0		! \
-	CYCLES_PLUS_1			! \
+	add	scratch2,arg0,arg0	! \
 	bl	get_mem_b0_direct_page_16,link	! \
 	extru	arg0,31,16,arg0		! \
 	copy	ret0,arg0		! \
+	extru,=	direct,31,8,0		! \
+	CYCLES_PLUS_1			! \
 	dep	dbank,15,8,arg0
 #else /* C */
 # define GET_DLOC_X_IND_WR()			\
@@ -90,7 +90,7 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DLOC_X_IND_ADDR()		\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DLOC_X_IND_WR()
 #else /* C */
 # define GET_DLOC_X_IND_ADDR()		\
@@ -113,7 +113,7 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DISP8_S_ADDR()		\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DISP8_S_WR()
 #else /* C */
 # define GET_DISP8_S_ADDR()		\
@@ -139,7 +139,7 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DLOC_ADDR()		\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DLOC_WR()
 #else /* C */
 # define GET_DLOC_ADDR()		\
@@ -149,10 +149,10 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DLOC_L_IND_WR()		\
-	add	direct,arg0,arg0	! \
+	addi	2,pc,pc			! \
 	extru,=	direct,31,8,0		! \
 	CYCLES_PLUS_1			! \
-	addi	2,pc,pc			! \
+	add	direct,arg0,arg0	! \
 	bl	get_mem_b0_24,link	! \
 	extru	arg0,31,16,arg0		! \
 	copy	ret0,arg0
@@ -169,7 +169,7 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DLOC_L_IND_ADDR()		\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DLOC_L_IND_WR()
 #else /* C */
 # define GET_DLOC_L_IND_ADDR()		\
@@ -179,7 +179,7 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DLOC_IND_Y_ADDR_FOR_WR()	\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	CYCLES_PLUS_1			! \
 	GET_DLOC_IND_Y_WR_SPECIAL()
 #else /* C */
@@ -191,14 +191,14 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DLOC_IND_WR()		\
-	addi	2,pc,pc			! \
-	add	direct,arg0,arg0	! \
 	extru,=	direct,31,8,0		! \
 	CYCLES_PLUS_1			! \
+	addi	2,pc,pc			! \
+	add	direct,arg0,arg0	! \
 	bl	get_mem_b0_direct_page_16,link	! \
 	extru	arg0,31,16,arg0		! \
 	copy	ret0,arg0		! \
-	dep	dbank,15,8,arg0
+	dep	dbank,15,16,arg0
 #else /* C */
 # define GET_DLOC_IND_WR()		\
 	arg = (arg + direct) & 0xffff;	\
@@ -212,7 +212,7 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DLOC_IND_ADDR()		\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DLOC_IND_WR()
 #else
 # define GET_DLOC_IND_ADDR()		\
@@ -222,16 +222,22 @@ op_routs_start	.word	0
 
 #ifdef ASM
 #define GET_DLOC_INDEX_WR(index_reg)	\
+	GET_DLOC_INDEX_WR_A(index_reg) ! GET_DLOC_INDEX_WR_B(index_reg)
+
+#define GET_DLOC_INDEX_WR_A(index_reg)	\
 	CYCLES_PLUS_1			! \
-	add	index_reg,arg0,arg0	! \
+	add	index_reg,direct,scratch2	! \
 	extru	direct,23,8,scratch1	! \
 	addi	2,pc,pc			! \
 	extru,=	direct,31,8,0		! \
 	CYCLES_PLUS_1			! \
 	bb,>=	psr,23,.+16		! \
-/* 4*/	add	direct,arg0,arg0	! \
+/* 4*/	add	scratch2,arg0,arg0	! \
 /* 8*/	extru,<> direct,31,8,0		! \
-/*12*/	dep	scratch1,23,8,arg0	! \
+/*12*/	dep	scratch1,23,8,arg0
+
+/* GET_DLOC_INDeX_WR_B must be exactly one instruction! */
+#define GET_DLOC_INDEX_WR_B(index_reg)	\
 /*16*/	extru	arg0,31,16,arg0
 
 #define GET_DLOC_Y_WR()			\
@@ -241,11 +247,11 @@ op_routs_start	.word	0
 	GET_DLOC_INDEX_WR(xreg)
 
 #define GET_DLOC_Y_ADDR()			\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DLOC_Y_WR()
 
 # define GET_DLOC_X_ADDR()			\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DLOC_X_WR()
 
 #else
@@ -287,7 +293,7 @@ op_routs_start	.word	0
 	extru	arg0,31,24,arg0
 
 # define GET_DISP8_S_IND_Y_ADDR()	\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DISP8_S_IND_Y_WR()
 #else /* C */
 
@@ -305,17 +311,17 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_DLOC_L_IND_Y_WR()		\
+	extru,=	direct,31,8,0		! \
+	CYCLES_PLUS_1			! \
 	addi	2,pc,pc			! \
 	add	direct,arg0,arg0	! \
 	bl	get_mem_b0_24,link	! \
 	extru	arg0,31,16,arg0		! \
 	add	ret0,yreg,arg0		! \
-	extru,=	direct,31,8,0		! \
-	CYCLES_PLUS_1			! \
 	extru	arg0,31,24,arg0
 
 # define GET_DLOC_L_IND_Y_ADDR()	\
-	extru	ret0,31,8,arg0		! \
+	ldb	1(scratch1),arg0	! \
 	GET_DLOC_L_IND_Y_WR()
 #else /* C */
 
@@ -336,15 +342,21 @@ op_routs_start	.word	0
 
 #ifdef ASM
 # define GET_ABS_ADDR()			\
-	extru	ret0,31,16,arg0		! \
+	ldb	1(scratch1),arg0	! \
+	ldb	2(scratch1),scratch1	! \
 	CYCLES_PLUS_1			! \
 	dep	dbank,15,8,arg0		! \
-	addi	3,pc,pc
+	addi	3,pc,pc			! \
+	dep	scratch1,23,8,arg0
 
 # define GET_LONG_ADDR()		\
-	extru	ret0,31,24,arg0		! \
+	ldb	1(scratch1),arg0	! \
+	ldb	2(scratch1),scratch2	! \
 	CYCLES_PLUS_2			! \
-	addi	4,pc,pc
+	ldb	3(scratch1),scratch1	! \
+	addi	4,pc,pc			! \
+	dep	scratch2,23,8,arg0	! \
+	dep	scratch1,15,8,arg0
 #else /* C */
 
 # define GET_ABS_ADDR()			\
@@ -359,18 +371,26 @@ op_routs_start	.word	0
 
 #ifdef ASM
 #define GET_ABS_INDEX_ADDR_FOR_WR(index_reg)	\
-	extru	ret0,31,16,arg0		! \
+	ldb	1(scratch1),arg0	! \
+	copy	index_reg,scratch3	! \
+	ldb	2(scratch1),scratch2	! \
+	dep	dbank,15,8,scratch3	! \
 	addi	3,pc,pc			! \
-	dep	dbank,15,8,arg0		! \
+	dep	scratch2,23,8,arg0	! \
 	CYCLES_PLUS_2			! \
-	add	arg0,index_reg,arg0	! \
+	add	arg0,scratch3,arg0	! \
 	extru	arg0,31,24,arg0
 
 #define GET_LONG_X_ADDR_FOR_WR()	\
-	extru	ret0,31,24,arg0		! \
-	addi	4,pc,pc			! \
-	add	arg0,xreg,arg0		! \
+	ldb	3(scratch1),scratch2	! \
+	copy	xreg,scratch3		! \
+	ldb	1(scratch1),arg0	! \
+	ldb	2(scratch1),scratch1	! \
 	CYCLES_PLUS_2			! \
+	dep	scratch2,15,8,scratch3	! \
+	addi	4,pc,pc			! \
+	dep	scratch1,23,8,arg0	! \
+	add	arg0,scratch3,arg0	! \
 	extru	arg0,31,24,arg0
 #else /* C */
 

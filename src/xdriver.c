@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.127 97/09/23 21:45:08 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$Header: xdriver.c,v 1.130 97/11/16 19:46:57 kentd Exp $";
 
 #define X_SHARED_MEM
 
@@ -70,9 +70,9 @@ Colormap g_a2_colormap;
 Colormap g_default_colormap;
 
 #ifdef X_SHARED_MEM
-int use_shmem = 1;
+int g_use_shmem = 1;
 #else
-int use_shmem = 0;
+int g_use_shmem = 0;
 #endif
 
 byte *data_text[2];
@@ -121,6 +121,8 @@ extern int g_cur_a2_stat;
 extern int g_a2vid_palette;
 
 extern int g_installed_full_superhires_colormap;
+
+extern int g_screen_redraw_skip_amt;
 
 extern word32 a2_screen_buffer_changed;
 extern byte *a2_line_ptr[];
@@ -402,7 +404,7 @@ dev_video_init()
 	printf("Preparing X Windows graphics system\n");
 
 	g_num_a2_keycodes = 0;
-	for(i = 0; i < 0x7f; i++) {
+	for(i = 0; i <= 0x7f; i++) {
 		tmp_array[i] = 0;
 	}
 	for(i = 0; i < 0x7f; i++) {
@@ -531,8 +533,7 @@ dev_video_init()
 
 	a2_win = XCreateWindow(display, RootWindow(display, screen_num),
 		0, 0, BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT,
-		0, vTemplate.depth, InputOutput,
-		DefaultVisual(display, screen_num),
+		0, vTemplate.depth, InputOutput, vis,
 		CWEventMask | CWColormap | CWBackingStore | CWCursor,
 		&win_attr);
 
@@ -542,47 +543,53 @@ dev_video_init()
 
 /* Check for XShm */
 #ifdef X_SHARED_MEM
-	if(use_shmem) {
+	if(g_use_shmem) {
 		ret = XShmQueryExtension(display);
 		if(ret == 0) {
 			printf("XShmQueryExt ret: %d\n", ret);
 			printf("not using shared memory\n");
-			use_shmem = 0;
+			g_use_shmem = 0;
 		} else {
 			printf("Will use shared memory for X\n");
 		}
 	}
 
-	if(use_shmem) {
-		use_shmem = get_shm(&ximage_text[0], display, &data_text[0],
+	if(g_use_shmem) {
+		g_use_shmem = get_shm(&ximage_text[0], display, &data_text[0],
 			vis, &shm_text_seginfo[0], 0);
 	}
-	if(use_shmem) {
-		use_shmem = get_shm(&ximage_text[1], display, &data_text[1],
+	if(g_use_shmem) {
+		g_use_shmem = get_shm(&ximage_text[1], display, &data_text[1],
 			vis, &shm_text_seginfo[1], 0);
 	}
-	if(use_shmem) {
-		use_shmem = get_shm(&ximage_hires[0], display, &data_hires[0],
+	if(g_use_shmem) {
+		g_use_shmem = get_shm(&ximage_hires[0], display, &data_hires[0],
 			vis, &shm_hires_seginfo[0], 0);
 	}
-	if(use_shmem) {
-		use_shmem = get_shm(&ximage_hires[1], display, &data_hires[1],
+	if(g_use_shmem) {
+		g_use_shmem = get_shm(&ximage_hires[1], display, &data_hires[1],
 			vis, &shm_hires_seginfo[1], 0);
 	}
-	if(use_shmem) {
-		use_shmem = get_shm(&ximage_superhires, display,
+	if(g_use_shmem) {
+		g_use_shmem = get_shm(&ximage_superhires, display,
 			&data_superhires, vis, &shm_superhires_seginfo, 0);
 	}
-	if(use_shmem) {
-		use_shmem = get_shm(&ximage_border_special, display,
+	if(g_use_shmem) {
+		g_use_shmem = get_shm(&ximage_border_special, display,
 			&data_border_special,vis,&shm_border_special_seginfo,1);
 	}
-	if(use_shmem) {
-		use_shmem = get_shm(&ximage_border_sides, display,
+	if(g_use_shmem) {
+		g_use_shmem = get_shm(&ximage_border_sides, display,
 			&data_border_sides, vis, &shm_border_sides_seginfo, 2);
 	}
 #endif
-	if(!use_shmem) {
+	if(!g_use_shmem) {
+		if(g_screen_redraw_skip_amt < 0) {
+			g_screen_redraw_skip_amt = 7;
+		}
+		printf("Not using shared memory, setting skip_amt = %d\n",
+			g_screen_redraw_skip_amt);
+
 		printf("Calling get_ximage!\n");
 
 		ximage_text[0] = get_ximage(display, &data_text[0], vis, 0);
@@ -596,8 +603,8 @@ dev_video_init()
 									vis, 2);
 	}
 
-	vid_printf("data_text[0]: %08x, use_shmem: %d\n",
-				(word32)data_text[0], use_shmem);
+	vid_printf("data_text[0]: %08x, g_use_shmem: %d\n",
+				(word32)data_text[0], g_use_shmem);
 
 	/* Done with visualList now */
 	XFree(visualList);
@@ -980,7 +987,7 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 	}
 
 #ifdef X_SHARED_MEM
-	if(use_shmem) {
+	if(g_use_shmem) {
 		XShmPutImage(display, a2_win, a2_winGC,
 			xim, left_pix, srcy,
 			BASE_MARGIN_LEFT + left_pix,
@@ -988,7 +995,7 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 			right_pix - left_pix, 16*(end_line - start_line),False);
 	}
 #endif
-	if(!use_shmem) {
+	if(!g_use_shmem) {
 		XPutImage(display, a2_win, a2_winGC, xim,
 			left_pix, srcy,
 			BASE_MARGIN_LEFT + left_pix,
@@ -1012,14 +1019,14 @@ x_redraw_border_sides_lines(int end_x, int width, int start_line,
 #endif
 
 #ifdef X_SHARED_MEM
-	if(use_shmem) {
+	if(g_use_shmem) {
 		XShmPutImage(display, a2_win, a2_winGC, ximage_border_sides,
 			0, 16*start_line,
 			end_x - width, BASE_MARGIN_TOP + 16*start_line,
 			width, 16*(end_line - start_line), False);
 	}
 #endif
-	if(!use_shmem) {
+	if(!g_use_shmem) {
 		XPutImage(display, a2_win, a2_winGC, ximage_border_sides,
 			0, 16*start_line,
 			end_x - width, BASE_MARGIN_TOP + 16*start_line,
@@ -1075,7 +1082,7 @@ x_refresh_border_special()
 	width = X_A2_WINDOW_WIDTH;
 	height = BASE_MARGIN_TOP;
 #ifdef X_SHARED_MEM
-	if(use_shmem) {
+	if(g_use_shmem) {
 		XShmPutImage(display, a2_win, a2_winGC, ximage_border_special,
 			0, 0,
 			0, BASE_MARGIN_TOP + A2_WINDOW_HEIGHT,
@@ -1087,7 +1094,7 @@ x_refresh_border_special()
 			width, BASE_MARGIN_TOP, False);
 	}
 #endif
-	if(!use_shmem) {
+	if(!g_use_shmem) {
 		XPutImage(display, a2_win, a2_winGC, ximage_border_special,
 			0, 0,
 			0, BASE_MARGIN_TOP + A2_WINDOW_HEIGHT,
