@@ -21,6 +21,8 @@ specials: 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c size_s
 specials_clean:
 	rm -f 8inst_s 16inst_s 8size 16size 8inst_c 16inst_c size_c size_s
 
+clean:
+	rm $(OBJECTS)
 
 # Mac builds:
 kegsmac: $(OBJECTS) compile_time.o
@@ -42,6 +44,10 @@ kegsmac: $(OBJECTS) compile_time.o
 xkegs: $(OBJECTS) compile_time.o
 	$(CC) $(CCOPTS) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(XLIBS) $(EXTRA_LIBS) -lX11
 	mv xkegs ..
+
+jkegs: $(OBJECTS) compile_time.o
+	$(LD) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX).html $(XLIBS) $(EXTRA_LIBS) -s ALLOW_MEMORY_GROWTH=1 -o $(NAME)$(SUFFIX).html --preload-file  kegs_conf --preload-file System.hdv --preload-file ROM.01 --preload-file bram.data.1 -s USE_SDL=2
+
 
 # Cygwin for X builds:
 kegs.exe: $(OBJECTS) compile_time.o

@@ -346,8 +346,10 @@ video_init()
 
 	dev_video_init();
 
+fprintf(stderr,"before font\n");
 	read_a2_font();
 
+fprintf(stderr,"before zero video memory %d\n",g_screen_depth);
 	vid_printf("Zeroing out video memory\n");
 
 	for(i = 0; i < 7; i++) {
@@ -392,6 +394,7 @@ video_init()
 		slow_mem_changed[i] = (word32)-1;
 	}
 
+fprintf(stderr,"before color stuff\n");
 	/* create g_expanded_col_* */
 	for(i = 0; i < 16; i++) {
 		val = (g_lores_colors[i] >> 0) & 0xf;

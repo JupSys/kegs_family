@@ -10,6 +10,10 @@
 
 const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.367 2004-11-22 02:39:26-05 kentd Exp $";
 
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#endif
+
 #include <math.h>
 
 #define INCLUDE_RCSID_C
@@ -911,7 +915,11 @@ kegsmain(int argc, char **argv)
 
 	do_reset();
 	g_stepping = 0;
+#ifdef EMSCRIPTEN
+        emscripten_set_main_loop(do_go, 0, 1);
+#else
 	do_go();
+#endif
 
 	/* If we get here, we hit a breakpoint, call debug intfc */
 	do_debug_intfc();

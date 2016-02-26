@@ -1,15 +1,15 @@
 
 TARGET = xkegs
-OBJECTS = $(OBJECTS1) xdriver.o
+OBJECTS = $(OBJECTS1) sdldriver.o
 CC = cc
-CCOPTS = -O2 -Wall -fomit-frame-pointer -march=pentium
+CCOPTS = -O2 -Wall -fomit-frame-pointer 
 OPTS = -DKEGS_LITTLE_ENDIAN
 SUFFIX =
 NAME = xkegs
 LDFLAGS =
 LDOPTS =
 LD = $(CC)
-EXTRA_LIBS = -lXext
+EXTRA_LIBS = `sdl2-config --libs` -lXext 
 EXTRA_SPECIALS =
 
 AS = cc

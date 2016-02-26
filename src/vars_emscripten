@@ -1,0 +1,18 @@
+
+TARGET = jkegs
+OBJECTS = $(OBJECTS1) sdldriver.o
+#CC = cc
+CCOPTS = -O2 -Wall -fomit-frame-pointer   `sdl2-config --cflags` 
+OPTS = -DKEGS_LITTLE_ENDIAN
+SUFFIX =
+NAME = xkegs
+#LDFLAGS =
+#LDOPTS =
+#LD = $(CC)
+EXTRA_LIBS = `sdl2-config --libs` 
+EXTRA_SPECIALS =
+
+AS = cc
+PERL = perl
+
+
