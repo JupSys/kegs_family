@@ -1,14 +1,16 @@
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.258 2020-09-24 03:56:16+00 kentd Exp $";
+
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002 by Kent Dickey			*/
+/*			Copyright 2002-2020 by Kent Dickey		*/
 /*									*/
-/*		This code is covered by the GNU GPL			*/
+/*	This code is covered by the GNU GPL v3				*/
+/*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
+/*	This program is provided with no warranty			*/
 /*									*/
 /*	The KEGS web page is kegs.sourceforge.net			*/
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
-
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.251 2004-11-19 01:55:50-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -23,7 +25,7 @@ extern byte *g_rom_cards_ptr;
 extern word32 slow_mem_changed[];
 
 extern int g_num_breakpoints;
-extern word32 g_breakpts[];
+extern Break_point g_break_pts[];
 
 extern Page_info page_info_rd_wr[];
 
@@ -72,6 +74,8 @@ int	g_zipgs_reg_c05b = 0x40;
 	// 2==rombank, 1-0==ram size (00:8K, 01=16K, 10=32K, 11=64K)
 int	g_zipgs_reg_c05c = 0x00;
 	// 7:1==slot delay enable (for 52-54ms), 0==speaker 5ms delay
+
+word32	g_c06c_latched_cyc = 0;
 
 #define EMUSTATE(a)	{ #a, &a }
 
@@ -132,26 +136,29 @@ Emustate_word32list g_emustate_word32list[] = {
 void
 fixup_brks()
 {
-	word32	page;
-	word32	tmp, tmp2;
+	word32	page, tmp, tmp2, end_page;
 	Pg_info	val;
-	int	is_wr_only;
-	int	i, num;
+	int	is_wr_only, num;
+	int	i;
 
 	num = g_num_breakpoints;
 	for(i = 0; i < num; i++) {
-		page = (g_breakpts[i] >> 8) & 0xffff;
-		is_wr_only = (g_breakpts[i] >> 24) & 1;
-		if(!is_wr_only) {
-			val = GET_PAGE_INFO_RD(page);
+		page = (g_break_pts[i].start_addr >> 8) & 0xffff;
+		end_page = (g_break_pts[i].end_addr >> 8) & 0xffff;
+		is_wr_only = (g_break_pts[i].start_addr >> 24) & 1;
+		while(page <= end_page) {
+			if(!is_wr_only) {
+				val = GET_PAGE_INFO_RD(page);
+				tmp = PTR2WORD(val) & 0xff;
+				tmp2 = tmp | BANK_IO_TMP | BANK_BREAK;
+				SET_PAGE_INFO_RD(page, val - tmp + tmp2);
+			}
+			val = GET_PAGE_INFO_WR(page);
 			tmp = PTR2WORD(val) & 0xff;
 			tmp2 = tmp | BANK_IO_TMP | BANK_BREAK;
-			SET_PAGE_INFO_RD(page, val - tmp + tmp2);
+			SET_PAGE_INFO_WR(page, val - tmp + tmp2);
+			page++;
 		}
-		val = GET_PAGE_INFO_WR(page);
-		tmp = PTR2WORD(val) & 0xff;
-		tmp2 = tmp | BANK_IO_TMP | BANK_BREAK;
-		SET_PAGE_INFO_WR(page, val - tmp + tmp2);
 	}
 }
 
@@ -185,7 +192,6 @@ fixup_bank0_2000_4000()
 		} else if((g_c035_shadow_reg & 0x02) == 0) {
 			mem0wr += BANK_SHADOW;
 		}
-		
 	} else {
 		if(RAMRD) {
 			mem0rd += 0x10000;
@@ -295,6 +301,9 @@ fixup_intcx()
 					// User-slot rom
 					rom_inc = &(g_rom_cards_ptr[0]) +
 						((j - 0xc0) << 8);
+					if(j == 0xc4) {		// Mockingboard
+						rom_inc = SET_BANK_IO;
+					}
 				}
 				SET_PAGE_INFO_RD(j + off, rom_inc);
 			}
@@ -305,7 +314,7 @@ fixup_intcx()
 				rom_inc = rom10000 + (j << 8);
 			} else {
 				/* c800 space not necessarily mapped */
-				/*   just map in ROM */
+				/*  just map in ROM */
 				rom_inc = rom10000 + (j << 8);
 			}
 			SET_PAGE_INFO_RD(j + off, rom_inc);
@@ -328,9 +337,8 @@ fixup_wrdefram(int new_wrdefram)
 	byte	*mem0wr;
 	byte	*wrptr;
 	int	j;
-	
-	g_c08x_wrdefram = new_wrdefram;
 
+	g_c08x_wrdefram = new_wrdefram;
 	if(g_c035_shadow_reg & 0x40) {
 		/* do nothing */
 		return;
@@ -962,7 +970,6 @@ setup_pageinfo()
 	word32	mem_size_pages;
 
 	/* first, set all of memory to point to itself */
-	
 	mem_size_pages = g_mem_size_total >> 8;
 	mem0rd = &(g_memory_ptr[0]);
 	fixup_any_bank_any_page(0, mem_size_pages, mem0rd, mem0rd);
@@ -1400,11 +1407,12 @@ io_read(word32 loc, double *cyc_ptr)
 			return 0;
 		case 0x6a: /* 0xc06a */
 		case 0x6b: /* 0xc06b */
+			UNIMPL_READ;
 		case 0x6c: /* 0xc06c */
 		case 0x6d: /* 0xc06d */
 		case 0x6e: /* 0xc06e */
 		case 0x6f: /* 0xc06f */
-			UNIMPL_READ;
+			return g_c06c_latched_cyc >> (8 * (loc & 3)) & 0xff;
 
 		/* 0xc070 - 0xc07f */
 		case 0x70: /* c070 */
@@ -1488,7 +1496,7 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0xe0: case 0xe1: case 0xe2: case 0xe3:
 		case 0xe4: case 0xe5: case 0xe6: case 0xe7:
 		case 0xe8: case 0xe9: case 0xea: case 0xeb:
-		          case 0xed: case 0xee: case 0xef:
+		case 0xed: case 0xee: case 0xef:
 			return read_iwm(loc, dcycs);
 		case 0xec:
 			return iwm_read_c0ec(dcycs);
@@ -1503,13 +1511,15 @@ io_read(word32 loc, double *cyc_ptr)
 			printf("loc: %04x bad\n", loc);
 			UNIMPL_READ;
 		}
-	case 1: case 2: case 3: case 4: case 5: case 6:
-		/* c100 - c6ff */
+	case 1: case 2: case 3: case 5: case 6:
+		/* c100 - c6ff, (except c4xx) */
 		mask = (1 << ((loc >> 8) & 7));
 		if(INTCX || ((g_c02d_int_crom & mask) == 0)) {
 			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
 		}
 		return float_bus(dcycs);
+	case 4:
+		return mockingboard_read(loc, dcycs);
 	case 7:
 		/* c700 */
 		if(INTCX || ((g_c02d_int_crom & (1 << 7)) == 0)) {
@@ -1753,7 +1763,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			tmp = val ^ g_c031_disk35;
 			if(tmp & 0x40) {
 				/* apple35_sel changed, maybe speed change */
-				set_halt(HALT_EVENT);
+				engine_recalc_events();
 			}
 			g_c031_disk35 = val & 0xc0;
 			return;
@@ -1797,11 +1807,11 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			g_c036_val_speed = (val & ~0x20);	/* clr bit 5 */
 			if(tmp & 0x80) {
 				/* to recalculate times since speed changing */
-				set_halt(HALT_EVENT);
+				engine_recalc_events();
 			}
 			if(tmp & 0xf) {
 				/* slot_motor_detect changed */
-				set_halt(HALT_EVENT);
+				engine_recalc_events();
 			}
 
 			if((val & 0x60) != 0) {
@@ -1963,7 +1973,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			} else if(g_zipgs_unlock >= 4) {
 				if((g_zipgs_reg_c05b & 0x10) == 0) {
 					/* to recalculate times */
-					set_halt(HALT_EVENT);
+					engine_recalc_events();
 				}
 				g_zipgs_reg_c05b |= 0x10;	// disable
 			}
@@ -1972,7 +1982,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			if(g_zipgs_unlock >= 4) {
 				if((g_zipgs_reg_c05b & 0x10) != 0) {
 					/* to recalculate times */
-					set_halt(HALT_EVENT);
+					engine_recalc_events();
 				}
 				g_zipgs_reg_c05b &= (~0x10);	// enable
 			} else {
@@ -1990,7 +2000,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 			if(g_zipgs_unlock >= 4) {
 				if(((g_zipgs_reg_c05a ^ val) >= 0x10) &&
 					((g_zipgs_reg_c05b & 0x10) == 0)) {
-					set_halt(HALT_EVENT);
+					engine_recalc_events();
 				}
 				g_zipgs_reg_c05a = val | 0xf;
 			} else {
@@ -2032,9 +2042,11 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x69: /* 0xc069 */
 			/* just ignore, someone writing c068 with m=0 */
 			return;
+		case 0x6c: /* 0xc06c */
+			g_c06c_latched_cyc = (word32)((word64)dcycs);
+			return;
 		case 0x6a: /* 0xc06a */
 		case 0x6b: /* 0xc06b */
-		case 0x6c: /* 0xc06c */
 		case 0x6d: /* 0xc06d */
 		case 0x6e: /* 0xc06e */
 		case 0x6f: /* 0xc06f */
@@ -2158,13 +2170,20 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0xfc: case 0xfd: case 0xfe: case 0xff:
 			UNIMPL_WRITE;
 		default:
-			printf("WRite loc: %x\n",loc);
+			printf("Write loc: %x\n",loc);
 			exit(-300);
 		}
 		break;
-	case 1: case 2: case 3: case 4: case 5: case 6: case 7:
-		/* c1000 - c7ff */
+	case 1: case 2: case 3: case 5: case 6: case 7:
+		/* c1000 - c7ff (but not c4xx) */
 		UNIMPL_WRITE;
+	case 4:
+		if((g_c02d_int_crom & 0x10) && !INTCX) {
+			// Slot 4 is set to Your Card
+			mockingboard_write(loc, val, dcycs);
+			return;
+		}
+		return;
 	case 8: case 9: case 0xa: case 0xb: case 0xc: case 0xd: case 0xe:
 		UNIMPL_WRITE;
 	case 0xf:
@@ -2187,7 +2206,6 @@ get_slow_mem(word32 loc, int duff_cycles)
 	int val;
 
 	loc = loc & 0x1ffff;
-	
 	if((loc &0xf000) == 0xc000) {
 		return(io_read(loc &0xfff, duff_cycles));
 	}

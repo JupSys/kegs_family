@@ -1,7 +1,18 @@
-
 #ifdef INCLUDE_IWM_RCSID_C
-const char rcsdif_iwm_35_525_h[] = "@(#)$KmKId: iwm_35_525.h,v 1.14 2004-12-01 19:45:02-05 kentd Exp $";
+const char rcsdif_iwm_35_525_h[] = "@(#)$KmKId: iwm_35_525.h,v 1.18 2020-07-12 19:48:39+00 kentd Exp $";
 #endif
+
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002-2020 by Kent Dickey		*/
+/*									*/
+/*	This code is covered by the GNU GPL v3				*/
+/*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
+/*	This program is provided with no warranty			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
 int
 IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
@@ -47,7 +58,7 @@ IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
 	cycs_passed = (int)dcycs_passed;
 
 	if(track_len == 0) {
-		ret = (cycs_passed & 0x7f) + 0x80;
+		ret = (cycs_passed & 0x7f) | 0x80;
 		iwm_printf("Reading c0ec, track_len 0, returning %02x\n", ret);
 		return ret;
 	}
@@ -210,13 +221,12 @@ void
 IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 {
 	double	dcycs_last_read;
-	word32	bits_read;
 	word32	mask;
 	word32	prev_val;
 	double	dcycs_this_nib;
 	double	dcycs_passed;
 	int	sdiff;
-	int	prev_bits;
+	int	bits_read, prev_bits;
 
 	if(dsk->fd < 0 || dsk->trks == 0) {
 		halt_printf("Tried to write to type: %d, drive: %d, fd: %d!\n",
@@ -238,14 +248,13 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 		/* Activate slow write emulation mode */
 		g_dcycs_end_emul_wr = dcycs + 64.0;
 		if(!g_slow_525_emul_wr) {
-			set_halt(HALT_EVENT);
+			engine_recalc_events();
 			g_slow_525_emul_wr = 1;
 		}
 	} else {
 		/* disable slow writes on 3.5" drives */
 		if(g_slow_525_emul_wr) {
-			set_halt(HALT_EVENT);
-			printf("HACK3: g_slow_525_emul_wr set to 0\n");
+			engine_recalc_events();
 			g_slow_525_emul_wr = 0;
 		}
 	}
@@ -264,7 +273,7 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 	if(fast_disk_emul) {
 		bits_read = 8;
 	}
-	
+
 	dcycs_this_nib = bits_read * (2 * IWM_CYC_MULT);
 
 	if(fast_disk_emul) {
@@ -272,7 +281,7 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 	}
 
 	if(prev_bits > 0) {
-		while((prev_val & 0x80) == 0 && bits_read > 0) {
+		while(((prev_val & 0x80) == 0) && (bits_read > 0)) {
 			/* previous byte needs some bits */
 			mask = mask >> 1;
 			prev_val = (prev_val << 1) + ((val & mask) !=0);
@@ -288,7 +297,7 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 		if(((prev_val & 0x80) == 0) && (prev_bits < 10)) {
 			/* special case: we still don't have enough to go */
 			iwm_printf("iwm_write: zip2: %02x, %d, left:%02x,%d\n",
-					prev_val, prev_bits, val,bits_read);
+					prev_val, prev_bits, val, bits_read);
 			val = prev_val;
 			bits_read = prev_bits;
 		} else {
@@ -297,12 +306,12 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 			disk_nib_out(dsk, prev_val, prev_bits);
 		}
 	} else if(val & 0x80) {
-		iwm_printf("iwm_write: new: %02x, %d\n", val,bits_read);
+		iwm_printf("iwm_write: new: %02x, %d\n", val, bits_read);
 		disk_nib_out(dsk, val, bits_read);
 		bits_read = 0;
 	} else {
 		iwm_printf("iwm_write: zip: %02x, %d, left:%02x,%d\n",
-			prev_val, prev_bits, val,bits_read);
+			prev_val, prev_bits, val, bits_read);
 	}
 
 	iwm.previous_write_val = val;
