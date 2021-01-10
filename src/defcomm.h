@@ -1,5 +1,5 @@
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$KmKId: defcomm.h,v 1.99 2020-07-01 21:15:51+00 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$KmKId: defcomm.h,v 1.100 2020-12-13 17:42:09+00 kentd Exp $";
 #endif
 
 /************************************************************************/
@@ -119,7 +119,6 @@ const char rcsdif_defcomm_h[] = "@(#)$KmKId: defcomm.h,v 1.99 2020-07-01 21:15:5
 #define BIT_ALL_STAT_TEXT_COLOR		16	/* 4 bits */
 						/* Text must be just above */
 						/* bg to match c022 reg */
-#define BIT_ALL_STAT_A2VID_PALETTE	20	/* 4 bits */
 
 #define ALL_STAT_SUPER_HIRES		(1 << (BIT_ALL_STAT_SUPER_HIRES))
 #define ALL_STAT_TEXT			(1 << (BIT_ALL_STAT_TEXT))
@@ -135,7 +134,6 @@ const char rcsdif_defcomm_h[] = "@(#)$KmKId: defcomm.h,v 1.99 2020-07-01 21:15:5
 #define ALL_STAT_BG_COLOR		(0xf << (BIT_ALL_STAT_BG_COLOR))
 #define ALL_STAT_ALTCHARSET		(1 << (BIT_ALL_STAT_ALTCHARSET))
 #define ALL_STAT_FLASH_STATE		(1 << (BIT_ALL_STAT_FLASH_STATE))
-#define ALL_STAT_A2VID_PALETTE		(0xf << (BIT_ALL_STAT_A2VID_PALETTE))
 
 #define BORDER_WIDTH		32
 

@@ -1,4 +1,4 @@
-const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.134 2020-12-11 21:07:12+00 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.135 2020-12-12 18:44:27+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -1739,7 +1739,7 @@ doc_read_c030(double dcycs)
 
 	doc_printf("read c030, num this vbl: %04x\n", num);
 
-	return 0;
+	return float_bus(dcycs);
 }
 
 int

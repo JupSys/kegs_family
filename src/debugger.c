@@ -1,8 +1,8 @@
-const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.22 2020-12-11 21:06:48+00 kentd Exp $";
+const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.28 2021-01-10 05:17:38+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -23,8 +23,6 @@ const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.22 2020-12-11 21:06:
 #define PRINTF_BUF_SIZE		239
 #define DEBUG_ENTRY_MAX_CHARS	80
 
-typedef void (Dbg_fn)(const char *str);
-
 STRUCT(Debug_entry) {
 	byte str_buf[DEBUG_ENTRY_MAX_CHARS];
 };
@@ -41,6 +39,7 @@ int	g_debug_lines_max = 1024*1024;
 int	g_debug_lines_view = -1;
 int	g_debug_lines_viewable_lines = 20;
 int	g_debugwin_changed = 1;
+int	g_debug_to_stdout = 1;
 
 extern byte *g_memory_ptr;
 extern byte *g_slow_memory_ptr;
@@ -53,6 +52,7 @@ extern int g_a2_key_to_ascii[][4];
 extern Kimage g_debugwin_kimage;
 
 extern int g_config_control_panel;
+extern word32 g_mem_size_total;
 
 int	g_num_breakpoints = 0;
 Break_point g_break_pts[MAX_BREAK_POINTS];
@@ -60,6 +60,7 @@ Break_point g_break_pts[MAX_BREAK_POINTS];
 extern int g_irq_pending;
 
 extern Engine_reg engine;
+extern double g_fcycles_end;
 
 int g_stepping = 0;
 
@@ -76,22 +77,26 @@ word32	g_a4bank = 0;
 
 #define	MAX_CMD_BUFFER		229
 
+#define PC_LOG_LEN		(2*1024*1024)
+
+Pc_log g_pc_log_array[PC_LOG_LEN + 2];
+Data_log g_data_log_array[PC_LOG_LEN + 2];
+
+word32	g_log_pc_enable = 0;
+Pc_log	*g_log_pc_ptr = &(g_pc_log_array[0]);
+Pc_log	*g_log_pc_start_ptr = &(g_pc_log_array[0]);
+Pc_log	*g_log_pc_end_ptr = &(g_pc_log_array[PC_LOG_LEN]);
+
+Data_log *g_log_data_ptr = &(g_data_log_array[0]);
+Data_log *g_log_data_start_ptr = &(g_data_log_array[0]);
+Data_log *g_log_data_end_ptr = &(g_data_log_array[PC_LOG_LEN]);
+
 int	g_quit_sim_now = 0;
 char	g_cmd_buffer[MAX_CMD_BUFFER + 2] = { 0 };
 int	g_cmd_buffer_len = 2;
 
 #define MAX_DISAS_BUF		150
 char g_disas_buffer[MAX_DISAS_BUF];
-
-STRUCT(Dbg_longcmd) {
-	const char *str;
-	Dbg_fn	*fnptr;
-};
-
-Dbg_longcmd g_debug_longcmds[] = {
-	{ "bp",		debug_bp },
-	{ 0, 0 }
-};
 
 void
 debugger_init()
@@ -113,6 +118,20 @@ debugger_run_16ms()
 	g_dbg_new_halt = 0;
 	// printf("debugger_run_16ms: g_halt_sim:%d\n", g_halt_sim);
 	return 0;
+}
+
+void
+dbg_log_info(double dcycs, word32 info1, word32 info2)
+{
+	g_log_data_ptr->dcycs = dcycs;
+	g_log_data_ptr->stat = 0;
+	g_log_data_ptr->addr = info1;
+	g_log_data_ptr->val = info2;
+	g_log_data_ptr->size = 100;
+	g_log_data_ptr++;
+	if(g_log_data_ptr >= g_log_data_end_ptr) {
+		g_log_data_ptr = g_log_data_start_ptr;
+	}
 }
 
 void
@@ -219,7 +238,7 @@ void
 debugger_redraw_screen(Kimage *kimage_ptr)
 {
 	int	line, vid_line, back, border_top, save_pos, num, lines_done;
-	int	save_view;
+	int	save_view, save_to_stdout;
 	int	i;
 
 	if((g_debugwin_changed == 0) || (kimage_ptr->active == 0)) {
@@ -233,10 +252,13 @@ debugger_redraw_screen(Kimage *kimage_ptr)
 	g_cmd_buffer[1] = ' ';
 	g_cmd_buffer[g_cmd_buffer_len] = 0xa0;		// Cursor: inverse space
 	g_cmd_buffer[g_cmd_buffer_len+1] = 0;
+	save_to_stdout = g_debug_to_stdout;
+	g_debug_to_stdout = 0;
 	dbg_printf("%s\n", &g_cmd_buffer[0]);
 	g_cmd_buffer[g_cmd_buffer_len] = 0;
 	dbg_printf("g_halt_sim:%02x\n", g_halt_sim);
 	border_top = 8;
+	g_debug_to_stdout = save_to_stdout;
 
 	vid_line = (((kimage_ptr->a2_height - 2*border_top) / 16) * 8) - 1;
 	num = g_debug_lines_pos - save_pos;
@@ -289,6 +311,35 @@ debug_draw_debug_line(Kimage *kimage_ptr, int line, int vid_line)
 		vid_line--;
 	}
 }
+
+Dbg_longcmd g_debug_bp_clear[] = {
+	{ "all",	debug_bp_clear_all,	0,
+					"clear all breakpoints" },
+	{ 0, 0 }
+};
+Dbg_longcmd g_debug_bp[] = {
+	{ "set",	debug_bp_set,	0,
+					"Set breakpoint: ADDR or ADDR0-ADDR1" },
+	{ "clear",	debug_bp_clear,	&g_debug_bp_clear[0],
+				"Clear breakpoint: ADDR OR ADDR0-ADDR1"},
+	{ 0, 0 }
+};
+
+Dbg_longcmd g_debug_logpc[] = {
+	{ "on",		debug_logpc_on,	0, "Turn on logging of pc and data" },
+	{ "off",	debug_logpc_off,0, "Turn off logging of pc and data" },
+	{ "save",	debug_logpc_save,0, "logpc save FILE: save to file" },
+	{ 0, 0 }
+};
+
+// Main table of commands
+Dbg_longcmd g_debug_longcmds[] = {
+	{ "help",	debug_help,	0,	"Help" },
+	{ "bp",		debug_bp,	&g_debug_bp[0],
+					"bp ADDR: sets breakpoint on addr" },
+	{ "logpc",	debug_logpc,	&g_debug_logpc[0], "Log PC" },
+	{ 0, 0 }
+};
 
 void
 debugger_help()
@@ -348,45 +399,133 @@ debugger_help()
 }
 
 void
-do_debug_cmd(const char *in_str)
+dbg_help_show_strs(int help_depth, const char *str, const char *help_str)
+{
+	const char *blank_str, *pre_str, *post_str;
+	int	column, len, blank_len, pre_len, post_len;
+
+	// Indent by 3*help_depth chars, then output str, then hit
+	//  column 14, then output help_str.  This can be done in just 2-3
+	//  lines, but I made it longer and clearer to avoid any "overflow"
+	//  cases
+	if(help_str == 0) {
+		return;
+	}
+	blank_str = "        " "        " "        ";
+	blank_len = (int)strlen(blank_str);		// should be >=17
+	column = 17;
+	len = strlen(str);
+	if(help_depth < 0) {
+		help_depth = 0;
+	}
+	pre_str = blank_str;
+	pre_len = 3 * help_depth;
+	if(pre_len < blank_len) {
+		pre_str = blank_str + blank_len - pre_len;
+	}
+	post_str = "";
+	post_len = column - pre_len - len;
+	if((post_len >= 1) && (post_len < blank_len)) {
+		post_str = blank_str + blank_len - post_len;
+	}
+	dbg_printf("%s%s%s: %s\n", pre_str, str, post_str, help_str);
+}
+
+const char *
+debug_find_cmd_in_table(const char *line_ptr, Dbg_longcmd *longptr,
+							int help_depth)
 {
 	Dbg_fn	*fnptr;
-	const char *line_ptr;
-	const char *str;
-	int	slot_drive, track, osc, ret_val, mode, old_mode, got_num, len;
-	int	pos, c;
+	Dbg_longcmd *subptr;
+	const char *str, *newstr;
+	int	len, c;
 	int	i;
-
-	mode = 0;
-	old_mode = 0;
-
-	dbg_printf("*%s\n", in_str);
-	line_ptr = in_str;
 
 	// See if the command is from the longcmd list
 	while(*line_ptr == ' ') {
 		line_ptr++;		// eat spaces
 	}
-	pos = 0;
+	// Output "   str     :" where : is at column 14 always
+	printf("dfcit: %s, help_depth:%d\n", line_ptr, help_depth);
 	for(i = 0; i < 1000; i++) {
 		// Provide a limit to avoid hang if table not terminated right
-		str = g_debug_longcmds[pos].str;
-		fnptr = g_debug_longcmds[pos].fnptr;
-		if(!str || !fnptr) {		// End of table
+		str = longptr[i].str;
+		fnptr = longptr[i].fnptr;
+		if(!str) {			// End of table
 			break;			// No match found
 		}
-		len = (int)strlen(str);
-		if(strncmp(line_ptr, str, len) == 0) {
-			// Ensure next char is either a space, or 0
-			// Let's us avoid commands which are prefixes, or
-			//  which are old Apple II monitor hex+commands
-			c = line_ptr[len];
-			if((c == 0) || (c == ' ')) {
-				(*fnptr)(in_str + len);
-				return;
-			}
+		if(help_depth < 0) {
+			// Print the help string for all entries in this table
+			dbg_help_show_strs(-1 - help_depth, str,
+							longptr[i].help_str);
+			continue;
 		}
-		pos++;
+		len = (int)strlen(str);
+		if(strncmp(line_ptr, str, len) != 0) {
+			continue;		// Not a match
+		}
+		// Ensure next char is either a space, or 0
+		// Let's us avoid commands which are prefixes, or
+		//  which are old Apple II monitor hex+commands
+		c = line_ptr[len];
+		if((c != 0) && (c != ' ')) {
+			continue;		// Not valid
+		}
+		if(help_depth) {
+			dbg_help_show_strs(help_depth, str,
+							longptr[i].help_str);
+		}
+		subptr = longptr[i].subptr;
+		// Try a subcmd first
+		newstr = line_ptr + len;
+		if(subptr != 0) {
+			printf("Got cmd %s as a match, now try subtab on %s\n",
+							str, newstr);
+			if(help_depth) {
+				help_depth++;
+			}
+			newstr = debug_find_cmd_in_table(newstr, subptr,
+								help_depth);
+			printf("debug_find_cmd_in_table ret: %p\n", newstr);
+		}
+		if((newstr == 0) || help_depth) {
+			return 0;
+		}
+		printf("  newstr: %s\n", newstr);
+		if((newstr != 0) && (fnptr != 0)) {
+			(*fnptr)(line_ptr + len);
+			return 0;		// Success
+		}
+	}
+	if(help_depth >= 1) {
+		// No subcommands found, print out all entries in this table
+		debug_find_cmd_in_table(line_ptr, longptr, -1 - help_depth);
+		return 0;
+	}
+	return line_ptr;
+}
+
+void
+do_debug_cmd(const char *in_str)
+{
+	const char *line_ptr;
+	const char *newstr;
+	int	slot_drive, track, osc, ret_val, mode, old_mode, got_num;
+	int	save_to_stdout;
+
+	mode = 0;
+	old_mode = 0;
+
+	save_to_stdout = g_debug_to_stdout;
+	g_debug_to_stdout = 1;
+	dbg_printf("*%s\n", in_str);
+	line_ptr = in_str;
+
+	// See if the command is from the longcmd list
+	newstr = debug_find_cmd_in_table(in_str, &(g_debug_longcmds[0]), 0);
+	if(newstr == 0) {
+		g_debug_to_stdout = save_to_stdout;
+		return;			// Command found get out
 	}
 
 	// If we get here, parse an Apple II monitor like command:
@@ -530,10 +669,6 @@ do_debug_cmd(const char *in_str)
 			show_bankptrs_bank0rdwr();
 			smartport_error();
 			break;
-		case 'P':
-			dbg_printf("Show pc_log!\n");
-			show_pc_log();
-			break;
 		case 'M':
 			show_pmhz();
 			mockingboard_show(got_num, g_a1);
@@ -564,7 +699,8 @@ do_debug_cmd(const char *in_str)
 			if(got_num) {
 				dbg_printf("got_num: %d, a2bank: %x, a2: %x\n",
 						got_num, g_a2bank, g_a2);
-				delete_bp((g_a2bank << 16) + g_a2);
+				delete_bp((g_a2bank << 16) + g_a2,
+						(g_a2bank << 16) + g_a2);
 			}
 			break;
 		case 'g':
@@ -606,6 +742,7 @@ do_debug_cmd(const char *in_str)
 		case 0:			// The final null char
 			if(old_mode == 's') {
 				mode = do_blank(mode, old_mode);
+				g_debug_to_stdout = save_to_stdout;
 				return;
 			}
 			if(line_ptr == &in_str[1]) {
@@ -617,10 +754,12 @@ do_debug_cmd(const char *in_str)
 					mode = do_blank(mode, old_mode);
 				}
 			}
+			g_debug_to_stdout = save_to_stdout;
 			return;			// Get out, all done
 			break;
 		default:
 			dbg_printf("\nUnrecognized command: %s\n", in_str);
+			g_debug_to_stdout = save_to_stdout;
 			return;
 		}
 	}
@@ -648,6 +787,10 @@ show_one_toolset(FILE *toolfile, int toolnum, word32 addr)
 	num_routs = dis_get_memory_ptr(addr);
 	fprintf(toolfile, "Tool 0x%02x, table: 0x%06x, num_routs:%03x\n",
 		toolnum, addr, num_routs);
+	if((addr < 0x10000) || (num_routs > 0x100)) {
+		fprintf(toolfile, "addr in page 0, or num_routs too large\n");
+		return;
+	}
 
 	for(i = 1; i < num_routs; i++) {
 		rout_addr = dis_get_memory_ptr(addr + 4*i);
@@ -675,6 +818,10 @@ show_toolset_tables(word32 a2bank, word32 addr)
 	fprintf(toolfile, "There are 0x%02x tools using ptr at %06x\n",
 			num_tools, addr);
 
+	if(num_tools > 40) {
+		fprintf(toolfile, "Too many tools, aborting\n");
+		num_tools = 0;
+	}
 	for(i = 1; i < num_tools; i++) {
 		tool_addr = dis_get_memory_ptr(addr + 4*i);
 		show_one_toolset(toolfile, i, tool_addr);
@@ -719,7 +866,44 @@ debug_getnum(const char **str_ptr)
 }
 
 void
+debug_help(const char *str)
+{
+	dbg_printf("Help:\n");
+	(void)debug_find_cmd_in_table(str, &(g_debug_longcmds[0]), 1);
+}
+
+void
 debug_bp(const char *str)
+{
+	// bp without a following set/clear command.  Set a breakpoint if
+	//  an address range follows, otherwise just print current breakpoints
+	debug_bp_setclr(str, 0);
+}
+
+void
+debug_bp_set(const char *str)
+{
+	debug_bp_setclr(str, 1);
+}
+
+void
+debug_bp_clear(const char *str)
+{
+	debug_bp_setclr(str, 2);
+}
+
+void
+debug_bp_clear_all(const char *str)
+{
+	if(g_num_breakpoints) {
+		g_num_breakpoints = 0;
+		setup_pageinfo();
+		dbg_printf("Deleted all breakpoints\n");
+	}
+}
+
+void
+debug_bp_setclr(const char *str, int is_set_clear)
 {
 	word32	addr, end_addr;
 
@@ -740,7 +924,162 @@ debug_bp(const char *str)
 			end_addr = addr;
 		}
 	}
-	set_bp(addr, end_addr);
+	if(is_set_clear == 2) {			// clear
+		delete_bp(addr, end_addr);
+	} else {				// set, or nothing
+		set_bp(addr, end_addr);
+	}
+}
+
+void
+debug_logpc(const char *str)
+{
+	dbg_printf("logpc enable:%d, cur offset:%08x\n", g_log_pc_enable,
+			g_log_pc_ptr - g_log_pc_start_ptr);
+}
+
+void
+debug_logpc_on(const char *str)
+{
+	g_log_pc_enable = 1;
+	g_fcycles_end = 0;
+	dbg_printf("Enabled logging of PC and data accesses\n");
+}
+
+void
+debug_logpc_off(const char *str)
+{
+	g_log_pc_enable = 0;
+	g_fcycles_end = 0;
+	dbg_printf("Disabled logging of PC and data accesses\n");
+}
+void
+debug_logpc_out_data(FILE *pcfile, Data_log *log_data_ptr, double start_dcycs)
+{
+	char	*str, *shadow_str;
+	word64	lstat, offset64, offset64slow, addr64;
+	word32	wstat, addr, size;
+
+	addr = log_data_ptr->addr;
+	lstat = (unsigned long)(log_data_ptr->stat);
+	wstat = lstat & 0xff;
+	addr64 = lstat - wstat + (addr & 0xff);
+	offset64 = addr64 - (unsigned long)&(g_memory_ptr[0]);
+	str = "IO";
+	shadow_str = "";
+	if((wstat & BANK_SHADOW) || (wstat & BANK_SHADOW2)) {
+		shadow_str = "SHADOWED";
+	}
+	size = log_data_ptr->size;
+	if(size >= 100) {
+		fprintf(pcfile, "INFO %08x %08x %9.2f\n", log_data_ptr->addr,
+			log_data_ptr->val, log_data_ptr->dcycs - start_dcycs);
+	} else {
+		offset64slow = addr64 - (unsigned long)&(g_slow_memory_ptr[0]);
+		if(offset64 < g_mem_size_total) {
+			str = "mem";
+		} else if(offset64slow < 0x20000) {
+			str = "slow_mem";
+			offset64 = offset64slow;
+		} else {
+			str = "IO";
+			offset64 = offset64 & 0xff;
+		}
+		fprintf(pcfile, "DATA set %06x = %06x (%d) %9.2f, "
+				"%s[%06llx] %s\n", addr, log_data_ptr->val,
+				size, log_data_ptr->dcycs - start_dcycs, str,
+				offset64 & 0xffffffULL, shadow_str);
+	}
+}
+
+void
+debug_logpc_save(const char *cmd_str)
+{
+	FILE	*pcfile;
+	Pc_log	*log_pc_ptr;
+	Data_log *log_data_ptr;
+	char	*str;
+	double	dcycs, start_dcycs;
+	word32	instr, psr, acc, xreg, yreg, stack, direct, dbank, kpc;
+	int	data_wrap, accsize, xsize;
+	int	i;
+
+	pcfile = fopen("pc_log_out", "w");
+	if(pcfile == 0) {
+		fprintf(stderr,"fopen failed...errno: %d\n", errno);
+		exit(2);
+	}
+
+	log_pc_ptr = g_log_pc_ptr;
+	log_data_ptr = g_log_data_ptr;
+#if 0
+	fprintf(pcfile, "current pc_log_ptr: %p, start: %p, end: %p\n",
+		log_pc_ptr, log_pc_start_ptr, log_pc_end_ptr);
+#endif
+
+	start_dcycs = log_pc_ptr->dcycs;
+	dcycs = start_dcycs;
+
+	data_wrap = 0;
+	/* find first data entry */
+	while(data_wrap < 2 && (log_data_ptr->dcycs < dcycs)) {
+		log_data_ptr++;
+		if(log_data_ptr >= g_log_data_end_ptr) {
+			log_data_ptr = g_log_data_start_ptr;
+			data_wrap++;
+		}
+	}
+	fprintf(pcfile, "start_dcycs: %9.2f\n", start_dcycs);
+
+	for(i = 0; i < PC_LOG_LEN; i++) {
+		dcycs = log_pc_ptr->dcycs;
+		while((data_wrap < 2) && (log_data_ptr->dcycs <= dcycs) &&
+					(log_data_ptr->dcycs >= start_dcycs)) {
+			debug_logpc_out_data(pcfile, log_data_ptr, start_dcycs);
+			if(log_data_ptr->dcycs == 0) {
+				break;
+			}
+			log_data_ptr++;
+			if(log_data_ptr >= g_log_data_end_ptr) {
+				log_data_ptr = g_log_data_start_ptr;
+				data_wrap++;
+			}
+		}
+		dbank = (log_pc_ptr->dbank_kpc >> 24) & 0xff;
+		kpc = log_pc_ptr->dbank_kpc & 0xffffff;
+		instr = log_pc_ptr->instr;
+		psr = (log_pc_ptr->psr_acc >> 16) & 0xffff;
+		acc = log_pc_ptr->psr_acc & 0xffff;
+		xreg = (log_pc_ptr->xreg_yreg >> 16) & 0xffff;
+		yreg = log_pc_ptr->xreg_yreg & 0xffff;
+		stack = (log_pc_ptr->stack_direct >> 16) & 0xffff;
+		direct = log_pc_ptr->stack_direct & 0xffff;
+
+		accsize = 2;
+		xsize = 2;
+		if(psr & 0x20) {
+			accsize = 1;
+		}
+		if(psr & 0x10) {
+			xsize = 1;
+		}
+
+		str = do_dis(kpc, accsize, xsize, 1, instr, 0);
+		fprintf(pcfile, "%06x: A:%04x X:%04x Y:%04x P:%03x "
+			"S:%04x D:%04x B:%02x %9.2f %s\n", i,
+			acc, xreg, yreg, psr, stack, direct, dbank,
+			(dcycs - start_dcycs), str);
+
+		if(dcycs == 0) {
+			break;
+		}
+		log_pc_ptr++;
+		if(log_pc_ptr >= g_log_pc_end_ptr) {
+			log_pc_ptr = g_log_pc_start_ptr;
+		}
+	}
+
+	fclose(pcfile);
 }
 
 void
@@ -780,32 +1119,31 @@ show_bp()
 }
 
 void
-delete_bp(word32 addr)
+delete_bp(word32 addr, word32 end_addr)
 {
-	int	count;
-	int	hit;
-	int	i;
+	int	count, hit;
+	int	i, j;
 
 	dbg_printf("About to delete BP at %06x\n", addr);
 	count = g_num_breakpoints;
 
 	hit = -1;
-	for(i = 0; i < count; i++) {
-		if((g_break_pts[i].start_addr <= addr) &&
-					(g_break_pts[i].end_addr >= addr)) {
-			hit = i;
-			break;
+	for(i = count - 1; i >= 0; i--) {
+		if((g_break_pts[i].start_addr > end_addr) ||
+					(g_break_pts[i].end_addr < addr)) {
+			continue;		// Not this entry
 		}
+		hit = i;
+		dbg_printf("Deleting brkpoint #0x%02x\n", hit);
+		for(j = i+1; j < count; j++) {
+			g_break_pts[j-1] = g_break_pts[j];
+		}
+		count--;
 	}
-
+	g_num_breakpoints = count;
 	if(hit < 0) {
 		dbg_printf("Breakpoint not found!\n");
 	} else {
-		dbg_printf("Deleting brkpoint #0x%02x\n", hit);
-		for(i = hit+1; i < count; i++) {
-			g_break_pts[i-1] = g_break_pts[i];
-		}
-		g_num_breakpoints = count - 1;
 		setup_pageinfo();
 	}
 
@@ -1432,6 +1770,9 @@ debug_add_output_string(char *in_str, int len)
 
 	tries = 0;
 	ret = 0;
+	if(g_debug_to_stdout) {
+		puts(in_str);		// Send output to stdout, too
+	}
 	while((len > 0) || (tries == 0)) {
 		// printf("DEBUG: adding str: %s, len:%d, ret:%d\n", in_str,
 		//						len, ret);

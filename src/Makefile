@@ -1,4 +1,4 @@
-# $KmKId: makefile,v 1.39 2020-12-11 21:52:48+00 kentd Exp $
+# $KmKId: makefile,v 1.40 2021-01-10 20:20:19+00 kentd Exp $
 
 XOPTS_WIN = -Wall -fomit-frame-pointer -march=pentium
 
@@ -26,12 +26,15 @@ kegsmac: $(OBJECTS) compile_time.o $(SWIFTOBJS)
 	clang $(CCOPTS) $(LDOPTS) $(OBJECTS) $(SWIFTOBJS) compile_time.o \
 		$(LDFLAGS) -o kegsmac $(EXTRA_LIBS) \
 		-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
+		-Xlinker -rpath -Xlinker @executable_path/../Frameworks \
 		-Xlinker -rpath -Xlinker /usr/lib/swift \
 		-Xlinker -no_deduplicate -fobjc-link-runtime \
 		-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx \
 		-L/usr/lib/swift
 	mkdir -p ../KEGSMAC.app/Contents/Resources/Base.lproj/
 	mkdir -p ../KEGSMAC.app/Contents/MacOS
+	mkdir -p ../KEGSMAC.app/Contents/Frameworks
+	PERL cp_kegs_libs kegsmac /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx ../KEGSMAC.app/Contents/Frameworks
 	mv kegsmac ../KEGSMAC.app/Contents/MacOS/KEGSMAC
 	echo "APPL????" > ../KEGSMAC.app/Contents/PkgInfo
 	cp -f Info.plist ../KEGSMAC.app/Contents/

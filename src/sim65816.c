@@ -1,8 +1,8 @@
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.403 2020-12-11 22:09:31+00 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.409 2021-01-06 06:33:31+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -17,8 +17,6 @@ const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.403 2020-12-11 22:09
 #define INCLUDE_RCSID_C
 #include "defc.h"
 #undef INCLUDE_RCSID_C
-
-#define PC_LOG_LEN	(2*1024*1024)
 
 double g_dtime_sleep = 0;
 double g_dtime_in_sleep = 0;
@@ -98,7 +96,7 @@ int	g_serial_out_masking = 0;
 int	g_serial_modem[2] = { 0, 1 };
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "1.03";
+const char g_kegs_version_str[] = "1.04";
 
 #define START_DCYCS	(0.0)
 
@@ -156,17 +154,6 @@ void *g_memory_alloc_ptr = 0;		/* for freeing memory area */
 
 Page_info page_info_rd_wr[2*65536 + PAGE_INFO_PAD_SIZE];
 
-Pc_log g_pc_log_array[PC_LOG_LEN + 2];
-Data_log g_data_log_array[PC_LOG_LEN + 2];
-
-Pc_log	*g_log_pc_ptr = &(g_pc_log_array[0]);
-Pc_log	*g_log_pc_start_ptr = &(g_pc_log_array[0]);
-Pc_log	*g_log_pc_end_ptr = &(g_pc_log_array[PC_LOG_LEN]);
-
-Data_log *g_log_data_ptr = &(g_data_log_array[0]);
-Data_log *g_log_data_start_ptr = &(g_data_log_array[0]);
-Data_log *g_log_data_end_ptr = &(g_data_log_array[PC_LOG_LEN]);
-
 word32	g_word32_tmp = 0;
 int	g_force_depth = -1;
 int	g_use_shmem = 1;
@@ -198,17 +185,6 @@ extern int g_doc_vol;
 
 extern int g_status_refresh_needed;
 
-#define LOG_DATA_INFO(dcycs, info1, info2)		\
-		g_log_data_ptr->dcycs = dcycs;	\
-		g_log_data_ptr->stat = 0;				\
-		g_log_data_ptr->addr = info1;				\
-		g_log_data_ptr->val = info2;				\
-		g_log_data_ptr->size = 100;				\
-		g_log_data_ptr++;					\
-		if(g_log_data_ptr >= g_log_data_end_ptr) {		\
-			g_log_data_ptr = g_log_data_start_ptr;		\
-		}
-
 int
 sim_get_force_depth()
 {
@@ -226,130 +202,6 @@ sim_set_use_shmem(int use_shmem)
 {
 	g_use_shmem = use_shmem;
 }
-
-void
-show_log_data(FILE *pcfile, Data_log *log_data_ptr, double start_dcycs)
-{
-	char	*str, *shadow_str;
-	word64	lstat, offset64, offset64slow, addr64;
-	word32	wstat, addr, size;
-
-	addr = log_data_ptr->addr;
-	lstat = (unsigned long)(log_data_ptr->stat);
-	wstat = lstat & 0xff;
-	addr64 = lstat - wstat + (addr & 0xff);
-	offset64 = addr64 - (unsigned long)&(g_memory_ptr[0]);
-	str = "IO";
-	shadow_str = "";
-	if((wstat & BANK_SHADOW) || (wstat & BANK_SHADOW2)) {
-		shadow_str = "SHADOWED";
-	}
-	size = log_data_ptr->size;
-	if(size >= 100) {
-		fprintf(pcfile, "INFO %08x %08x %9.2f\n", log_data_ptr->addr,
-			log_data_ptr->val, log_data_ptr->dcycs - start_dcycs);
-	} else {
-		offset64slow = addr64 - (unsigned long)&(g_slow_memory_ptr[0]);
-		if(offset64 < g_mem_size_total) {
-			str = "mem";
-		} else if(offset64slow < 0x20000) {
-			str = "slow_mem";
-			offset64 = offset64slow;
-		} else {
-			str = "IO";
-			offset64 = offset64 & 0xff;
-		}
-		fprintf(pcfile, "DATA set %06x = %06x (%d) %9.2f, "
-				"%s[%06llx] %s\n", addr, log_data_ptr->val,
-				size, log_data_ptr->dcycs - start_dcycs, str,
-				offset64 & 0xffffffULL, shadow_str);
-	}
-}
-
-void
-show_pc_log()
-{
-	FILE	*pcfile;
-	Pc_log	*log_pc_ptr;
-	Data_log *log_data_ptr;
-	char	*str;
-	double	dcycs, start_dcycs;
-	word32	instr, psr, acc, xreg, yreg, stack, direct, dbank, kpc;
-	int	data_wrap, accsize, xsize;
-	int	i;
-
-	pcfile = fopen("pc_log_out", "w");
-	if(pcfile == 0) {
-		fprintf(stderr,"fopen failed...errno: %d\n", errno);
-		exit(2);
-	}
-
-	log_pc_ptr = g_log_pc_ptr;
-	log_data_ptr = g_log_data_ptr;
-#if 0
-	fprintf(pcfile, "current pc_log_ptr: %p, start: %p, end: %p\n",
-		log_pc_ptr, log_pc_start_ptr, log_pc_end_ptr);
-#endif
-
-	start_dcycs = log_pc_ptr->dcycs;
-	dcycs = start_dcycs;
-
-	data_wrap = 0;
-	/* find first data entry */
-	while(data_wrap < 2 && (log_data_ptr->dcycs < dcycs)) {
-		log_data_ptr++;
-		if(log_data_ptr >= g_log_data_end_ptr) {
-			log_data_ptr = g_log_data_start_ptr;
-			data_wrap++;
-		}
-	}
-	fprintf(pcfile, "start_dcycs: %9.2f\n", start_dcycs);
-
-	for(i = 0; i < PC_LOG_LEN; i++) {
-		dcycs = log_pc_ptr->dcycs;
-		while((data_wrap < 2) && (log_data_ptr->dcycs <= dcycs) &&
-					(log_data_ptr->dcycs >= start_dcycs)) {
-			show_log_data(pcfile, log_data_ptr, start_dcycs);
-			log_data_ptr++;
-			if(log_data_ptr >= g_log_data_end_ptr) {
-				log_data_ptr = g_log_data_start_ptr;
-				data_wrap++;
-			}
-		}
-		dbank = (log_pc_ptr->dbank_kpc >> 24) & 0xff;
-		kpc = log_pc_ptr->dbank_kpc & 0xffffff;
-		instr = log_pc_ptr->instr;
-		psr = (log_pc_ptr->psr_acc >> 16) & 0xffff;;
-		acc = log_pc_ptr->psr_acc & 0xffff;;
-		xreg = (log_pc_ptr->xreg_yreg >> 16) & 0xffff;;
-		yreg = log_pc_ptr->xreg_yreg & 0xffff;;
-		stack = (log_pc_ptr->stack_direct >> 16) & 0xffff;;
-		direct = log_pc_ptr->stack_direct & 0xffff;;
-
-		accsize = 2;
-		xsize = 2;
-		if(psr & 0x20) {
-			accsize = 1;
-		}
-		if(psr & 0x10) {
-			xsize = 1;
-		}
-
-		str = do_dis(kpc, accsize, xsize, 1, instr, 0);
-		fprintf(pcfile, "%04x: A:%04x X:%04x Y:%04x P:%03x "
-			"S:%04x D:%04x B:%02x %9.2f %s\n", i,
-			acc, xreg, yreg, psr, stack, direct, dbank,
-			(dcycs - start_dcycs), str);
-
-		log_pc_ptr++;
-		if(log_pc_ptr >= g_log_pc_end_ptr) {
-			log_pc_ptr = g_log_pc_start_ptr;
-		}
-	}
-
-	fclose(pcfile);
-}
-
 
 #define TOOLBOX_LOG_LEN		64
 
@@ -1598,7 +1450,7 @@ run_a2_one_vbl()
 		} else if(zip_speed) {
 			fspeed_mult = g_zip_pmhz;
 			fplus_ptr = &g_recip_projected_pmhz_zip;
-		} else if(fast && !iwm_1 && !(limit_speed == 1)) {
+		} else if(fast && !iwm_1 && (iwm_25 || (limit_speed != 1))) {
 			fspeed_mult = 2.5;
 			fplus_ptr = &g_recip_projected_pmhz_fast;
 		} else {
@@ -1659,7 +1511,7 @@ run_a2_one_vbl()
 			type = this_event->type;
 			this_event->next = g_event_free.next;
 			g_event_free.next = this_event;
-			LOG_DATA_INFO(dcycs, type, 1);
+			dbg_log_info(dcycs, type, 1);
 			switch(type & 0xff) {
 			case EV_60HZ:
 				update_60hz(dcycs, now_dtime);

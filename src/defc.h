@@ -1,10 +1,10 @@
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.119 2020-09-13 23:00:12+00 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.121 2021-01-06 01:38:27+00 kentd Exp $";
 #endif
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2019 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -192,6 +192,15 @@ STRUCT(Cfg_listhdr) {
 	int	num_to_show;
 };
 
+typedef void (Dbg_fn)(const char *str);
+
+STRUCT(Dbg_longcmd) {
+	const char *str;
+	Dbg_fn	*fnptr;
+	Dbg_longcmd *subptr;
+	const char *help_str;
+};
+
 STRUCT(Emustate_intlist) {
 	const char *str;
 	int	*iptr;
@@ -227,7 +236,7 @@ STRUCT(Lzw_state) {
 #define RDROM	(g_c068_statereg & 0x08)
 #define LCBANK2	(g_c068_statereg & 0x04)
 #define ROMB	(g_c068_statereg & 0x02)
-#define INTCX	(g_c068_statereg & 0x01)
+// #define INTCX	(g_c068_statereg & 0x01)
 
 #define C041_EN_25SEC_INTS	0x10
 #define C041_EN_VBL_INTS	0x08

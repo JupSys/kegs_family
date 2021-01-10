@@ -1,8 +1,8 @@
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.171 2020-12-11 21:07:43+00 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.173 2021-01-06 06:33:13+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -667,6 +667,8 @@ change_display_mode(double dcycs)
 		halt_printf("Line < 0!\n");
 	}
 	tmp_line = MY_MIN(199, line);
+
+	dbg_log_info(dcycs, (g_cur_a2_stat << 12) | (line & 0xfff), 2);
 
 	video_update_all_stat_through_line(tmp_line);
 
@@ -2435,12 +2437,8 @@ word32
 float_bus(double dcycs)
 {
 	word32	val;
-	int	lines_since_vbl;
-	int	line, eff_line, line24;
-	int	all_stat;
-	int	byte_offset;
-	int	hires, page2;
-	int	addr;
+	int	lines_since_vbl, line, eff_line, line24, all_stat, byte_offset;
+	int	hires, page2, addr;
 
 	lines_since_vbl = get_lines_since_vbl(dcycs);
 
@@ -2450,21 +2448,18 @@ float_bus(double dcycs)
 /* For each line, figure out starting byte at -25 mod 128 bytes from this */
 /*  line's start */
 /* This emulates an Apple II style floating bus.  A real IIgs does not */
-/*  drive anything meaningful during the 25 horizontal blanking lines, */
+/*  drive anything meaningful during the 25 horizontal blanking cycles, */
 /*  nor during veritical blanking.  The data seems to be 0 or related to */
 /*  the instruction fetches on a real IIgs during blankings */
 
 	line = lines_since_vbl >> 8;
 	byte_offset = lines_since_vbl & 0xff;
-	/* byte offset is from 0 to 65, where the visible screen is drawn */
-	/*  from 25 to 65 */
+	// byte offset is from 0 through 64, where the visible screen is drawn
+	//  from 25 through 64
 
 	eff_line = line;
-	if(line >= 192) {
-		eff_line = line - 192;
-		if(line >= 256) {
-			eff_line = line - 262 + 64;
-		}
+	if((line >= 192) || (byte_offset < 25)) {
+		return 0;		// Don't do anything during blanking
 	}
 	all_stat = g_cur_a2_stat;
 	hires = all_stat & ALL_STAT_HIRES;
@@ -2486,11 +2481,6 @@ float_bus(double dcycs)
 	}
 
 	val = g_slow_memory_ptr[addr];
-	if(byte_offset < 10) {
-		/* Bob Bishop's sample program seems to get confused by */
-		/*  these bytes--so mask some off to prevent seeing some */
-		val = 0;
-	}
 #if 0
 	printf("For %04x (%d) addr=%04x, val=%02x, dcycs:%9.2f\n",
 		lines_since_vbl, eff_line, addr, val, dcycs - g_last_vbl_dcycs);

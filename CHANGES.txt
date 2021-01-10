@@ -1,4 +1,32 @@
 
+Changes in KEGS v1.04 since v1.03 (01/10/21)
+- Paste works from the host to the emulated machine.  On the Mac,
+	select text in another app, do Cmd-C, and then in KEGS select
+	the Edit menu->Paste.  On X11, select the text in another application,
+	then in KEGS, click the middle mouse button to paste.  Up to ~32KB
+	can be pasted, but I recommend smaller amounts. 
+- On the Mac, the Config menu item will bring up the Configuration screen
+	(same as pressing F4).
+- Fix bug where Nox Archaist running on 5.25" floppies with fast_disk_emul
+	on (which is the default) would cause KEGS to halt and not write
+	modified data back to the disk image.  Nox Archaist doesn't read
+	the entire sector header, waits about 7 disk nibble times, then
+	writes new sector data.  This confused fast disk emulation which
+	doesn't move the emulated disk position just by waiting.  Now, when
+	a write begins, KEGS will move the emulated disk position.
+- Added logpc debugger command in the F7 debugger window.  KEGS can keep
+	track of all registers after each instruction for up to 2 million
+	instructions.  This is dumped out to the file pc_log_out in the
+	directory where config.kegs was found.  
+	In the debugger window "help logpc" gives basic help.  "logpc on"
+	turns on logging, and "logpc save" writes out the last 2 million
+	instructions.
+- Reading $C020 and $C030 return a floating bus value.  This fixes
+	Beyond Castle Wolfenstain randomness as reported by Vladimir
+	Ivanov.
+	https://groups.google.com/g/comp.sys.apple2/c/3gH0dUpLI3Q/m/JJYnhRYBrY4J
+
+
 Changes in KEGS v1.03 since v1.00 (12/11/20)
 - This is beta quality
 - Add Mockingboard support.  In the IIgs control panel, set slot 4 to Your

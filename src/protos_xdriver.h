@@ -1,6 +1,6 @@
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2019 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -10,7 +10,7 @@
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
 
-const char rcsid_protos_x_h[] = "@(#)$KmKId: protos_xdriver.h,v 1.33 2020-10-25 16:42:14+00 kentd Exp $";
+const char rcsid_protos_x_h[] = "@(#)$KmKId: protos_xdriver.h,v 1.34 2021-01-04 06:14:29+00 kentd Exp $";
 
 /* END_HDR */
 
@@ -32,6 +32,8 @@ void get_shm(Window_info *win_info_ptr);
 void get_ximage(Window_info *win_info_ptr);
 void x_update_display(Window_info *win_info_ptr);
 Window_info *x_find_xwin(Window in_win);
+void x_request_paste_data(Window_info *win_info_ptr);
+void x_handle_paste(Window w, Atom property);
 int x_update_mouse(Window_info *win_info_ptr, int raw_x, int raw_y, int button_states, int buttons_valid);
 void x_input_events(void);
 void x_hide_pointer(Window_info *win_info_ptr, int do_hide);

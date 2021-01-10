@@ -1,4 +1,4 @@
-// $KmKId: MainView.swift,v 1.20 2020-12-11 17:42:02+00 kentd Exp $
+// $KmKId: MainView.swift,v 1.22 2021-01-10 20:42:42+00 kentd Exp $
 //  Copyright 2019-2020 by Kent Dickey
 //
 
@@ -289,7 +289,48 @@ class MainView: NSView {
 	}
 
 	@objc func do_config(_ : AnyObject) {
-		print("do_config")
+		// Create a "virtual" F4 press
+		//print("do_config")
+		// Create a keydown for the F4 key (keycode:0x76)
+		adb_physical_key_update(kimage_ptr, Int32(0x76), 0,
+			Int32(current_flags & is_shift),
+			Int32(current_flags & is_control),
+			Int32(current_flags & is_capslock))
+
+		// and create a keyup for the F4 key (keycode:0x76)
+		adb_physical_key_update(kimage_ptr, Int32(0x76), 1,
+			Int32(current_flags & is_shift),
+			Int32(current_flags & is_control),
+			Int32(current_flags & is_capslock))
+	}
+
+	@objc func do_paste(_ : AnyObject) {
+		// print("do_paste")
+		let general = NSPasteboard.general;
+		guard let str = general.string(forType: .string) else {
+			print("Cannot paste, nothing in clipboard");
+			return
+		}
+		//print("str: \(str)")
+		for raw_c in str.utf8 {
+			var c: Int
+			c = Int(raw_c)
+			// Don't paste in ctrl-chars and other junk
+			if(c == 10) {
+				c = 13		// Newline to Return
+			} else if((c == 9) || (c == 13)) {	// Tab, return
+				// Just allow it
+			} else if(c < 32) {
+				c = 0
+			}
+			if((c != 0) && (c < 0x7f)) {
+				let ret = adb_paste_add_buf(UInt32(c))
+				if(ret != 0) {
+					print("Paste too large!")
+					return;
+				}
+			}
+		}
 	}
 
 	func mac_update_display() {

@@ -1,4 +1,4 @@
-// $KmKId: AppDelegate.swift,v 1.14 2020-12-11 21:08:18+00 kentd Exp $
+// $KmKId: AppDelegate.swift,v 1.15 2020-12-30 20:46:51+00 kentd Exp $
 // Copyright 2019-2020 by Kent Dickey
 //
 // /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/
@@ -183,8 +183,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 			kegs_item.title = appname
 			kegs_item.submenu = kegs
 			menu.addItem(kegs_item)
-			// First menu of "Kegs" now done.  Add "Config" menu
 
+			// First menu of "Kegs" now done.  Add "Edit" menu
+			let edit = NSMenu(title: "Edit")
+			edit.addItem(withTitle: "Paste",
+				action: #selector(MainView.do_paste(_:)),
+				keyEquivalent: "")
+			let edit_item = NSMenuItem()
+			edit_item.title = "Edit"
+			edit_item.submenu = edit
+			menu.addItem(edit_item)
+
+			// Edit menu of "Kegs" now done.  Add "Config" menu
 			let config = NSMenu(title: "Config")
 			config.addItem(withTitle: "Configuration  F4",
 				action: #selector(MainView.do_config(_:)),

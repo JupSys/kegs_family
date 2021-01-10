@@ -1,4 +1,4 @@
-const char rcsid_sound_driver_c[] = "@(#)$KmKId: sound_driver.c,v 1.26 2020-12-11 21:07:32+00 kentd Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$KmKId: sound_driver.c,v 1.27 2020-12-12 18:44:07+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -75,6 +75,8 @@ snddrv_init()
 	int	size, ret, use_shm;
 
 	ret = 0;
+	if(ret) {			// Avoid unused var warning
+	}
 
 	g_zeroes_buffered = 0;
 	g_zeroes_seen = 0;

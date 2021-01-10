@@ -1,6 +1,6 @@
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -11,7 +11,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_base_h[] = "@(#)$KmKId: protos_base.h,v 1.44 2020-12-11 19:40:43+00 kentd Exp $";
+const char rcsid_protos_base_h[] = "@(#)$KmKId: protos_base.h,v 1.49 2021-01-10 05:17:54+00 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -67,6 +67,8 @@ int adb_get_keypad_xy(int get_y);
 int update_mouse(Kimage *kimage_ptr, int x, int y, int button_states, int buttons_valid);
 int mouse_read_c024(double dcycs);
 void mouse_compress_fifo(double dcycs);
+void adb_paste_update_state(void);
+int adb_paste_add_buf(word32 key);
 void adb_key_event(int a2code, int is_up);
 word32 adb_read_c000(void);
 word32 adb_access_c010(void);
@@ -180,21 +182,34 @@ int cfg_control_panel_update(void);
 /* debugger.c */
 void debugger_init(void);
 int debugger_run_16ms(void);
+void dbg_log_info(double dcycs, word32 info1, word32 info2);
 void debugger_update_list_kpc(void);
 void debugger_key_event(int a2code, int is_up, int shift_down, int ctrl_down, int lock_down);
 void debugger_page_updown(int isup);
 void debugger_redraw_screen(Kimage *kimage_ptr);
 void debug_draw_debug_line(Kimage *kimage_ptr, int line, int vid_line);
 void debugger_help(void);
+void dbg_help_show_strs(int help_depth, const char *str, const char *help_str);
+const char *debug_find_cmd_in_table(const char *line_ptr, Dbg_longcmd *longptr, int help_depth);
 void do_debug_cmd(const char *in_str);
 word32 dis_get_memory_ptr(word32 addr);
 void show_one_toolset(FILE *toolfile, int toolnum, word32 addr);
 void show_toolset_tables(word32 a2bank, word32 addr);
 word32 debug_getnum(const char **str_ptr);
+void debug_help(const char *str);
 void debug_bp(const char *str);
+void debug_bp_set(const char *str);
+void debug_bp_clear(const char *str);
+void debug_bp_clear_all(const char *str);
+void debug_bp_setclr(const char *str, int is_set_clear);
+void debug_logpc(const char *str);
+void debug_logpc_on(const char *str);
+void debug_logpc_off(const char *str);
+void debug_logpc_out_data(FILE *pcfile, Data_log *log_data_ptr, double start_dcycs);
+void debug_logpc_save(const char *cmd_str);
 void set_bp(word32 addr, word32 end_addr);
 void show_bp(void);
-void delete_bp(word32 addr);
+void delete_bp(word32 addr, word32 end_addr);
 int do_blank(int mode, int old_mode);
 void do_go(void);
 void do_step(void);
@@ -298,7 +313,7 @@ void write_iwm(int loc, int val, double dcycs);
 int iwm_read_enable2(double dcycs);
 int iwm_read_enable2_handshake(double dcycs);
 void iwm_write_enable2(int val, double dcycs);
-int iwm_read_data(Disk *dsk, int fast_disk_emul, double dcycs);
+word32 iwm_read_data(Disk *dsk, int fast_disk_emul, double dcycs);
 void iwm_write_data(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
 void sector_to_partial_nib(byte *in, byte *nib_ptr);
 int disk_unnib_4x4(Disk *dsk);
@@ -313,6 +328,7 @@ void iwm_nibblize_track_525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track)
 void iwm_nibblize_track_35(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track);
 void disk_4x4_nib_out(Disk *dsk, word32 val);
 void disk_nib_out(Disk *dsk, byte val, int size);
+void disk_nib_out_raw(Disk *dsk, byte val, int size, double dcycs);
 void disk_nib_end_track(Disk *dsk);
 void iwm_show_track(int slot_drive, int track);
 void iwm_show_a_track(Trk *trk);
@@ -388,8 +404,6 @@ void mockingboard_show(int got_num, word32 disable_mask);
 int sim_get_force_depth(void);
 int sim_get_use_shmem(void);
 void sim_set_use_shmem(int use_shmem);
-void show_log_data(FILE *pcfile, Data_log *log_data_ptr, double start_dcycs);
-void show_pc_log(void);
 word32 toolbox_debug_4byte(word32 addr);
 void toolbox_debug_c(word32 xreg, word32 stack, double *cyc_ptr);
 void show_toolbox_log(void);

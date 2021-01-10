@@ -1,4 +1,4 @@
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.86 2020-09-07 22:38:37+00 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.87 2020-12-30 18:11:00+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -114,6 +114,7 @@ int	g_adb_mouse_valid_data = 0;
 int	g_adb_mouse_coord = 0;
 
 #define MAX_KBD_BUF		8
+#define MAX_KBD_PASTE_BUF	32768
 
 int	g_key_down = 0;
 int	g_hard_key_down = 0;
@@ -121,6 +122,9 @@ int	g_a2code_down = 0;
 int	g_kbd_read_no_update = 0;
 int	g_kbd_chars_buffered = 0;
 int	g_kbd_buf[MAX_KBD_BUF];
+int	g_kbd_paste_rd_pos = 0;
+int	g_kbd_paste_wr_pos = 0;
+byte	g_kbd_paste_buf[MAX_KBD_PASTE_BUF];
 word32	g_adb_repeat_vbl = 0;
 
 int	g_kbd_dev_addr = 2;		/* ADB physical kbd addr */
@@ -349,6 +353,9 @@ adb_reset()
 	g_c027_val = 0;
 
 	g_key_down = 0;
+	g_kbd_paste_rd_pos = 0;
+	g_kbd_paste_wr_pos = 0;
+	g_kbd_chars_buffered = 0;
 
 	g_kbd_dev_addr = 2;
 	g_mouse_dev_addr = 3;
@@ -1557,6 +1564,51 @@ mouse_compress_fifo(double dcycs)
 }
 
 void
+adb_paste_update_state()
+{
+	int	rd_pos, wr_pos;
+
+	rd_pos = g_kbd_paste_rd_pos;
+	wr_pos = g_kbd_paste_wr_pos;
+	if(rd_pos >= wr_pos) {
+		g_kbd_paste_rd_pos = 0;
+		g_kbd_paste_wr_pos = 0;
+		return;
+	}
+	if(g_kbd_chars_buffered == 0) {
+		g_kbd_buf[0] = g_kbd_paste_buf[rd_pos];
+		g_kbd_paste_rd_pos = rd_pos + 1;
+		g_kbd_chars_buffered = 1;
+	}
+}
+
+int
+adb_paste_add_buf(word32 key)
+{
+	int	pos;
+
+	// Applesoft reads $C000 to check for ctrl-C after each statement.
+	//  So if we dropped all chars into g_kbd_buf[], we could end up
+	//  losing chars due to multiple reads of $C000 without writes to $C010
+	//  causing g_kbd_read_no_update to toss a paste char.
+	// Instead, have a separate buffer, and when g_kbd_chars_buffered==0,
+	//  copy one paste char to g_kbd_buf[0].  This also solves a problem
+	//  where Applesoft is doing: 10 GOTO 10 and it needs to see a Ctrl-C
+	//  to stop--but a paste buffer is in the way.
+	// But, now pressing keys while a paste is pending causes those keys
+	//  to take priority during the paste.
+	pos = g_kbd_paste_wr_pos;
+	if(pos >= MAX_KBD_PASTE_BUF) {
+		return 1;
+	}
+	g_kbd_paste_buf[pos] = key | 0x80;
+	g_kbd_paste_wr_pos = pos + 1;
+
+	adb_paste_update_state();
+	return 0;
+}
+
+void
 adb_key_event(int a2code, int is_up)
 {
 	word32	special, vbl_count;
@@ -1709,6 +1761,9 @@ adb_access_c010()
 			g_kbd_buf[i - 1] = g_kbd_buf[i];
 		}
 		g_kbd_chars_buffered--;
+		if(g_kbd_chars_buffered == 0) {
+			adb_paste_update_state();
+		}
 	}
 
 	g_c025_val = g_c025_val & (~ (0x08));

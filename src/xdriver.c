@@ -1,4 +1,4 @@
-const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.226 2020-12-11 21:07:32+00 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.227 2020-12-30 20:46:16+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -20,6 +20,7 @@ const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.226 2020-12-11 21:07:3
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
+#include <X11/Xatom.h>
 #include <time.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -897,6 +898,67 @@ x_find_xwin(Window in_win)
 int g_num_check_input_calls = 0;
 int g_check_input_flush_rate = 2;
 
+void
+x_request_paste_data(Window_info *win_info_ptr)
+{
+	printf("Pasting selection\n");
+	// printf("Calling XConvertSelection\n");
+	XConvertSelection(g_display, XA_PRIMARY, XA_STRING, XA_STRING,
+		win_info_ptr->x_win, CurrentTime);
+	// This will cause a SelectionNotify event, and we get the data
+	//  by using XGetWindowProperty on our own window.  This will eventually
+	//  call x_handle_paste().
+}
+
+void
+x_handle_paste(Window w, Atom property)
+{
+	byte	*bptr;
+	Atom	sel_type;
+	unsigned long sel_nitems, sel_bytes_after;
+	long	sel_length;
+	int	sel_format, ret, ret2, c;
+	int	i;
+
+	sel_length = 16384;
+	sel_type = 0;
+	sel_format = 0;
+	sel_nitems = 0;
+	sel_bytes_after = 0;
+	bptr = 0;
+	ret = XGetWindowProperty(g_display, w, property, 0, sel_length, 1,
+		AnyPropertyType, &sel_type, &sel_format, &sel_nitems,
+		&sel_bytes_after, &bptr);
+#if 0
+	printf("XGetWindowProperty ret:%d, sel_type:%ld, sel_format:%d, "
+		"sel_nitems:%ld, sel_bytes_after:%ld, bptr:%p\n",
+		ret, sel_type, sel_format, sel_nitems, sel_bytes_after, bptr);
+#endif
+	if(bptr && (sel_type == property) && sel_nitems && (sel_format == 8)) {
+		//printf("bptr: %s\n", (char *)bptr);
+		for(i = 0; i < sel_nitems; i++) {
+			c = bptr[i];
+			if(c == 10) {
+				c = 13;		// newline -> return
+			} else if((c == 9) || (c == 13)) {
+				// Allow these unchanged
+			} else if(c < 32) {
+				c = 0;
+			}
+			if((c > 0) && (c < 0x7f)) {
+				ret2 = adb_paste_add_buf(c);
+				if(ret2) {
+					printf("Paste buffer full!\n");
+					break;
+				}
+			}
+		}
+	}
+	if(ret == 0) {
+		XFree(bptr);
+	}
+}
+
 int
 x_update_mouse(Window_info *win_info_ptr, int raw_x, int raw_y,
 				int button_states, int buttons_valid)
@@ -904,6 +966,10 @@ x_update_mouse(Window_info *win_info_ptr, int raw_x, int raw_y,
 	Kimage	*kimage_ptr;
 	int	x, y;
 
+	if((button_states & buttons_valid & 2) == 2) {
+		x_request_paste_data(win_info_ptr);
+		button_states = button_states & (~2);
+	}
 	kimage_ptr = win_info_ptr->kimage_ptr;
 	x = video_scale_mouse_x(kimage_ptr, raw_x, 0);
 	y = video_scale_mouse_y(kimage_ptr, raw_y, 0);
@@ -1038,6 +1104,23 @@ x_input_events()
 #endif
 			video_update_scale(win_info_ptr->kimage_ptr, width,
 								height);
+			break;
+		case SelectionNotify:
+			// We get this event after we requested the PRIMARY
+			//  selection, so paste this to adb().
+			vid_printf("SelectionNotify received\n");
+			vid_printf("req:%ld, selection:%ld, target:%ld, "
+				"property:%ld\n", ev.xselection.requestor,
+				ev.xselection.selection,
+				ev.xselection.target,
+				ev.xselection.property);
+			if(ev.xselection.property == None) {
+				printf("No selection\n");
+				break;
+			}
+			x_handle_paste(ev.xselection.requestor,
+							ev.xselection.property);
+
 			break;
 		default:
 			printf("X event 0x%08x is unknown!\n",

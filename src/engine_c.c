@@ -1,8 +1,8 @@
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.75 2020-12-11 22:56:54+00 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.76 2021-01-06 01:38:49+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -16,7 +16,6 @@ const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.75 2020-12-11 22:56:
 #include "protos_engine_c.h"
 
 #if 0
-# define LOG_PC
 /* define FCYCS_PTR_FCYCLES_ROUND_SLOW to get accurate 1MHz write to slow mem*/
 /*  this might help joystick emulation in some Apple //gs games like */
 /*  Madness */
@@ -52,6 +51,7 @@ extern Break_point g_break_pts[];
 
 extern Kimage g_debugwin_kimage;
 
+extern word32 g_log_pc_enable;
 extern Pc_log *g_log_pc_ptr;
 extern Pc_log *g_log_pc_start_ptr;
 extern Pc_log *g_log_pc_end_ptr;
@@ -86,43 +86,6 @@ int bogus[] = {
 #define CYCLES_FINISH	fcycles = g_fcycles_end + fplus_1;
 
 #define FCYCLES_ROUND	fcycles = (int)(fcycles + fplus_x_m1);
-
-#ifdef LOG_PC
-# define LOG_PC_MACRO()							\
-		tmp_pc_ptr = g_log_pc_ptr;				\
-		tmp_pc_ptr->dbank_kpc = (dbank << 24) + kpc;		\
-		tmp_pc_ptr->instr = (opcode << 24) + arg_ptr[1] +	\
-			(arg_ptr[2] << 8) + (arg_ptr[3] << 16);		\
-		tmp_pc_ptr->dcycs = fcycles + g_last_vbl_dcycs - fplus_2;
-
-# define LOG_PC_MACRO2()						\
-		tmp_pc_ptr->psr_acc = ((psr & ~(0x82)) << 16) + acc +	\
-			(neg << 23) + ((!zero) << 17);			\
-		tmp_pc_ptr->xreg_yreg = (xreg << 16) + yreg;		\
-		tmp_pc_ptr->stack_direct = (stack << 16) + direct;	\
-		tmp_pc_ptr++;						\
-		if(tmp_pc_ptr >= g_log_pc_end_ptr) {			\
-			tmp_pc_ptr = g_log_pc_start_ptr;		\
-		}							\
-		g_log_pc_ptr = tmp_pc_ptr;
-
-# define LOG_DATA_MACRO(in_addr, in_val, in_size, in_stat)		\
-		g_log_data_ptr->dcycs = fcycles + g_last_vbl_dcycs;	\
-		g_log_data_ptr->stat = in_stat;				\
-		g_log_data_ptr->addr = in_addr;				\
-		g_log_data_ptr->val = in_val;				\
-		g_log_data_ptr->size = in_size;				\
-		g_log_data_ptr++;					\
-		if(g_log_data_ptr >= g_log_data_end_ptr) {		\
-			g_log_data_ptr = g_log_data_start_ptr;		\
-		}
-
-#else
-# define LOG_PC_MACRO()
-# define LOG_PC_MACRO2()
-# define LOG_DATA_MACRO(addr, val, size, in_stat)
-/* Just do nothing */
-#endif
 
 
 #define	GET_1BYTE_ARG	arg = arg_ptr[1];
@@ -488,6 +451,10 @@ set_memory8_io_stub(word32 addr, word32 val, byte *stat, double *fcycs_ptr,
 		*ptr = val;
 	}
 }
+
+#define LOG_PC_MACRO()
+#define LOG_PC_MACRO2()
+#define LOG_DATA_MACRO(addr, val, size, in_stat)
 
 void
 set_memory16_pieces_stub(word32 addr, word32 val, double *fcycs_ptr,
@@ -915,6 +882,7 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 		arg_ptr[3] = arg >> 16;					\
 	}
 
+
 #define ACC8
 #define ENGINE_TYPE enter_engine_acc8
 #include "engine.h"
@@ -926,6 +894,53 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 #include "engine.h"
 // The above creates enter_engine_acc16
 
+#undef LOG_PC_MACRO
+#undef LOG_PC_MACRO2
+#undef LOG_DATA_MACRO
+
+#define LOG_PC_MACRO()							\
+		tmp_pc_ptr = g_log_pc_ptr;				\
+		tmp_pc_ptr->dbank_kpc = (dbank << 24) + kpc;		\
+		tmp_pc_ptr->instr = (opcode << 24) + arg_ptr[1] +	\
+			(arg_ptr[2] << 8) + (arg_ptr[3] << 16);		\
+		tmp_pc_ptr->dcycs = fcycles + g_last_vbl_dcycs - fplus_2;
+
+#define LOG_PC_MACRO2()						\
+		tmp_pc_ptr->psr_acc = ((psr & ~(0x82)) << 16) + acc +	\
+			(neg << 23) + ((!zero) << 17);			\
+		tmp_pc_ptr->xreg_yreg = (xreg << 16) + yreg;		\
+		tmp_pc_ptr->stack_direct = (stack << 16) + direct;	\
+		tmp_pc_ptr++;						\
+		if(tmp_pc_ptr >= g_log_pc_end_ptr) {			\
+			tmp_pc_ptr = g_log_pc_start_ptr;		\
+		}							\
+		g_log_pc_ptr = tmp_pc_ptr;
+
+#define LOG_DATA_MACRO(in_addr, in_val, in_size, in_stat)		\
+		g_log_data_ptr->dcycs = fcycles + g_last_vbl_dcycs;	\
+		g_log_data_ptr->stat = in_stat;				\
+		g_log_data_ptr->addr = in_addr;				\
+		g_log_data_ptr->val = in_val;				\
+		g_log_data_ptr->size = in_size;				\
+		g_log_data_ptr++;					\
+		if(g_log_data_ptr >= g_log_data_end_ptr) {		\
+			g_log_data_ptr = g_log_data_start_ptr;		\
+		}
+
+#undef ACC8
+#undef ENGINE_TYPE
+#define ACC8
+#define ENGINE_TYPE enter_engine_acc8_log
+#include "engine.h"
+// The above creates enter_engine_acc8_log
+
+#undef ACC8
+#undef ENGINE_TYPE
+#define ENGINE_TYPE enter_engine_acc16_log
+#include "engine.h"
+// The above creates enter_engine_acc16_log
+
+
 int
 enter_engine(Engine_reg *engine_ptr)
 {
@@ -934,10 +949,18 @@ enter_engine(Engine_reg *engine_ptr)
 
 	fcycles_end_save = g_fcycles_end;
 	while(1) {
-		if(engine_ptr->psr & 0x20) {	// 8-bit accumulator
-			ret = enter_engine_acc8(engine_ptr);
+		if(g_log_pc_enable) {
+			if(engine_ptr->psr & 0x20) {	// 8-bit accumulator
+				ret = enter_engine_acc8_log(engine_ptr);
+			} else {
+				ret = enter_engine_acc16_log(engine_ptr);
+			}
 		} else {
-			ret = enter_engine_acc16(engine_ptr);
+			if(engine_ptr->psr & 0x20) {	// 8-bit accumulator
+				ret = enter_engine_acc8(engine_ptr);
+			} else {
+				ret = enter_engine_acc16(engine_ptr);
+			}
 		}
 		if((ret == RET_PSR) && !g_halt_sim) {
 			g_fcycles_end = fcycles_end_save;

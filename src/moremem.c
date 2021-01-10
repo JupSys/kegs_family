@@ -1,4 +1,4 @@
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.258 2020-09-24 03:56:16+00 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.262 2021-01-10 21:12:02+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -265,10 +265,8 @@ fixup_intcx()
 {
 	byte	*rom10000;
 	byte	*rom_inc;
-	int	no_io_shadow;
-	int	off;
-	int	start_k;
-	word32	mask;
+	word32	intcx, mask;
+	int	no_io_shadow, off, start_k;
 	int	j, k;
 
 	rom10000 = &(g_rom_fc_ff_ptr[0x30000]);
@@ -281,6 +279,9 @@ fixup_intcx()
 		start_k = 2;
 	}
 
+	intcx = (g_c068_statereg & 1);	// set means use internal rom
+	// printf("fixup_intcx, intcx:%d, no_io:%d, c02d:%02x\n", intcx,
+	//				no_io_shadow, g_c02d_int_crom);
 	for(k = start_k; k < 4; k++) {
 		off = k;
 		if(k >= 2) {
@@ -293,29 +294,27 @@ fixup_intcx()
 
 		for(j = 0xc1; j < 0xc8; j++) {
 			mask = 1 << (j & 0xf);
-			if(j < 0xc8) {
-				rom_inc = SET_BANK_IO;
-				if(((g_c02d_int_crom & mask) == 0) || INTCX) {
-					rom_inc = rom10000 + (j << 8);
-				} else {
-					// User-slot rom
-					rom_inc = &(g_rom_cards_ptr[0]) +
-						((j - 0xc0) << 8);
-					if(j == 0xc4) {		// Mockingboard
-						rom_inc = SET_BANK_IO;
-					}
+			rom_inc = SET_BANK_IO;
+			if(((g_c02d_int_crom & mask) == 0) || intcx) {
+				rom_inc = rom10000 + (j << 8);
+			} else {
+				// User-slot rom
+				rom_inc = &(g_rom_cards_ptr[0]) +
+							((j - 0xc0) << 8);
+				if(j == 0xc4) {		// Mockingboard
+					rom_inc = SET_BANK_IO;
 				}
-				SET_PAGE_INFO_RD(j + off, rom_inc);
 			}
+			SET_PAGE_INFO_RD(j + off, rom_inc);
 		}
 		for(j = 0xc8; j < 0xd0; j++) {
 			/* c800 - cfff */
-			if(((g_c02d_int_crom & (1 << 3)) == 0) || INTCX) {
+			if(((g_c02d_int_crom & (1 << 3)) == 0) || intcx) {
 				rom_inc = rom10000 + (j << 8);
 			} else {
 				/* c800 space not necessarily mapped */
-				/*  just map in ROM */
-				rom_inc = rom10000 + (j << 8);
+				//rom_inc = rom10000 + (j << 8);
+				rom_inc = SET_BANK_IO;
 			}
 			SET_PAGE_INFO_RD(j + off, rom_inc);
 		}
@@ -1082,7 +1081,7 @@ show_addr(byte *ptr)
 }
 
 
-#define CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr, fcyc, new_fcyc)	\
+#define CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr)			\
 	dcycs = g_last_vbl_dcycs + *cyc_ptr;
 
 
@@ -1091,16 +1090,10 @@ io_read(word32 loc, double *cyc_ptr)
 {
 	double	dcycs;
 	word64	word64_tmp;
-#if 0
-	double	fcyc, new_fcyc;
-#endif
-	word32	mask;
-	int new_lcbank2;
-	int new_wrdefram;
-	int tmp;
-	int i;
+	int	new_lcbank2, new_wrdefram, tmp;
+	int	i;
 
-	CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr, fcyc, new_fcyc);
+	CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr);
 
 /* IO space */
 	switch((loc >> 8) & 0xf) {
@@ -1124,8 +1117,8 @@ io_read(word32 loc, double *cyc_ptr)
 			return IOR(RAMRD);
 		case 0x14: /* c014=rdramwrt */
 			return IOR(RAMWRT);
-		case 0x15: /* c015 = INTCX */
-			return IOR(INTCX);
+		case 0x15: /* c015 = RDCXROM = INTCX */
+			return IOR(g_c068_statereg & 1);
 		case 0x16: /* c016: ALTZP */
 			return IOR(ALTZP);
 		case 0x17: /* c017: rdc3rom */
@@ -1151,7 +1144,7 @@ io_read(word32 loc, double *cyc_ptr)
 		/* 0xc020 - 0xc02f */
 		case 0x20: /* 0xc020 */
 			/* Click cassette port */
-			return 0x00;
+			return float_bus(dcycs);
 		case 0x21: /* 0xc021 */
 			/* Not documented, but let's return COLOR_C021 */
 			return IOR(g_cur_a2_stat & ALL_STAT_COLOR_C021);
@@ -1513,36 +1506,25 @@ io_read(word32 loc, double *cyc_ptr)
 		}
 	case 1: case 2: case 3: case 5: case 6:
 		/* c100 - c6ff, (except c4xx) */
-		mask = (1 << ((loc >> 8) & 7));
-		if(INTCX || ((g_c02d_int_crom & mask) == 0)) {
-			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
-		}
 		return float_bus(dcycs);
 	case 4:
 		return mockingboard_read(loc, dcycs);
 	case 7:
 		/* c700 */
-		if(INTCX || ((g_c02d_int_crom & (1 << 7)) == 0)) {
-			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
-		}
 		tmp = g_rom_fc_ff_ptr[0x3c500 + (loc & 0xff)];
 		if((loc & 0xff) == 0xfb) {
 			tmp = tmp & 0xbf;	/* clear bit 6 for ROM 03 */
 		}
 		return tmp;
 	case 8: case 9: case 0xa: case 0xb: case 0xc: case 0xd: case 0xe:
-		if(INTCX || ((g_c02d_int_crom & (1 << 3)) == 0)) {
-			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
-		}
-		UNIMPL_READ;
+		return float_bus(dcycs);
+		// UNIMPL_READ;
 	case 0xf:
-		if(INTCX || ((g_c02d_int_crom & (1 << 3)) == 0)) {
-			return(g_rom_fc_ff_ptr[0x3c000 + (loc & 0xfff)]);
-		}
 		if((loc & 0xfff) == 0xfff) {
 			return g_rom_fc_ff_ptr[0x3cfff];
 		}
-		UNIMPL_READ;
+		return float_bus(dcycs);
+		// UNIMPL_READ;
 	}
 
 	halt_printf("io_read: hit end, loc: %06x\n", loc);
@@ -1563,7 +1545,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 	int	tmp;
 	int	fixup;
 
-	CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr, fcyc, new_fcyc);
+	CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr);
 
 	val = val & 0xff;
 	switch((loc >> 8) & 0xf) {
@@ -1594,10 +1576,10 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x05: /* 0xc005 */
 			set_statereg(dcycs, g_c068_statereg | 0x10);
 			return;
-		case 0x06: /* 0xc006 */
+		case 0x06: /* 0xc006 = SETSLOTCXROM, use slot rom c800 */
 			set_statereg(dcycs, g_c068_statereg & ~0x01);
 			return;
-		case 0x07: /* 0xc007 */
+		case 0x07: /* 0xc007 = SETINTXROM, use int rom c800 */
 			set_statereg(dcycs, g_c068_statereg | 0x01);
 			return;
 		case 0x08: /* 0xc008 */
@@ -1606,21 +1588,21 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x09: /* 0xc009 */
 			set_statereg(dcycs, g_c068_statereg | 0x80);
 			return;
-		case 0x0a: /* 0xc00a */
+		case 0x0a: /* 0xc00a = SETINTC3ROM, use internal ROM slot 3*/
 			tmp = 1 << 3;
 			if((g_c02d_int_crom & tmp) != 0) {
 				g_c02d_int_crom &= ~tmp;
 				fixup_intcx();
 			}
 			return;
-		case 0x0b: /* 0xc00b */
+		case 0x0b: /* 0xc00b = SETSLOTC3ROM, use slot rom slot 3 */
 			tmp = 1 << 3;
 			if((g_c02d_int_crom & tmp) == 0) {
 				g_c02d_int_crom |= tmp;
 				fixup_intcx();
 			}
 			return;
-		case 0x0c: /* 0xc00c */
+		case 0x0c: /* 0xc00c = SETINTC3ROM, use internal rom slot 3*/
 			if(g_cur_a2_stat & ALL_STAT_VID80) {
 				g_cur_a2_stat &= (~ALL_STAT_VID80);
 				change_display_mode(dcycs);
@@ -1730,7 +1712,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 				printf("Writing c02b with %02x\n", val);
 			}
 			return;
-		case 0x2d: /* 0xc02d */
+		case 0x2d: /* 0xc02d = Slot Reg. Bit set means use slot rom */
 			if((val & 0x9) != 0) {
 				halt_printf("Illegal c02d write: %02x!\n", val);
 			}
@@ -2178,8 +2160,8 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		/* c1000 - c7ff (but not c4xx) */
 		UNIMPL_WRITE;
 	case 4:
-		if((g_c02d_int_crom & 0x10) && !INTCX) {
-			// Slot 4 is set to Your Card
+		if((g_c02d_int_crom & 0x10) && !(g_c068_statereg & 1)) {
+			// Slot 4 is set to Your Card and not INTCX
 			mockingboard_write(loc, val, dcycs);
 			return;
 		}
@@ -2197,77 +2179,13 @@ io_write(word32 loc, int val, double *cyc_ptr)
 	exit(-290);
 }
 
-
-
-#if 0
-int
-get_slow_mem(word32 loc, int duff_cycles)
-{
-	int val;
-
-	loc = loc & 0x1ffff;
-	if((loc &0xf000) == 0xc000) {
-		return(io_read(loc &0xfff, duff_cycles));
-	}
-	if((loc & 0xf000) >= 0xd000) {
-		if((loc & 0xf000) == 0xd000) {
-			if(!LCBANK2) {
-				/* Not LCBANK2 == be 0xc000 - 0xd000 */
-				loc = loc - 0x1000;
-			}
-		}
-	}
-
-	val = g_slow_memory_ptr[loc];
-
-	halt_printf("get_slow_mem: %06x = %02x\n", loc, val);
-
-	return val;
-}
-
-int
-set_slow_mem(word32 loc, int val, int duff_cycles)
-{
-	int	or_pos;
-	word32	or_val;
-
-	loc = loc & 0x1ffff;
-	if((loc & 0xf000) == 0xc000) {
-		return(io_write(loc & 0xfff, val, duff_cycles));
-	}
-
-	if((loc & 0xf000) == 0xd000) {
-		if(!LCBANK2) {
-			/* Not LCBANK2 == be 0xc000 - 0xd000 */
-			loc = loc - 0x1000;
-		}
-	}
-
-	if(g_slow_memory_ptr[loc] != val) {
-		or_pos = (loc >> SHIFT_PER_CHANGE) & 0x1f;
-		or_val = DEP1(1, or_pos, 0);
-		if((loc >> CHANGE_SHIFT) >= SLOW_MEM_CH_SIZE || loc < 0) {
-			printf("loc: %08x!!\n", loc);
-			exit(11);
-		}
-		slow_mem_changed[(loc & 0xffff) >> CHANGE_SHIFT] |= or_val;
-	}
-
-/* doesn't shadow text/hires graphics properly! */
-	g_slow_memory_ptr[loc] = val;
-
-	return val;
-}
-#endif
-
-/* IIgs vertical line counters */
-/* 0x7d - 0x7f: in vbl, top of screen? */
-/* 0x80 - 0xdf: not in vbl, drawing screen */
-/* 0xe0 - 0xff: in vbl, bottom of screen */
-
-/* Note: lines are then 0-0x60 effectively, for 192 lines */
-/* vertical blanking engages on line 192, even if in super hires mode */
-/* (Last 8 lines in SHR are drawn with vbl_active set */
+// IIgs vertical line counters
+// 0x7d - 0x7f: in vbl, top of screen?
+// 0x80 - 0xdf: not in vbl, drawing screen
+// 0xe0 - 0xff: in vbl, bottom of screen
+// Note: lines are then 0-0x60 effectively, for 192 lines, from 0x80-0xdf
+// vertical blanking engages on line 192, even if in super hires mode
+// (Last 8 lines in SHR are drawn with vbl_active set
 
 word32
 get_lines_since_vbl(double dcycs)
@@ -2317,9 +2235,10 @@ in_vblank(double dcycs)
 	return 0;
 }
 
-/* horizontal video counter goes from 0x00,0x40 - 0x7f, then 0x80,0xc0-0xff */
-/* over 2*65 cycles.  The last visible screen pos is 0x7f and 0xff */
-/* This matches KEGS starting line 0 at the border for line -1 */
+// horizontal video counter goes from 0x00,0x40 - 0x7f, then 0x80,0xc0-0xff
+// over 2*65 cycles.  The last visible screen pos is 0x7f and 0xff
+// KEGS starts it's "line 0" at the start of the right border for line -1
+// See get_lines_since_vbl comment for the format of the vertical counter
 int
 read_vid_counters(int loc, double dcycs)
 {

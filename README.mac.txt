@@ -15,7 +15,7 @@ home directory (read the README--these files are searched for in various
 places).
 
 KEGSMAC can also be run from the Finder, but if you do this, debugging
-problems is much tougher.
+problems is a little tougher.
 
 To quit, either click the window close box, or select Quit from the menu.
 To go full screen, click the Maximize button in the window.  You can
@@ -25,10 +25,4 @@ resize the window to any size you like.
 Compile directions
 ------------------
 
-In order to compile,
-
-1) cd into the src/ directory
-2) rm vars; ln -s vars_mac vars
-3) run make
-
-You can contact me at kadickey@alumni.princeton.edu
+See README.compile.txt
