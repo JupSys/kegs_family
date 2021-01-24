@@ -1,4 +1,4 @@
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.74 2020-12-11 21:06:13+00 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.75 2021-01-16 04:00:00+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -19,7 +19,6 @@ const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.74 2020-12-11 21:06:13+0
 
 extern int Verbose;
 extern word32 g_vbl_count;
-extern Iwm iwm;
 
 extern int g_track_bytes_35[];
 extern int g_track_nibs_35[];
@@ -990,34 +989,6 @@ config_parse_config_kegs_file()
 	iwm_printf("Done parsing disk_conf file\n");
 }
 
-
-Disk *
-cfg_get_dsk_from_slot_drive(int slot, int drive)
-{
-	Disk	*dsk;
-	int	max_drive;
-
-	/* Get dsk */
-	max_drive = 2;
-	switch(slot) {
-	case 5:
-		dsk = &(iwm.drive35[drive]);
-		break;
-	case 6:
-		dsk = &(iwm.drive525[drive]);
-		break;
-	default:
-		max_drive = MAX_C7_DISKS;
-		dsk = &(iwm.smartport[drive]);
-	}
-
-	if(drive >= max_drive) {
-		dsk -= drive;	/* move back to drive 0 effectively */
-	}
-
-	return dsk;
-}
-
 void
 config_generate_config_kegs_name(char *outstr, int maxlen, Disk *dsk,
 		int with_extras)
@@ -1077,7 +1048,7 @@ config_write_config_kegs_file()
 			fprintf(fconf, "\n");	/* an extra blank line */
 		}
 
-		dsk = cfg_get_dsk_from_slot_drive(slot, drive);
+		dsk = iwm_get_dsk_from_slot_drive(slot, drive);
 		if(dsk->name_ptr == 0 && (i > 4)) {
 			/* No disk, not even ejected--just skip */
 			continue;
@@ -1151,7 +1122,7 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		return;
 	}
 
-	dsk = cfg_get_dsk_from_slot_drive(slot, drive);
+	dsk = iwm_get_dsk_from_slot_drive(slot, drive);
 
 #if 0
 	printf("Inserting disk %s (%s or %d) in slot %d, drive: %d\n", name,
@@ -1161,18 +1132,18 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 	dsk->just_ejected = 0;
 
 	if(dsk->fd >= 0) {
-		eject_disk(dsk);
+		iwm_eject_disk(dsk);
 	}
 
 	/* Before opening, make sure no other mounted disk has this name */
 	/* If so, unmount it */
 	if(!ejected) {
 		for(i = 0; i < 2; i++) {
-			eject_named_disk(&iwm.drive525[i], name,partition_name);
-			eject_named_disk(&iwm.drive35[i], name, partition_name);
+			iwm_eject_named_disk(5, i, name, partition_name);
+			iwm_eject_named_disk(6, i, name, partition_name);
 		}
 		for(i = 0; i < MAX_C7_DISKS; i++) {
-			eject_named_disk(&iwm.smartport[i],name,partition_name);
+			iwm_eject_named_disk(7, i, name, partition_name);
 		}
 	}
 
@@ -1447,100 +1418,6 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 
 	iwm_move_to_track(dsk, save_track);
 
-}
-
-void
-eject_named_disk(Disk *dsk, const char *name, const char *partition_name)
-{
-
-	if(dsk->fd < 0) {
-		return;
-	}
-
-	/* If name matches, eject the disk! */
-	if(!strcmp(dsk->name_ptr, name)) {
-		/* It matches, eject it */
-		if((partition_name != 0) && (dsk->partition_name != 0)) {
-			/* If both have partitions, and they differ, then */
-			/*  don't eject.  Otherwise, eject */
-			if(strcmp(dsk->partition_name, partition_name) != 0) {
-				/* Don't eject */
-				return;
-			}
-		}
-		eject_disk(dsk);
-	}
-}
-
-void
-eject_disk_by_num(int slot, int drive)
-{
-	Disk	*dsk;
-
-	dsk = cfg_get_dsk_from_slot_drive(slot, drive);
-
-	eject_disk(dsk);
-}
-
-void
-eject_disk(Disk *dsk)
-{
-	int	motor_on;
-	int	i;
-
-	if(dsk->fd < 0) {
-		return;
-	}
-
-	g_config_kegs_update_needed = 1;
-
-	motor_on = iwm.motor_on;
-	if(g_c031_disk35 & 0x40) {
-		motor_on = iwm.motor_on35;
-	}
-	if(motor_on) {
-		halt_printf("Try eject dsk:%s, but motor_on!\n", dsk->name_ptr);
-	}
-
-	iwm_flush_disk_to_unix(dsk);
-
-	printf("Ejecting disk: %s\n", dsk->name_ptr);
-
-	/* Free all memory, close file */
-
-	/* free the tracks first */
-	if(dsk->trks != 0) {
-		for(i = 0; i < dsk->num_tracks; i++) {
-			if(dsk->trks[i].nib_area) {
-				free(dsk->trks[i].nib_area);
-			}
-			dsk->trks[i].nib_area = 0;
-			dsk->trks[i].track_len = 0;
-		}
-		free(dsk->trks);
-	}
-	dsk->num_tracks = 0;
-	dsk->trks = 0;
-
-	/* close file, clean up dsk struct */
-	if(dsk->fd == 0) {
-		free(dsk->raw_data);
-	} else {
-		close(dsk->fd);
-	}
-
-	dsk->fd = -1;
-	dsk->raw_size = 0;
-	dsk->raw_data = 0;
-	dsk->image_start = 0;
-	dsk->image_size = 0;
-	dsk->nib_pos = 0;
-	dsk->disk_dirty = 0;
-	dsk->write_through_to_unix = 0;
-	dsk->write_prot = 1;
-	dsk->just_ejected = 1;
-
-	/* Leave name_ptr valid */
 }
 
 int
@@ -2006,7 +1883,7 @@ cfg_get_disk_name(char *outstr, int maxlen, int type_ext, int with_extras)
 
 	slot = type_ext >> 8;
 	drive = type_ext & 0xff;
-	dsk = cfg_get_dsk_from_slot_drive(slot, drive);
+	dsk = iwm_get_dsk_from_slot_drive(slot, drive);
 
 	outstr[0] = 0;
 	if(dsk->name_ptr == 0) {
@@ -2973,7 +2850,7 @@ cfg_file_handle_key(int key)
 	switch(key) {
 	case 0x1b:
 		if(g_cfg_slotdrive < 0xfff) {
-			eject_disk_by_num(g_cfg_slotdrive >> 8,
+			iwm_eject_disk_by_num(g_cfg_slotdrive >> 8,
 						g_cfg_slotdrive & 0xff);
 		}
 		g_cfg_slotdrive = -1;
@@ -3194,7 +3071,7 @@ cfg_control_panel_update()
 		case 'E':
 			type = g_menuptr[g_menu_line].cfgtype;
 			if((type & 0xf) == CFGTYPE_DISK) {
-				eject_disk_by_num(type >> 12,
+				iwm_eject_disk_by_num(type >> 12,
 							(type >> 4) & 0xff);
 			}
 			break;

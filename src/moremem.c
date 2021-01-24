@@ -1,8 +1,8 @@
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.262 2021-01-10 21:12:02+00 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.263 2021-01-11 06:51:57+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/

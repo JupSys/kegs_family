@@ -1,4 +1,4 @@
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.173 2021-01-06 06:33:13+00 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.174 2021-01-23 22:46:19+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -379,6 +379,9 @@ void
 video_set_active(Kimage *kimage_ptr, int active)
 {
 	kimage_ptr->active = active;
+	if(kimage_ptr != &g_mainwin_kimage) {
+		adb_nonmain_check();
+	}
 }
 
 void
@@ -2344,10 +2347,42 @@ video_scale_mouse_y(Kimage *kimage_ptr, int raw_y, int y_height)
 	if(y_height == 0) {
 		y = (kimage_ptr->scale_height_to_a2 * raw_y) / 65536;
 	} else {
-		// Scale raw_y using y_width
+		// Scale raw_y using y_height
 		y = (raw_y * kimage_ptr->a2_height_full) / y_height;
 	}
 	y = y - BASE_MARGIN_TOP;
+	return y;
+}
+
+int
+video_unscale_mouse_x(Kimage *kimage_ptr, int a2_x, int x_width)
+{
+	int	x;
+
+	// Convert a2_x to output coordinates
+	x = a2_x + BASE_MARGIN_LEFT;
+	if(x_width == 0) {
+		x = (kimage_ptr->scale_width_a2_to_x * x) / 65536;
+	} else {
+		// Scale a2_x using x_width
+		x = (x * x_width) / kimage_ptr->a2_width_full;
+	}
+	return x;
+}
+
+int
+video_unscale_mouse_y(Kimage *kimage_ptr, int a2_y, int y_height)
+{
+	int	y;
+
+	// Convert a2_y to output coordinates
+	y = a2_y + BASE_MARGIN_TOP;
+	if(y_height == 0) {
+		y = (kimage_ptr->scale_height_a2_to_x * y) / 65536;
+	} else {
+		// Scale a2_y using y_height
+		y = (y * y_height) / kimage_ptr->a2_height_full;
+	}
 	return y;
 }
 

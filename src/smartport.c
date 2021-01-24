@@ -1,4 +1,4 @@
-const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.38 2020-09-07 22:38:17+00 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.39 2021-01-16 04:00:19+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -24,7 +24,7 @@ int g_cycs_in_io_read = 0;
 
 extern Engine_reg engine;
 
-extern Iwm iwm;
+extern Iwm g_iwm;
 
 #define LEN_SMPT_LOG	16
 STRUCT(Smpt_log) {
@@ -209,12 +209,13 @@ do_c70d(word32 arg0)
 			return;
 		} else if(unit > 0 && status_code == 0) {
 			/* status for unit x */
-			if(unit > MAX_C7_DISKS || iwm.smartport[unit-1].fd < 0){
+			if((unit > MAX_C7_DISKS) ||
+					(g_iwm.smartport[unit-1].fd < 0)) {
 				stat_val = 0x80;
 				size = 0;
 			} else {
 				stat_val = 0xf8;
-				size = iwm.smartport[unit-1].image_size;
+				size = g_iwm.smartport[unit-1].image_size;
 				size = (size+511) / 512;
 			}
 			set_memory_c(status_ptr, stat_val, 0);
@@ -233,12 +234,13 @@ do_c70d(word32 arg0)
 			disk_printf("just finished unit %d, stat 0\n", unit);
 			return;
 		} else if(status_code == 3) {
-			if(unit > MAX_C7_DISKS || iwm.smartport[unit-1].fd < 0){
+			if((unit > MAX_C7_DISKS) ||
+					(g_iwm.smartport[unit-1].fd < 0)) {
 				stat_val = 0x80;
 				size = 0;
 			} else {
 				stat_val = 0xf8;
-				size = iwm.smartport[unit-1].image_size;
+				size = g_iwm.smartport[unit-1].image_size;
 				size = (size+511) / 512;
 			}
 			if(cmd & 0x40) {
@@ -492,7 +494,7 @@ do_c70a(word32 arg0)
 
 	ret = 0x27;	/* I/O error */
 	if(cmd == 0x00) {
-		size = iwm.smartport[unit].image_size;
+		size = g_iwm.smartport[unit].image_size;
 		size = (size+511) / 512;
 
 		smartport_log(0, unit, size, 0);
@@ -537,7 +539,7 @@ do_read_c7(int unit_num, word32 buf, int blk)
 		return 0x28;
 	}
 
-	dsk = &(iwm.smartport[unit_num]);
+	dsk = &(g_iwm.smartport[unit_num]);
 	fd = dsk->fd;
 	image_start = dsk->image_start;
 	image_size = dsk->image_size;
@@ -619,7 +621,7 @@ do_write_c7(int unit_num, word32 buf, int blk)
 		return 0x28;
 	}
 
-	dsk = &(iwm.smartport[unit_num]);
+	dsk = &(g_iwm.smartport[unit_num]);
 	fd = dsk->fd;
 	image_start = dsk->image_start;
 	image_size = dsk->image_size;
@@ -683,7 +685,7 @@ do_format_c7(int unit_num)
 		return 0x28;
 	}
 
-	dsk = &(iwm.smartport[unit_num]);
+	dsk = &(g_iwm.smartport[unit_num]);
 	fd = dsk->fd;
 	image_start = dsk->image_start;
 	image_size = dsk->image_size;

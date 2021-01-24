@@ -1,5 +1,5 @@
-// $KmKId: MainView.swift,v 1.22 2021-01-10 20:42:42+00 kentd Exp $
-//  Copyright 2019-2020 by Kent Dickey
+// $KmKId: MainView.swift,v 1.25 2021-01-24 23:24:56+00 kentd Exp $
+//  Copyright 2019-2021 by Kent Dickey
 //
 
 import Cocoa
@@ -167,7 +167,7 @@ class MainView: NSView {
 		mac_update_mouse(event: event, buttons_state:0, buttons_valid:1)
 	}
 	override func mouseDown(with event: NSEvent) {
-		// print("Mouse down \(event.locationInWindow.x)," +
+		//print("Mouse down \(event.locationInWindow.x)," +
 		//				"\(event.locationInWindow.y)")
 		mac_update_mouse(event: event, buttons_state:1, buttons_valid:1)
 	}
@@ -177,7 +177,10 @@ class MainView: NSView {
 		var warp = Int32(0)
 		var x_width = 0
 		var y_height = 0
-		let hide = adb_get_hide_warp_info(&warp)
+		var x = Int32(0)
+		var y = Int32(0)
+		var do_delta = Int(0)
+		let hide = adb_get_hide_warp_info(kimage_ptr, &warp)
 		if(warp != mac_warp_pointer) {
 			mouse_moved = true
 		}
@@ -194,26 +197,62 @@ class MainView: NSView {
 			x_width = Int(bounds.size.width);
 			y_height = Int(bounds.size.height);
 		}
-		let x = video_scale_mouse_x(kimage_ptr, Int32(location.x),
+		let raw_x = location.x
+		let raw_y = bounds.size.height - 1 - location.y
+			// raw_y is 0 at the top of the window now
+		x = video_scale_mouse_x(kimage_ptr, Int32(raw_x),
 						Int32(x_width))
-		let y = video_scale_mouse_y(kimage_ptr,
-				Int32(bounds.size.height - 1 - location.y),
-				Int32(y_height))
-		if((mac_warp_pointer != 0) && (x == A2_WINDOW_WIDTH/2) &&
-					(y == A2_WINDOW_HEIGHT/2) &&
-					(buttons_valid == 0)) {
-			update_mouse(kimage_ptr, x, y, Int32(0), Int32(-1))
-			return
+		y = video_scale_mouse_y(kimage_ptr, Int32(raw_y),
+						Int32(y_height))
+		do_delta = 0;
+		if(mac_warp_pointer != 0) {
+			do_delta |= 0x1000;	// x,y are deltas
+			x = Int32(event.deltaX)
+			y = Int32(event.deltaY)
 		}
-		let ret = update_mouse(kimage_ptr, x, y,
-				Int32(buttons_state), Int32(buttons_valid))
+		let ret = adb_update_mouse(kimage_ptr, x, y,
+				Int32(buttons_state),
+				Int32(buttons_valid | do_delta))
 		if(ret != 0) {
 			mouse_moved = true
+		}
+		guard let win = window else {
+			return			// No valid window
+		}
+		if(mouse_moved) {
+			var rect1 = NSRect.zero
+
+			// If warp, warp cursor to middle of window.  Moving
+			//  the cursor requires absolute screen coordinates,
+			//  where y=0 is the top of the screen.  We must convert
+			//  window coords (where y=0 is the bottom of the win).
+			mouse_moved = false
+			let warp_x = CGFloat(video_unscale_mouse_x(kimage_ptr,
+				Int32(A2_WINDOW_WIDTH/2), Int32(x_width)))
+			let warp_y = CGFloat(video_unscale_mouse_y(kimage_ptr,
+				Int32(A2_WINDOW_HEIGHT/2), Int32(y_height)))
+			let scr_height = CGDisplayPixelsHigh(CGMainDisplayID());
+			rect1.origin.x = CGFloat(warp_x)
+			rect1.origin.y = bounds.size.height - 1 -
+								CGFloat(warp_y)
+			rect1.size.width = 1;
+			rect1.size.height = 0;
+			let screen_rect = win.convertToScreen(rect1)
+			let screen_rect_y = CGFloat(scr_height) -
+							screen_rect.origin.y
+			let cg_loc = CGPoint(x: screen_rect.origin.x,
+				y: CGFloat(screen_rect_y))
+			//print("scr_rect:\(screen_rect)")
+			if(warp != 0) {
+				// Warp to middle of the window
+				CGDisplayMoveCursorToPoint(CGMainDisplayID(),
+								cg_loc);
+			}
 		}
 	}
 
 	func mac_hide_pointer(hide: Int32) {
-		print("Hide called: \(hide)")
+		// print("Hide called: \(hide)")
 		if(hide != 0) {
 			CGDisplayHideCursor(CGMainDisplayID())
 		} else {

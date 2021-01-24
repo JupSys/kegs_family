@@ -1,4 +1,4 @@
-// $KmKId: AppDelegate.swift,v 1.15 2020-12-30 20:46:51+00 kentd Exp $
+// $KmKId: AppDelegate.swift,v 1.16 2021-01-24 05:36:13+00 kentd Exp $
 // Copyright 2019-2020 by Kent Dickey
 //
 // /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/
@@ -133,11 +133,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 	func windowDidBecomeKey(_ notification: Notification) {
 		//print("DidbecomeKey")
 		// If window focus is changing, turn off key repeat
-		adb_kbd_repeat_off();
+		adb_kbd_repeat_off()
 	}
 	func windowDidResignKey(_ notification: Notification) {
 		//print("DidResignKey")
-		adb_kbd_repeat_off();
+		adb_kbd_repeat_off()
 	}
 
 	func windowWillResize(_ window: NSWindow, to frameSize: NSSize)

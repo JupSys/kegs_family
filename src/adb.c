@@ -1,4 +1,4 @@
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.87 2020-12-30 18:11:00+00 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.88 2021-01-23 22:44:35+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -106,9 +106,6 @@ STRUCT(Mouse_fifo) {
 };
 
 Mouse_fifo g_mouse_fifo[ADB_MOUSE_FIFO] = { { 0, 0, 0, 0 } };
-
-int g_mouse_warp_x = 0;
-int g_mouse_warp_y = 0;
 
 int	g_adb_mouse_valid_data = 0;
 int	g_adb_mouse_coord = 0;
@@ -306,10 +303,22 @@ const int g_a2_key_to_ascii[][4] = {
 };
 
 int
-adb_get_hide_warp_info(int *warpptr)
+adb_get_hide_warp_info(Kimage *kimage_ptr, int *warpptr)
 {
-	*warpptr = g_warp_pointer;
-	return g_hide_pointer;
+	if(kimage_ptr == &g_mainwin_kimage) {
+		*warpptr = g_warp_pointer;
+		return g_hide_pointer;
+	}
+	*warpptr = 0;
+	return 0;
+}
+
+void
+adb_nonmain_check()
+{
+	// Debug window active.  Undo F8 pointer warping
+	g_warp_pointer = 0;
+	g_hide_pointer = 0;
 }
 
 void
@@ -1267,38 +1276,62 @@ adb_get_keypad_xy(int get_y)
 	}
 }
 
+// g_mouse_raw_x/y: Current position (in A2 coordinates) of mouse on host screen
+// g_mouse_fifo[0].x/y: Current position (in A2 coords) of where we "want"
+//		mouse on the A2 screen.
+// g_mouse_a2_x/y: last x,y returned through $c024 to software.
+// So, reading $c024 return g_mouse_fifo[].x - g_mouse_a2_x.
+// And, in simple cases, host mouse movement just sets g_mouse_fifo[0].x=raw_x
 int
-update_mouse(Kimage *kimage_ptr, int x, int y, int button_states,
+adb_update_mouse(Kimage *kimage_ptr, int x, int y, int button_states,
 							int buttons_valid)
 {
 	double	dcycs;
 	int	button1_changed, mouse_moved, unhide, pos;
 	int	i;
 
+	if(kimage_ptr != &g_mainwin_kimage) {
+		adb_nonmain_check();
+	}
 	dcycs = g_cur_dcycs;
 
-	g_mouse_raw_x = x;
-	g_mouse_raw_y = y;
-
 	unhide = 0;
-	if(x < 0) {
-		x = 0;
-		unhide = 1;
-	}
-	if(x >= 640) {
-		x = 639;
-		unhide = 1;
-	}
-	if(y < 0) {
-		y = 0;
-		unhide = 1;
-	}
-	if(y >= 400) {
-		y = 399;
-		unhide = 1;
+	if((buttons_valid >= 0) && (buttons_valid & 0x1000)) {
+		// x, y are really deltas
+		buttons_valid &= 0xfff;
+		x = g_mouse_raw_x + x;
+		y = g_mouse_raw_y + y;
+		g_mouse_raw_x = x;
+		g_mouse_raw_y = y;
+	} else {
+		g_mouse_raw_x = x;
+		g_mouse_raw_y = y;
+
+		// Clamp mouse to 0-639, 0-399 to make GSOS work nicely
+		if(x < 0) {
+			x = 0;
+			unhide = 1;
+		}
+		if(x >= 640) {
+			x = 639;
+			unhide = 1;
+		}
+		if(y < 0) {
+			y = 0;
+			unhide = 1;
+		}
+		if(y >= 400) {
+			y = 399;
+			unhide = 1;
+		}
 	}
 
 	g_unhide_pointer = unhide && !g_warp_pointer;
+
+	if(kimage_ptr != &g_mainwin_kimage) {
+		// In debugger window...just get out
+		return 0;
+	}
 
 	if(!g_warp_pointer) {
 		if(g_hide_pointer && g_unhide_pointer) {
@@ -1334,20 +1367,15 @@ update_mouse(Kimage *kimage_ptr, int x, int y, int button_states,
 	}
 
 #if 0
-	printf("...real move, warp: %d, %d, new x: %d, %d, a2:%d,%d\n",
-		g_mouse_warp_x, g_mouse_warp_y, g_mouse_fifo[0].x,
-		g_mouse_fifo[0].y, g_mouse_a2_x, g_mouse_a2_y);
+	printf("...real move, new x: %d, %d, a2:%d,%d\n", g_mouse_fifo[0].x,
+			g_mouse_fifo[0].y, g_mouse_a2_x, g_mouse_a2_y);
 #endif
 
 	mouse_moved = (g_mouse_fifo[0].x != x) || (g_mouse_fifo[0].y != y);
 
-	g_mouse_a2_x += g_mouse_warp_x;
-	g_mouse_a2_y += g_mouse_warp_y;
 	g_mouse_fifo[0].x = x;
 	g_mouse_fifo[0].y = y;
 	g_mouse_fifo[0].dcycs = dcycs;
-	g_mouse_warp_x = 0;
-	g_mouse_warp_y = 0;
 
 	button1_changed = (buttons_valid & 1) &&
 			((button_states & 1) != (g_mouse_fifo[0].buttons & 1));
@@ -1672,7 +1700,6 @@ adb_key_event(int a2code, int is_up)
 		special = 0;
 	}
 
-
 	if(!is_up) {
 		if(hard_key) {
 			g_kbd_buf[g_kbd_chars_buffered] = key;
@@ -1840,12 +1867,6 @@ adb_physical_key_update(Kimage *kimage_ptr, int a2code, int is_up,
 		a2code = a2code - 0x40;
 	}
 
-	if(kimage_ptr == &g_debugwin_kimage) {
-		debugger_key_event(a2code, is_up, shift_down, ctrl_down,
-								lock_down);
-		return;
-	}
-
 	/* Now check for special keys (function keys, etc) */
 	ascii_and_type = g_a2_key_to_ascii[a2code][1];
 	special = 0;
@@ -1912,9 +1933,9 @@ adb_physical_key_update(Kimage *kimage_ptr, int a2code, int is_up,
 			break;
 		case 0x08: /* F8 - warp pointer */
 			g_warp_pointer = !g_warp_pointer;
-			if(g_hide_pointer != g_warp_pointer) {
-				g_hide_pointer = g_warp_pointer;
-			}
+			g_hide_pointer = g_warp_pointer;
+			printf("New warp:%d, new hide:%d\n", g_warp_pointer,
+								g_hide_pointer);
 			break;
 		case 0x09: /* F9 - swap paddles */
 			if(SHIFT_DOWN) {
@@ -1935,6 +1956,13 @@ adb_physical_key_update(Kimage *kimage_ptr, int a2code, int is_up,
 
 		return;
 	}
+
+	if(kimage_ptr == &g_debugwin_kimage) {
+		debugger_key_event(a2code, is_up, shift_down, ctrl_down,
+								lock_down);
+		return;
+	}
+
 	/* Handle Keypad Joystick here partly...if keypad key pressed */
 	/*  while in Keypad Joystick mode, do not pass it on as a key press */
 	if((ascii_and_type & 0xff00) == 0x1000) {

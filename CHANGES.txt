@@ -1,4 +1,10 @@
 
+Changes in KEGS v1.05 since v1.04 (01/24/21)
+- The Mac executable is now universal, support M1 silicon and x86_64.
+- F8 works again to confine the mouse to the KEGS window.  Press F8 again
+	to release the cursor.
+
+
 Changes in KEGS v1.04 since v1.03 (01/10/21)
 - Paste works from the host to the emulated machine.  On the Mac,
 	select text in another app, do Cmd-C, and then in KEGS select

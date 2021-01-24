@@ -1,5 +1,5 @@
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.17 2020-09-07 22:12:12+00 kentd Exp $";
+const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.18 2021-01-16 03:59:18+00 kentd Exp $";
 #endif
 
 /************************************************************************/
@@ -27,7 +27,6 @@ const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.17 2020-09-07 22:12:12+00 kent
 typedef struct _Disk Disk;
 
 STRUCT(Trk) {
-	Disk	*dsk;
 	byte	*nib_area;
 	int	track_dirty;
 	int	overflow_size;

@@ -1,4 +1,4 @@
-const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.28 2021-01-10 05:17:38+00 kentd Exp $";
+const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.29 2021-01-23 22:45:47+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -116,6 +116,7 @@ debugger_run_16ms()
 		show_regs();
 	}
 	g_dbg_new_halt = 0;
+	adb_nonmain_check();
 	// printf("debugger_run_16ms: g_halt_sim:%d\n", g_halt_sim);
 	return 0;
 }

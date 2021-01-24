@@ -1,4 +1,4 @@
-const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.227 2020-12-30 20:46:16+00 kentd Exp $";
+const char rcsid_xdriver_c[] = "@(#)$KmKId: xdriver.c,v 1.228 2021-01-23 22:45:26+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -62,6 +62,8 @@ typedef struct windowinfo {
 
 #include "protos_xdriver.h"
 
+int	g_x_warp_x = 0;
+int	g_x_warp_y = 0;
 int	g_x_warp_pointer = 0;
 int	g_x_hide_pointer = 0;
 
@@ -964,9 +966,10 @@ x_update_mouse(Window_info *win_info_ptr, int raw_x, int raw_y,
 				int button_states, int buttons_valid)
 {
 	Kimage	*kimage_ptr;
-	int	x, y;
+	int	x, y, ret;
 
 	if((button_states & buttons_valid & 2) == 2) {
+		// Middle button: Paste request
 		x_request_paste_data(win_info_ptr);
 		button_states = button_states & (~2);
 	}
@@ -974,13 +977,15 @@ x_update_mouse(Window_info *win_info_ptr, int raw_x, int raw_y,
 	x = video_scale_mouse_x(kimage_ptr, raw_x, 0);
 	y = video_scale_mouse_y(kimage_ptr, raw_y, 0);
 
-	if(g_x_warp_pointer && (x == BASE_WINDOW_WIDTH/2) &&
-			(y == A2_WINDOW_HEIGHT/2) && (buttons_valid == 0) ) {
+	if(g_x_warp_pointer && (raw_x == g_x_warp_x) &&
+			(raw_y == g_x_warp_y) && (buttons_valid == 0) ) {
 		/* tell adb routs to recenter but ignore this motion */
-		update_mouse(kimage_ptr, x, y, 0, -1);
+		adb_update_mouse(kimage_ptr, x, y, 0, -1);
 		return 0;
 	}
-	return update_mouse(kimage_ptr, x, y, button_states, buttons_valid & 7);
+	ret = adb_update_mouse(kimage_ptr, x, y, button_states,
+							buttons_valid & 7);
+	return ret;
 }
 
 void
@@ -1130,7 +1135,7 @@ x_input_events()
 	}
 
 	if(key_or_mouse && (win_info_ptr == &g_mainwin_info)) {
-		hide = adb_get_hide_warp_info(&warp);
+		hide = adb_get_hide_warp_info(win_info_ptr->kimage_ptr, &warp);
 		if(warp != g_x_warp_pointer) {
 			motion = 1;
 		}
@@ -1142,9 +1147,14 @@ x_input_events()
 	}
 
 	if(motion && g_x_warp_pointer && (win_info_ptr == &g_mainwin_info)) {
+		// Calculate where to warp to
+		g_x_warp_x = video_unscale_mouse_x(win_info_ptr->kimage_ptr,
+			BASE_MARGIN_LEFT + (BASE_WINDOW_WIDTH/2), 0);
+		g_x_warp_y = video_unscale_mouse_y(win_info_ptr->kimage_ptr,
+			BASE_MARGIN_TOP + (A2_WINDOW_HEIGHT/2), 0);
+
 		XWarpPointer(g_display, None, win_info_ptr->x_win, 0, 0, 0, 0,
-			BASE_MARGIN_LEFT + (BASE_WINDOW_WIDTH/2),
-			BASE_MARGIN_TOP + (A2_WINDOW_HEIGHT/2));
+			g_x_warp_x, g_x_warp_y);
 	}
 
 	if(refresh_needed && win_info_ptr) {

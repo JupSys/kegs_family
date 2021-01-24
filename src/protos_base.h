@@ -11,7 +11,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_base_h[] = "@(#)$KmKId: protos_base.h,v 1.49 2021-01-10 05:17:54+00 kentd Exp $";
+const char rcsid_protos_base_h[] = "@(#)$KmKId: protos_base.h,v 1.51 2021-01-23 22:46:05+00 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -37,7 +37,8 @@ void joystick_update_buttons(void);
 /* END_HDR */
 
 /* adb.c */
-int adb_get_hide_warp_info(int *warpptr);
+int adb_get_hide_warp_info(Kimage *kimage_ptr, int *warpptr);
+void adb_nonmain_check(void);
 void adb_init(void);
 void adb_reset(void);
 void adb_log(word32 addr, int val);
@@ -64,7 +65,7 @@ void adb_write_c027(int val);
 int read_adb_ram(word32 addr);
 void write_adb_ram(word32 addr, int val);
 int adb_get_keypad_xy(int get_y);
-int update_mouse(Kimage *kimage_ptr, int x, int y, int button_states, int buttons_valid);
+int adb_update_mouse(Kimage *kimage_ptr, int x, int y, int button_states, int buttons_valid);
 int mouse_read_c024(double dcycs);
 void mouse_compress_fifo(double dcycs);
 void adb_paste_update_state(void);
@@ -135,13 +136,9 @@ void config_parse_option(char *buf, int pos, int len, int line);
 void config_parse_bram(char *buf, int pos, int len);
 void config_load_roms(void);
 void config_parse_config_kegs_file(void);
-Disk *cfg_get_dsk_from_slot_drive(int slot, int drive);
 void config_generate_config_kegs_name(char *outstr, int maxlen, Disk *dsk, int with_extras);
 void config_write_config_kegs_file(void);
 void insert_disk(int slot, int drive, const char *name, int ejected, const char *partition_name, int part_num);
-void eject_named_disk(Disk *dsk, const char *name, const char *partition_name);
-void eject_disk_by_num(int slot, int drive);
-void eject_disk(Disk *dsk);
 int cfg_get_fd_size(int fd);
 int cfg_partition_read_block(int fd, void *buf, long blk, int blk_size);
 int cfg_partition_find_by_name_or_num(Disk *dsk, const char *partnamestr, int part_num);
@@ -313,6 +310,7 @@ void write_iwm(int loc, int val, double dcycs);
 int iwm_read_enable2(double dcycs);
 int iwm_read_enable2_handshake(double dcycs);
 void iwm_write_enable2(int val, double dcycs);
+void iwm_fastemul_start_write(Disk *dsk, double dcycs_passed, double dcycs);
 word32 iwm_read_data(Disk *dsk, int fast_disk_emul, double dcycs);
 void iwm_write_data(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
 void sector_to_partial_nib(byte *in, byte *nib_ptr);
@@ -330,8 +328,12 @@ void disk_4x4_nib_out(Disk *dsk, word32 val);
 void disk_nib_out(Disk *dsk, byte val, int size);
 void disk_nib_out_raw(Disk *dsk, byte val, int size, double dcycs);
 void disk_nib_end_track(Disk *dsk);
+Disk *iwm_get_dsk_from_slot_drive(int slot, int drive);
+void iwm_eject_named_disk(int slot, int drive, const char *name, const char *partition_name);
+void iwm_eject_disk_by_num(int slot, int drive);
+void iwm_eject_disk(Disk *dsk);
 void iwm_show_track(int slot_drive, int track);
-void iwm_show_a_track(Trk *trk);
+void iwm_show_a_track(Disk *dsk, Trk *trk);
 
 
 /* joystick_driver.c */
@@ -603,6 +605,8 @@ word32 video_scale_calc_frac(int pos, int out_max, word32 frac_inc, word32 frac_
 void video_update_scale(Kimage *kimage_ptr, int out_width, int out_height);
 int video_scale_mouse_x(Kimage *kimage_ptr, int raw_x, int x_width);
 int video_scale_mouse_y(Kimage *kimage_ptr, int raw_y, int y_height);
+int video_unscale_mouse_x(Kimage *kimage_ptr, int a2_x, int x_width);
+int video_unscale_mouse_y(Kimage *kimage_ptr, int a2_y, int y_height);
 void video_update_color_raw(int col_num, int a2_color);
 void video_update_status_line(int line, const char *string);
 void video_show_debug_info(void);
