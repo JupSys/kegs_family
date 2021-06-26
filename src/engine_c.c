@@ -1,4 +1,4 @@
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.76 2021-01-06 01:38:49+00 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.81 2021-06-14 01:13:48+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -433,7 +433,7 @@ set_memory8_io_stub(word32 addr, word32 val, byte *stat, double *fcycs_ptr,
 		if(setmem_tmp1 != ((val) & 0xff)) {
 			g_slow_memory_ptr[tmp1] = val;
 			slow_mem_changed[tmp1 >> CHANGE_SHIFT] |=
-				(1 << (31-((tmp1 >> SHIFT_PER_CHANGE) & 0x1f)));
+				(1U << (31-((tmp1 >> SHIFT_PER_CHANGE) & 31)));
 		}
 	} else if(wstat & (1 << (31 - BANK_SHADOW2_BIT))) {
 		FCYCS_PTR_FCYCLES_ROUND_SLOW;
@@ -444,7 +444,7 @@ set_memory8_io_stub(word32 addr, word32 val, byte *stat, double *fcycs_ptr,
 		if(setmem_tmp1 != ((val) & 0xff)) {
 			g_slow_memory_ptr[tmp1] = val;
 			slow_mem_changed[tmp2 >>CHANGE_SHIFT] |=
-				(1 <<(31-((tmp2 >> SHIFT_PER_CHANGE) & 0x1f)));
+				(1U << (31-((tmp2 >> SHIFT_PER_CHANGE) & 31)));
 		}
 	} else {
 		/* breakpoint only */
@@ -723,7 +723,7 @@ get_itimer()
 	/* asm volatile("rdtsc" : "=%eax"(ret) : : "%edx"); */
 
 	/* GCC bug report 2001-03/msg00786.html used: */
-	/*register word64 dtmp; */
+	/*register dword64 dtmp; */
 	/*asm volatile ("rdtsc" : "=A" (dtmp)); */
 	/*return (word32)dtmp; */
 
@@ -746,7 +746,7 @@ get_itimer()
 	return ret;
 #  else
 #	if defined(__aarch64__)		/* 64-bit ARM architecture */
-		register word64 ret;
+		register dword64 ret;
 		asm volatile("mrs %0,CNTVCT_EL0" : "=r"(ret));
 		return ret;
 #	else
@@ -884,12 +884,15 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 
 
 #define ACC8
+#define IS_ACC16	0
 #define ENGINE_TYPE enter_engine_acc8
 #include "engine.h"
 // The above creates enter_engine_acc8
 
 #undef ACC8
+#undef IS_ACC16
 #undef ENGINE_TYPE
+#define IS_ACC16	1
 #define ENGINE_TYPE enter_engine_acc16
 #include "engine.h"
 // The above creates enter_engine_acc16
@@ -906,8 +909,8 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 		tmp_pc_ptr->dcycs = fcycles + g_last_vbl_dcycs - fplus_2;
 
 #define LOG_PC_MACRO2()						\
-		tmp_pc_ptr->psr_acc = ((psr & ~(0x82)) << 16) + acc +	\
-			(neg << 23) + ((!zero) << 17);			\
+		tmp_pc_ptr->psr_acc = ((psr & ~(0x82)) << 16) | acc |	\
+			((neg7 & 0x80) << 16) | ((!zero) << 17);	\
 		tmp_pc_ptr->xreg_yreg = (xreg << 16) + yreg;		\
 		tmp_pc_ptr->stack_direct = (stack << 16) + direct;	\
 		tmp_pc_ptr++;						\
@@ -928,14 +931,18 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 		}
 
 #undef ACC8
+#undef IS_ACC16
 #undef ENGINE_TYPE
 #define ACC8
+#define IS_ACC16	0
 #define ENGINE_TYPE enter_engine_acc8_log
 #include "engine.h"
 // The above creates enter_engine_acc8_log
 
 #undef ACC8
+#undef IS_ACC16
 #undef ENGINE_TYPE
+#define IS_ACC16	1
 #define ENGINE_TYPE enter_engine_acc16_log
 #include "engine.h"
 // The above creates enter_engine_acc16_log

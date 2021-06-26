@@ -1,4 +1,4 @@
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.410 2021-01-11 06:51:01+00 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.417 2021-06-25 02:42:52+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -96,7 +96,7 @@ int	g_serial_out_masking = 0;
 int	g_serial_modem[2] = { 0, 1 };
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "1.05";
+const char g_kegs_version_str[] = "1.07";
 
 #define START_DCYCS	(0.0)
 
@@ -165,7 +165,6 @@ extern word32 g_cycs_in_refresh_line;
 extern word32 g_cycs_in_refresh_ximage;
 extern word32 g_cycs_in_run_16ms;
 extern word32 g_cycs_outside_run_16ms;
-extern word32 g_cycs_in_io_read;
 extern word32 g_cycs_in_sound1;
 extern word32 g_cycs_in_sound2;
 extern word32 g_cycs_in_sound3;
@@ -819,6 +818,9 @@ parse_argv(int argc, char **argv, int slashes_to_find)
 					i++;
 				}
 			}
+		} else if(!strcmp("-logpc", argv[i])) {
+			printf("Force logpc enable\n");
+			debug_logpc_on("on");
 		} else {
 			printf("Bad option: %s\n", argv[i]);
 			return 3;
@@ -1511,7 +1513,7 @@ run_a2_one_vbl()
 			type = this_event->type;
 			this_event->next = g_event_free.next;
 			g_event_free.next = this_event;
-			dbg_log_info(dcycs, type, 1);
+			dbg_log_info(dcycs, type, 0, 0x101);
 			switch(type & 0xff) {
 			case EV_60HZ:
 				update_60hz(dcycs, now_dtime);
@@ -1893,7 +1895,6 @@ update_60hz(double dcycs, double dtime_now)
 		g_cycs_in_check_input = 0;
 		g_cycs_in_refresh_line = 0;
 		g_cycs_in_refresh_ximage = 0;
-		g_cycs_in_io_read = 0;
 		g_cycs_in_sound1 = 0;
 		g_cycs_in_sound2 = 0;
 		g_cycs_in_sound3 = 0;
@@ -2272,29 +2273,32 @@ kegs_vprintf(const char *fmt, va_list ap)
 		memcpy(buf2ptr, bufptr, len+1);
 		g_fatal_log_strs[g_fatal_log++] = buf2ptr;
 	}
-	must_write(1, bufptr, len);
+	(void)must_write(1, (byte *)bufptr, len);
 	if(g_debug_file_fd >= 0) {
-		must_write(g_debug_file_fd, bufptr, len);
+		(void)must_write(g_debug_file_fd, (byte *)bufptr, len);
 	}
 	free(bufptr);
 
 	return ret;
 }
 
-void
-must_write(int fd, char *bufptr, int len)
+word32
+must_write(int fd, byte *bufptr, word32 size)
 {
+	word32	len;
 	int	ret;
 
-	while(len > 0) {
+	len = size;
+	while(len != 0) {
 		ret = (int)write(fd, bufptr, len);
 		if(ret >= 0) {
 			len -= ret;
 			bufptr += ret;
 		} else if((errno != EAGAIN) && (errno != EINTR)) {
-			return;		// just get out
+			return 0;		// just get out
 		}
 	}
+	return size;
 }
 
 void

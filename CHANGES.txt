@@ -1,4 +1,16 @@
 
+Changes in KEGS v1.07 since v1.05 (06/26/21)
+- Can create new disk images while running: press N in the disk image
+	selection screen.
+- Support for loading disk images directly out of .zip archives (read-only).
+	In the disk image selection dialog, select the .zip file, and then
+	it will step into the archive and you can select the file inside.
+- Major rewrite of IWM routines to now add support for WOZ version 1 and
+	version 2 5.25" disk images.
+- Many Mockingboard fixes to enable mb-audit v0.7 to pass.
+	https://github.com/tomcw/mb-audit
+
+
 Changes in KEGS v1.05 since v1.04 (01/24/21)
 - The Mac executable is now universal, support M1 silicon and x86_64.
 - F8 works again to confine the mouse to the KEGS window.  Press F8 again

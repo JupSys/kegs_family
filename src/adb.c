@@ -1,4 +1,4 @@
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.88 2021-01-23 22:44:35+00 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.90 2021-05-04 00:06:36+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -21,7 +21,7 @@ extern word32 g_vbl_count;
 extern int g_num_lines_prev_superhires640;
 extern int g_num_lines_prev_superhires;
 extern int g_rom_version;
-extern int g_fast_disk_emul;
+extern int g_fast_disk_emul_en;
 extern int g_limit_speed;
 extern int g_irq_pending;
 extern int g_swap_paddles;
@@ -1921,9 +1921,10 @@ adb_physical_key_update(Kimage *kimage_ptr, int a2code, int is_up,
 			break;
 		case 0x07: /* F7 - toggle debugger window, SHIFT:fast disk */
 			if(SHIFT_DOWN) {
-				g_fast_disk_emul = !g_fast_disk_emul;
-				printf("g_fast_disk_emul is now %d\n",
-							g_fast_disk_emul);
+				g_fast_disk_emul_en = !g_fast_disk_emul_en;
+				iwm_update_fast_disk_emul(g_fast_disk_emul_en);
+				printf("g_fast_disk_emul_en is now %d\n",
+							g_fast_disk_emul_en);
 			} else {
 				video_set_active(&g_debugwin_kimage,
 						!g_debugwin_kimage.active);

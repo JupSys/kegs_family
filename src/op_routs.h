@@ -1,4 +1,4 @@
-// $KmKId: op_routs.h,v 1.43 2020-09-06 15:48:11+00 kentd Exp $
+// $KmKId: op_routs.h,v 1.44 2021-06-14 01:13:57+00 kentd Exp $
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -68,8 +68,13 @@
 	}								\
 	GET_MEMORY_DIRECT_PAGE16((direct + arg) & 0xffff, tmp1);	\
 	tmp1 += (dbank << 16);						\
+	arg = (tmp1 & 0xffff00) | ((tmp1 + yreg) & 0xff);		\
+	if(IS_ACC16) {							\
+		CYCLES_PLUS_1;						\
+	} else {							\
+		GET_MEMORY8(arg, tmp2);					\
+	}								\
 	arg = tmp1 + yreg;						\
-	CYCLES_PLUS_1;							\
 	INC_KPC_2;
 
 

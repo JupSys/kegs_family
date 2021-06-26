@@ -1,8 +1,8 @@
-const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.39 2021-01-16 04:00:19+00 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.41 2021-05-04 23:42:01+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -19,8 +19,6 @@ extern int Halt_on;
 extern int g_rom_version;
 extern int g_io_amt;
 extern int g_highest_smartport_unit;
-
-int g_cycs_in_io_read = 0;
 
 extern Engine_reg engine;
 
@@ -102,28 +100,13 @@ smartport_log(word32 start_addr, int cmd, int rts_addr, int cmd_list)
 void
 do_c70d(word32 arg0)
 {
-	int	cmd;
-	int	cmd_list_lo, cmd_list_mid, cmd_list_hi;
-	int	rts_lo, rts_hi;
-	word32	rts_addr;
-	word32	cmd_list;
-	int	unit;
-	int	param_cnt;
-	int	status_ptr_lo, status_ptr_mid, status_ptr_hi;
-	int	buf_ptr_lo, buf_ptr_hi;
-	int	buf_ptr;
-	int	block_lo, block_mid, block_hi;
-	int	block;
-	word32	status_ptr;
-	int	status_code;
-	int	ctl_ptr_lo, ctl_ptr_hi;
-	int	ctl_ptr;
-	int	ctl_code;
-	int	mask;
-	int	stat_val;
-	int	size;
-	int	ret;
-	int	ext;
+	dword64	dsize;
+	word32	status_ptr, rts_addr, cmd_list,	cmd_list_lo, cmd_list_mid;
+	word32	cmd_list_hi, status_ptr_lo, status_ptr_mid, status_ptr_hi;
+	word32	rts_lo, rts_hi, buf_ptr_lo, buf_ptr_hi, buf_ptr, mask, cmd;
+	word32	block_lo, block_mid, block_hi, block_hi2, unit;
+	word32	ctl_ptr_lo, ctl_ptr_hi, ctl_ptr;
+	int	param_cnt, block, status_code, ctl_code, stat_val, ret, ext;
 	int	i;
 
 	set_memory_c(0x7f8, 0xc7, 0);
@@ -181,7 +164,7 @@ do_c70d(word32 arg0)
 		}
 
 		status_ptr = status_ptr_lo + (256*status_ptr_mid) +
-			(65536*status_ptr_hi);
+							(65536*status_ptr_hi);
 		if(cmd & 0x40) {
 			status_code = get_memory_c((cmd_list+6) & mask, 0);
 		} else {
@@ -212,18 +195,18 @@ do_c70d(word32 arg0)
 			if((unit > MAX_C7_DISKS) ||
 					(g_iwm.smartport[unit-1].fd < 0)) {
 				stat_val = 0x80;
-				size = 0;
+				dsize = 0;
 			} else {
 				stat_val = 0xf8;
-				size = g_iwm.smartport[unit-1].image_size;
-				size = (size+511) / 512;
+				dsize = g_iwm.smartport[unit-1].dimage_size;
+				dsize = (dsize+511) / 512;
 			}
 			set_memory_c(status_ptr, stat_val, 0);
-			set_memory24_c(status_ptr +1, size, 0);
+			set_memory24_c(status_ptr + 1, (word32)dsize, 0);
 			engine.xreg = 4;
 			if(cmd & 0x40) {
 				set_memory_c(status_ptr + 4,
-						(size >> 16) & 0xff, 0);
+						(dsize >> 24) & 0xff, 0);
 				engine.xreg = 5;
 			}
 			engine.yreg = 0;
@@ -237,31 +220,31 @@ do_c70d(word32 arg0)
 			if((unit > MAX_C7_DISKS) ||
 					(g_iwm.smartport[unit-1].fd < 0)) {
 				stat_val = 0x80;
-				size = 0;
+				dsize = 0;
 			} else {
 				stat_val = 0xf8;
-				size = g_iwm.smartport[unit-1].image_size;
-				size = (size+511) / 512;
+				dsize = g_iwm.smartport[unit-1].dimage_size;
+				dsize = (dsize + 511) / 512;
 			}
 			if(cmd & 0x40) {
 				disk_printf("extended for stat_code 3!\n");
 			}
 			/* DIB for unit 1 */
 			set_memory_c(status_ptr, stat_val, 0);
-			set_memory24_c(status_ptr +1, size, 0);
+			set_memory24_c(status_ptr + 1, (word32)dsize, 0);
 			if(cmd & 0x40) {
 				set_memory_c(status_ptr + 4,
-						(size >> 24) & 0xff, 0);
+						(dsize >> 24) & 0xff, 0);
 				status_ptr++;
 			}
-			set_memory_c(status_ptr +4, 4, 0);
+			set_memory_c(status_ptr + 4, 4, 0);
 			for(i = 5; i < 21; i++) {
-				set_memory_c(status_ptr +i, 0x20, 0);
+				set_memory_c(status_ptr + i, 0x20, 0);
 			}
-			set_memory_c(status_ptr +5, 'K', 0);
-			set_memory_c(status_ptr +6, 'E', 0);
-			set_memory_c(status_ptr +7, 'G', 0);
-			set_memory_c(status_ptr +8, 'S', 0);
+			set_memory_c(status_ptr + 5, 'K', 0);
+			set_memory_c(status_ptr + 6, 'E', 0);
+			set_memory_c(status_ptr + 7, 'G', 0);
+			set_memory_c(status_ptr + 8, 'S', 0);
 
 			/* hard disk supporting extended calls */
 			set_memory16_c(status_ptr + 21, 0xa002, 0);
@@ -305,8 +288,13 @@ do_c70d(word32 arg0)
 		block_lo = get_memory_c((cmd_list+4) & mask, 0);
 		block_mid = get_memory_c((cmd_list+5) & mask, 0);
 		block_hi = get_memory_c((cmd_list+6) & mask, 0);
-		block = ((block_hi*256) + block_mid)*256 + block_lo;
-		disk_printf("smartport read unit %d of block %04x into %04x\n",
+		block_hi2 = 0;
+		if(cmd & 0x40) {
+			block_hi2 = get_memory_c((cmd_list+7) & mask, 0);
+		}
+		block = (block_hi2 << 24) | (block_hi << 16) |
+					(block_mid << 8) | block_lo;
+		disk_printf("smartport read unit %d of block %06x to %06x\n",
 			unit, block, buf_ptr);
 		if(unit < 1 || unit > MAX_C7_DISKS) {
 			halt_printf("Unknown unit #: %d\n", unit);
@@ -345,7 +333,12 @@ do_c70d(word32 arg0)
 		block_lo = get_memory_c((cmd_list+4) & mask, 0);
 		block_mid = get_memory_c((cmd_list+5) & mask, 0);
 		block_hi = get_memory_c((cmd_list+6) & mask, 0);
-		block = ((block_hi*256) + block_mid)*256 + block_lo;
+		block_hi2 = 0;
+		if(cmd & 0x40) {
+			block_hi2 = get_memory_c((cmd_list+7) & mask, 0);
+		}
+		block = (block_hi2 << 24) | (block_hi << 16) |
+					(block_mid << 8) | block_lo;
 		disk_printf("smartport write unit %d of block %04x from %04x\n",
 			unit, block, buf_ptr);
 		if(unit < 1 || unit > MAX_C7_DISKS) {
@@ -374,7 +367,7 @@ do_c70d(word32 arg0)
 		}
 		unit = get_memory_c((cmd_list+1) & mask, 0);
 
-		if(unit < 1 || unit > MAX_C7_DISKS) {
+		if((unit < 1) || (unit > MAX_C7_DISKS)) {
 			halt_printf("Unknown unit #: %d\n", unit);
 		}
 
@@ -452,12 +445,9 @@ do_c70d(word32 arg0)
 void
 do_c70a(word32 arg0)
 {
-	int	cmd, unit;
-	int	buf_lo, buf_hi;
-	int	blk_lo, blk_hi;
-	int	blk, buf;
-	int	prodos_unit;
-	int	size;
+	dword64	dsize;
+	word32	cmd, unit, buf_lo, buf_hi, blk_lo, blk_hi, blk, buf;
+	word32	prodos_unit;
 	int	ret;
 
 	set_memory_c(0x7f8, 0xc7, 0);
@@ -494,14 +484,14 @@ do_c70a(word32 arg0)
 
 	ret = 0x27;	/* I/O error */
 	if(cmd == 0x00) {
-		size = g_iwm.smartport[unit].image_size;
-		size = (size+511) / 512;
+		dsize = g_iwm.smartport[unit].dimage_size;
+		dsize = (dsize + 511) / 512;
 
-		smartport_log(0, unit, size, 0);
+		smartport_log(0, unit, dsize, 0);
 
 		ret = 0;
-		engine.xreg = size & 0xff;
-		engine.yreg = size >> 8;
+		engine.xreg = dsize & 0xff;
+		engine.yreg = dsize >> 8;
 	} else if(cmd == 0x01) {
 		smartport_log(0, unit, buf, blk);
 		ret = do_read_c7(unit, buf, blk);
@@ -521,19 +511,17 @@ do_c70a(word32 arg0)
 }
 
 int
-do_read_c7(int unit_num, word32 buf, int blk)
+do_read_c7(int unit_num, word32 buf, word32 blk)
 {
 	byte	local_buf[0x200];
 	Disk	*dsk;
 	byte	*bptr;
-	register word32 start_time;
-	register word32 end_time;
-	long	image_start, image_size, ret;
+	dword64	dimage_start, dimage_size, dret;
 	word32	val;
 	int	len, fd;
 	int	i;
 
-	if(unit_num < 0 || unit_num > MAX_C7_DISKS) {
+	if((unit_num < 0) || (unit_num > MAX_C7_DISKS)) {
 		halt_printf("do_read_c7: unit_num: %d\n", unit_num);
 		smartport_error();
 		return 0x28;
@@ -541,8 +529,8 @@ do_read_c7(int unit_num, word32 buf, int blk)
 
 	dsk = &(g_iwm.smartport[unit_num]);
 	fd = dsk->fd;
-	image_start = dsk->image_start;
-	image_size = dsk->image_size;
+	dimage_start = dsk->dimage_start;
+	dimage_size = dsk->dimage_size;
 	if(fd < 0) {
 		printf("c7_fd == %d!\n", fd);
 #if 0
@@ -554,23 +542,24 @@ do_read_c7(int unit_num, word32 buf, int blk)
 #endif
 		return 0x2f;
 	}
-	if(((blk + 1) * 0x200) > (image_start + image_size)) {
-		halt_printf("Tried to read past %08lx on disk (blk:%04x)\n",
-			image_start + image_size, blk);
+	if(((blk + 1) * 0x200LL) > (dimage_start + dimage_size)) {
+		halt_printf("Tried to read past %08llx on disk (blk:%04x)\n",
+			dimage_start + dimage_size, blk);
 		smartport_error();
 		return 0x27;
 	}
 
-	if(fd == 0) {
+	if(dsk->raw_data) {
 		// image was compressed and is in dsk->raw_data
-		bptr = dsk->raw_data + image_start + (blk*0x200);
+		bptr = dsk->raw_data + dimage_start + (blk*0x200ULL);
 		for(i = 0; i < 0x200; i++) {
 			local_buf[i] = bptr[i];
 		}
 	} else {
-		ret = lseek(fd, image_start + blk*0x200, SEEK_SET);
-		if(ret != (image_start + blk*0x200)) {
-			halt_printf("lseek ret %08lx, errno: %d\n", ret, errno);
+		dret = lseek(fd, dimage_start + blk*0x200ULL, SEEK_SET);
+		if(dret != (dimage_start + blk*0x200ULL)) {
+			halt_printf("lseek ret %08llx, errno:%d\n", dret,
+									errno);
 			smartport_error();
 			return 0x27;
 		}
@@ -592,26 +581,20 @@ do_read_c7(int unit_num, word32 buf, int blk)
 		return 0;
 	}
 
-	GET_ITIMER(start_time);
-
 	for(i = 0; i < 0x200; i += 2) {
 		val = (local_buf[i+1] << 8) + local_buf[i];
 		set_memory16_c(buf + i, val, 0);
 	}
 
-	GET_ITIMER(end_time);
-
-	g_cycs_in_io_read += (end_time - start_time);
-
 	return 0;
 }
 
 int
-do_write_c7(int unit_num, word32 buf, int blk)
+do_write_c7(int unit_num, word32 buf, word32 blk)
 {
 	byte	local_buf[0x200];
 	Disk	*dsk;
-	long	ret, image_start, image_size;
+	dword64	dret, dimage_start, dimage_size;
 	int	len, fd;
 	int	i;
 
@@ -623,8 +606,8 @@ do_write_c7(int unit_num, word32 buf, int blk)
 
 	dsk = &(g_iwm.smartport[unit_num]);
 	fd = dsk->fd;
-	image_start = dsk->image_start;
-	image_size = dsk->image_size;
+	dimage_start = dsk->dimage_start;
+	dimage_size = dsk->dimage_size;
 	if(fd < 0) {
 		halt_printf("c7_fd == %d!\n", fd);
 		smartport_error();
@@ -645,15 +628,15 @@ do_write_c7(int unit_num, word32 buf, int blk)
 		return 0x00;
 	}
 
-	ret = lseek(fd, image_start + blk*0x200, SEEK_SET);
-	if(ret != (image_start + blk*0x200)) {
-		halt_printf("lseek returned %08x, errno: %d\n", ret, errno);
+	dret = lseek(fd, dimage_start + blk*0x200ULL, SEEK_SET);
+	if(dret != (dimage_start + blk*0x200ULL)) {
+		halt_printf("lseek returned %08llx, errno: %d\n", dret, errno);
 		smartport_error();
 		return 0x27;
 	}
 
-	if(ret >= (image_start + image_size)) {
-		halt_printf("Tried to write to %08x\n", ret);
+	if(dret >= (dimage_start + dimage_size)) {
+		halt_printf("Tried to write to %08llx\n", dret);
 		smartport_error();
 		return 0x27;
 	}
@@ -675,7 +658,7 @@ do_format_c7(int unit_num)
 {
 	byte	local_buf[0x1000];
 	Disk	*dsk;
-	long	image_start, image_size, ret, total, sum;
+	dword64	dimage_start, dimage_size, dret, dtotal, dsum;
 	int	len, max, fd;
 	int	i;
 
@@ -687,8 +670,8 @@ do_format_c7(int unit_num)
 
 	dsk = &(g_iwm.smartport[unit_num]);
 	fd = dsk->fd;
-	image_start = dsk->image_start;
-	image_size = dsk->image_size;
+	dimage_start = dsk->dimage_start;
+	dimage_size = dsk->dimage_size;
 	if(fd < 0) {
 		halt_printf("c7_fd == %d!\n", fd);
 		smartport_error();
@@ -709,25 +692,25 @@ do_format_c7(int unit_num)
 		local_buf[i] = 0;
 	}
 
-	ret = lseek(fd, image_start, SEEK_SET);
-	if(ret != image_start) {
-		halt_printf("lseek returned %08lx, errno: %d\n", ret, errno);
+	dret = lseek(fd, dimage_start, SEEK_SET);
+	if(dret != dimage_start) {
+		halt_printf("lseek returned %08llx, errno: %d\n", dret, errno);
 		smartport_error();
 		return 0x27;
 	}
 
-	sum = 0;
-	total = image_size;
+	dsum = 0;
+	dtotal = dimage_size;
 
-	while(sum < total) {
-		max = (int)MY_MIN(0x1000, total-sum);
+	while(dsum < dtotal) {
+		max = (int)MY_MIN(0x10000, dtotal - dsum);
 		len = (int)write(fd, &local_buf[0], max);
 		if(len != max) {
 			halt_printf("write ret %08x, errno:%d\n", len, errno);
 			smartport_error();
 			return 0x27;
 		}
-		sum += len;
+		dsum += len;
 	}
 
 	return 0;

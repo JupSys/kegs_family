@@ -1,4 +1,4 @@
-// "@(#)$KmKId: instable.h,v 1.113 2020-09-06 15:24:57+00 kentd Exp $"
+// "@(#)$KmKId: instable.h,v 1.115 2021-04-05 18:19:05+00 kentd Exp $"
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -85,7 +85,7 @@ case 0x07:			/*  ORA [Dloc] */
 
 case 0x08:			/*  PHP */
 	INC_KPC_1;
-	psr = (psr & ~0x82) | ((neg & 1) << 7) | ((!zero) << 1);
+	psr = (psr & ~0x82) | (neg7 & 0x80) | ((!zero) << 1);
 	PUSH8(psr);
 	break;
 
@@ -134,7 +134,7 @@ case 0x0f:			/*  ORA long */
 	break;
 
 case 0x10:			/*  BPL disp8 */
-	BRANCH_DISP8(neg == 0);
+	BRANCH_DISP8((neg7 & 0x80) == 0);
 	break;
 
 case 0x11:			/*  ORA (Dloc),y */
@@ -277,7 +277,7 @@ case 0x28:			/*  PLP */
 	INC_KPC_1;
 	psr = (psr & ~0xff) | (tmp1 & 0xff);
 	zero = !(psr & 2);
-	neg = (psr >> 7) & 1;
+	neg7 = psr;
 	UPDATE_PSR(psr, tmp2);
 	break;
 
@@ -329,7 +329,7 @@ case 0x2f:			/*  AND long */
 	break;
 
 case 0x30:			/*  BMI disp8 */
-	BRANCH_DISP8(neg);
+	BRANCH_DISP8(neg7 & 0x80);
 	break;
 
 case 0x31:			/*  AND (Dloc),y */
@@ -422,14 +422,14 @@ case 0x40:			/*  RTI */
 		kpc = (kpc & 0xff0000) + ((tmp1 >> 8) & 0xffff);
 		tmp2 = psr;
 		psr = (psr & ~0xff) + (tmp1 & 0xff);
-		neg = (psr >> 7) & 1;
+		neg7 = psr;
 		zero = !(psr & 2);
 		UPDATE_PSR(psr, tmp2);
 	} else {
 		PULL8(tmp1);
 		tmp2 = psr;
 		psr = (tmp1 & 0xff);
-		neg = (psr >> 7) & 1;
+		neg7 = psr;
 		zero = !(psr & 2);
 		PULL24(kpc);
 		UPDATE_PSR(psr, tmp2);
@@ -1203,10 +1203,10 @@ case 0xc2:			/*  REP #imm */
 	tmp2 = psr;
 	CYCLES_PLUS_1;
 	INC_KPC_2;
-	psr = (psr & ~0x82) | ((neg & 1) << 7) | ((!zero) << 1);
+	psr = (psr & ~0x82) | (neg7 & 0x80) | ((!zero) << 1);
 	psr = psr & ~(arg & 0xff);
 	zero = !(psr & 2);
-	neg = (psr >> 7) & 1;
+	neg7 = psr;
 	UPDATE_PSR(psr, tmp2);
 	break;
 
@@ -1376,10 +1376,10 @@ case 0xe2:			/*  SEP #imm */
 	tmp2 = psr;
 	CYCLES_PLUS_1;
 	INC_KPC_2;
-	psr = (psr & ~0x82) | ((neg & 1) << 7) | ((!zero) << 1);
+	psr = (psr & ~0x82) | (neg7 & 0x80) | ((!zero) << 1);
 	psr = psr | (arg & 0xff);
 	zero = !(psr & 2);
-	neg = (psr >> 7) & 1;
+	neg7 = psr;
 	UPDATE_PSR(psr, tmp2);
 	break;
 

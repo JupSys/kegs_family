@@ -1,4 +1,4 @@
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.174 2021-01-23 22:46:19+00 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.176 2021-06-25 02:42:44+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -671,7 +671,7 @@ change_display_mode(double dcycs)
 	}
 	tmp_line = MY_MIN(199, line);
 
-	dbg_log_info(dcycs, (g_cur_a2_stat << 12) | (line & 0xfff), 2);
+	dbg_log_info(dcycs, (g_cur_a2_stat << 12) | (line & 0xfff), 0, 0x102);
 
 	video_update_all_stat_through_line(tmp_line);
 

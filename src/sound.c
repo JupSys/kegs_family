@@ -1,8 +1,8 @@
-const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.135 2020-12-12 18:44:27+00 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.137 2021-04-16 03:26:01+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -27,7 +27,7 @@ extern int g_use_shmem;
 extern word32 g_vbl_count;
 extern int g_preferred_rate;
 
-extern int g_c03ef_doc_ptr;
+extern word32 g_c03ef_doc_ptr;
 
 extern double g_last_vbl_dcycs;
 
@@ -543,7 +543,7 @@ sound_play(double dsamps)
 	float	ftmp, fsampnum, next_fsampnum, fc030_range, fc030_base;
 	float	fpercent;
 	word32	start_time1, start_time2, start_time3, start_time4;
-	word32	end_time1, end_time2, end_time3;
+	word32	end_time1, end_time2, end_time3, uval1, uval0;
 	word32	cur_acc, cur_pos, cur_mask, cur_inc, cur_end;
 	int	val, val2, new_val, imul, off, num, c030_lo_val, c030_hi_val;
 	int	sampnum, next_sampnum, c030_state, val0, val1, ctl, num_osc_en;
@@ -905,7 +905,7 @@ sound_play(double dsamps)
 				if(val0 < -32768) {
 					val = -32768;
 				}
-				val0 = val;
+				uval0 = val & 0xffffU;
 				val = val1;
 				if(val1 > 32767) {
 					val = 32767;
@@ -913,24 +913,25 @@ sound_play(double dsamps)
 				if(val1 < -32768) {
 					val = -32768;
 				}
+				uval1 = val & 0xffffU;
 				outptr += 2;
 
 #if defined(__linux__) || defined(OSS)
 				/* Linux seems to expect little-endian */
 				/*  samples always, even on PowerPC */
 # ifdef KEGS_BIG_ENDIAN
-				sndptr[pos] = ((val & 0xff) << 24) +
-						((val & 0xff00) << 8) +
-						((val0 & 0xff) << 8) +
-						((val0 >> 8) & 0xff);
+				sndptr[pos] = ((uval1 & 0xff) << 24) +
+						((uval1 & 0xff00) << 8) +
+						((uval0 & 0xff) << 8) +
+						((uval0 >> 8) & 0xff);
 # else
-				sndptr[pos] = (val << 16) + (val0 & 0xffff);
+				sndptr[pos] = (uval1 << 16) + (uval0 & 0xffff);
 # endif
 #else
 # ifdef KEGS_BIG_ENDIAN
-				sndptr[pos] = (val0 << 16) + (val & 0xffff);
+				sndptr[pos] = (uval0 << 16) + uval1;
 # else
-				sndptr[pos] = (val << 16) + (val0 & 0xffff);
+				sndptr[pos] = (uval1 << 16) + uval0;
 # endif
 #endif
 				pos++;
@@ -1003,7 +1004,7 @@ sound_mock_envelope(int pair, int *env_ptr, int num_samps, int *vol_ptr)
 {
 	Ay8913	*ay8913ptr;
 	double	dmul, denv_period;
-	word64	env_dsamp, dsamp_inc;
+	dword64	env_dsamp, dsamp_inc;
 	word32	ampl, eff_ampl, reg13, env_val, env_period;
 	int	i;
 
@@ -1042,7 +1043,7 @@ sound_mock_envelope(int pair, int *env_ptr, int num_samps, int *vol_ptr)
 	// inc_per_tick 62.5KHz tick: (1/env_period)
 	// inc_per_dcyc: (1/(16*env_period))
 	// inc_per_samp = inc_per_dcyc * g_dcycs_per_samp
-	dsamp_inc = (word64)((dmul * g_dcycs_per_samp / denv_period));
+	dsamp_inc = (dword64)((dmul * g_dcycs_per_samp / denv_period));
 			// Amount to inc per sample, fixed point, 40 bit frac
 
 	reg13 = ay8913ptr->regs[13];			// "reg15", env ctrl

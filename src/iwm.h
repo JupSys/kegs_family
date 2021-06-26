@@ -1,10 +1,10 @@
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.18 2021-01-16 03:59:18+00 kentd Exp $";
+const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.22 2021-04-25 19:57:49+00 kentd Exp $";
 #endif
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -20,31 +20,44 @@ const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.18 2021-01-16 03:59:18+00 kent
 #define NIB_LEN_525		0x1900		/* 51072 bits per track */
 #define NIBS_FROM_ADDR_TO_DATA	20
 
-#define DSK_TYPE_PRODOS		0
-#define DSK_TYPE_DOS33		1
-#define DSK_TYPE_NIB		2
-
-typedef struct _Disk Disk;
+// image_type settings.  0 means unknown type
+#define DSK_TYPE_PRODOS		1
+#define DSK_TYPE_DOS33		2
+#define DSK_TYPE_NIB		3
+#define DSK_TYPE_WOZ		4
 
 STRUCT(Trk) {
-	byte	*nib_area;
-	int	track_dirty;
-	int	overflow_size;
-	int	track_len;
-	int	unix_pos;
+	byte	*raw_bptr;
+	byte	*sync_ptr;
+	dword64	dunix_pos;
 	int	unix_len;
+	word32	track_qbits;
 };
 
-struct _Disk {
+STRUCT(Woz_info) {
+	byte	*wozptr;
+	word32	woz_size;
+	int	version;
+	int	bad;
+	int	meta_size;
+	int	trks_size;
+	byte	*tmap_bptr;
+	byte	*trks_bptr;
+	byte	*info_bptr;
+	byte	*meta_bptr;
+};
+
+STRUCT(Disk) {
 	double	dcycs_last_read;
 	byte	*raw_data;
+	Woz_info *wozinfo_ptr;
 	char	*name_ptr;
 	char	*partition_name;
 	int	partition_num;
 	int	fd;
-	int	raw_size;
-	int	image_start;
-	int	image_size;
+	dword64	raw_dsize;
+	dword64	dimage_start;
+	dword64	dimage_size;
 	int	smartport;
 	int	disk_525;
 	int	drive;
@@ -56,21 +69,24 @@ struct _Disk {
 	int	disk_dirty;
 	int	just_ejected;
 	int	last_phase;
-	int	nib_pos;
+	word32	cur_qbit_pos;
+	word32	cur_track_qbits;
+	Trk	*cur_trk_ptr;
 	int	num_tracks;
 	Trk	*trks;
 };
-
 
 STRUCT(Iwm) {
 	Disk	drive525[2];
 	Disk	drive35[2];
 	Disk	smartport[MAX_C7_DISKS];
+	double	dcycs_last_fastemul_read;
 	int	motor_on;
 	int	motor_off;
 	int	motor_off_vbl_count;
 	int	motor_on35;
 	int	head35;
+	int	last_sel35;
 	int	step_direction35;
 	int	iwm_phase[4];
 	int	iwm_mode;
@@ -79,11 +95,11 @@ STRUCT(Iwm) {
 	int	q7;
 	int	enable2;
 	int	reset;
-
-	word32	previous_write_val;
-	int	previous_write_bits;
+	word32	write_val;
+	word32	qbit_wr_start;
+	word32	qbit_wr_last;
+	word32	forced_sync_qbit;
 };
-
 
 STRUCT(Driver_desc) {
 	word16	sig;
@@ -116,3 +132,4 @@ STRUCT(Part_map) {
 	char	processor[16];
 	char	junk[128];
 };
+

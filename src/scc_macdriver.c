@@ -1,4 +1,4 @@
-const char rcsid_scc_macdriver_c[] = "@(#)$KmKId: scc_macdriver.c,v 1.9 2020-09-04 18:35:37+00 kentd Exp $";
+const char rcsid_scc_macdriver_c[] = "@(#)$KmKId: scc_macdriver.c,v 1.10 2021-06-13 14:59:02+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -72,7 +72,7 @@ scc_serial_mac_change_params(int port)
 
 	scc_ptr = &(scc_stat[port]);
 
-	fd = (int)scc_ptr->host_handle;
+	fd = (long)scc_ptr->host_handle;
 	printf("scc_serial_mac_change_parms port: %d, fd: %d\n", port, fd);
 	if(fd <= 0) {
 		return;
@@ -142,7 +142,7 @@ scc_serial_mac_fill_readbuf(int port, int space_left, double dcycs)
 
 	scc_ptr = &(scc_stat[port]);
 
-	fd = (int)scc_ptr->host_handle;
+	fd = (long)scc_ptr->host_handle;
 	if(fd <= 0) {
 		return;
 	}
@@ -171,7 +171,7 @@ scc_serial_mac_empty_writebuf(int port)
 
 	scc_ptr = &(scc_stat[port]);
 
-	fd = (int)scc_ptr->host_handle;
+	fd = (long)scc_ptr->host_handle;
 	if(fd <= 0) {
 		return;
 	}

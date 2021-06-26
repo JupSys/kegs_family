@@ -1,4 +1,4 @@
-const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.29 2021-01-23 22:45:47+00 kentd Exp $";
+const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.36 2021-06-26 01:42:42+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -122,13 +122,16 @@ debugger_run_16ms()
 }
 
 void
-dbg_log_info(double dcycs, word32 info1, word32 info2)
+dbg_log_info(double dcycs, word32 info1, word32 info2, int type)
 {
+	if(dcycs == 0) {
+		dcycs = 1.0/32768.0;
+	}
 	g_log_data_ptr->dcycs = dcycs;
 	g_log_data_ptr->stat = 0;
 	g_log_data_ptr->addr = info1;
 	g_log_data_ptr->val = info2;
-	g_log_data_ptr->size = 100;
+	g_log_data_ptr->size = type;		// type must be > 4
 	g_log_data_ptr++;
 	if(g_log_data_ptr >= g_log_data_end_ptr) {
 		g_log_data_ptr = g_log_data_start_ptr;
@@ -333,12 +336,18 @@ Dbg_longcmd g_debug_logpc[] = {
 	{ 0, 0 }
 };
 
+Dbg_longcmd g_debug_iwm[] = {
+	{ "check",	debug_iwm_check, 0, "Denibblize current track" },
+	{ 0, 0 }
+};
+
 // Main table of commands
 Dbg_longcmd g_debug_longcmds[] = {
 	{ "help",	debug_help,	0,	"Help" },
 	{ "bp",		debug_bp,	&g_debug_bp[0],
 					"bp ADDR: sets breakpoint on addr" },
 	{ "logpc",	debug_logpc,	&g_debug_logpc[0], "Log PC" },
+	{ "iwm",	debug_iwm,	&g_debug_iwm[0], "IWM" },
 	{ 0, 0 }
 };
 
@@ -366,7 +375,6 @@ debugger_help()
 	dbg_printf("[bank]/[addr1].[addr2]  View memory\n");
 	dbg_printf("[bank]/[addr]L          Disassemble memory\n");
 
-	dbg_printf("P                       Dump the trace to 'pc_log_out'\n");
 	dbg_printf("Z                       Dump SCC state\n");
 	dbg_printf("I                       Dump IWM state\n");
 	dbg_printf("[drive].[track]I        Dump IWM state\n");
@@ -447,7 +455,7 @@ debug_find_cmd_in_table(const char *line_ptr, Dbg_longcmd *longptr,
 		line_ptr++;		// eat spaces
 	}
 	// Output "   str     :" where : is at column 14 always
-	printf("dfcit: %s, help_depth:%d\n", line_ptr, help_depth);
+	// printf("dfcit: %s, help_depth:%d\n", line_ptr, help_depth);
 	for(i = 0; i < 1000; i++) {
 		// Provide a limit to avoid hang if table not terminated right
 		str = longptr[i].str;
@@ -480,19 +488,16 @@ debug_find_cmd_in_table(const char *line_ptr, Dbg_longcmd *longptr,
 		// Try a subcmd first
 		newstr = line_ptr + len;
 		if(subptr != 0) {
-			printf("Got cmd %s as a match, now try subtab on %s\n",
-							str, newstr);
 			if(help_depth) {
 				help_depth++;
 			}
 			newstr = debug_find_cmd_in_table(newstr, subptr,
 								help_depth);
-			printf("debug_find_cmd_in_table ret: %p\n", newstr);
+			// If a subcmd was found, newstr is now 0
 		}
 		if((newstr == 0) || help_depth) {
 			return 0;
 		}
-		printf("  newstr: %s\n", newstr);
 		if((newstr != 0) && (fnptr != 0)) {
 			(*fnptr)(line_ptr + len);
 			return 0;		// Success
@@ -579,7 +584,7 @@ do_debug_cmd(const char *in_str)
 				}
 				track = g_a2;
 			}
-			iwm_show_track(slot_drive, track);
+			iwm_show_track(slot_drive, track, 0.0);
 			iwm_show_stats();
 			break;
 		case 'E':
@@ -935,7 +940,7 @@ debug_bp_setclr(const char *str, int is_set_clear)
 void
 debug_logpc(const char *str)
 {
-	dbg_printf("logpc enable:%d, cur offset:%08x\n", g_log_pc_enable,
+	dbg_printf("logpc enable:%d, cur offset:%08lx\n", g_log_pc_enable,
 			g_log_pc_ptr - g_log_pc_start_ptr);
 }
 
@@ -958,8 +963,8 @@ void
 debug_logpc_out_data(FILE *pcfile, Data_log *log_data_ptr, double start_dcycs)
 {
 	char	*str, *shadow_str;
-	word64	lstat, offset64, offset64slow, addr64;
-	word32	wstat, addr, size;
+	dword64	lstat, offset64, offset64slow, addr64;
+	word32	wstat, addr, size, val;
 
 	addr = log_data_ptr->addr;
 	lstat = (unsigned long)(log_data_ptr->stat);
@@ -972,9 +977,10 @@ debug_logpc_out_data(FILE *pcfile, Data_log *log_data_ptr, double start_dcycs)
 		shadow_str = "SHADOWED";
 	}
 	size = log_data_ptr->size;
-	if(size >= 100) {
-		fprintf(pcfile, "INFO %08x %08x %9.2f\n", log_data_ptr->addr,
-			log_data_ptr->val, log_data_ptr->dcycs - start_dcycs);
+	if(size > 32) {
+		fprintf(pcfile, "INFO %08x %08x t:%03x %9.2f\n",
+			log_data_ptr->addr, log_data_ptr->val, size,
+			log_data_ptr->dcycs - start_dcycs);
 	} else {
 		offset64slow = addr64 - (unsigned long)&(g_slow_memory_ptr[0]);
 		if(offset64 < g_mem_size_total) {
@@ -986,9 +992,17 @@ debug_logpc_out_data(FILE *pcfile, Data_log *log_data_ptr, double start_dcycs)
 			str = "IO";
 			offset64 = offset64 & 0xff;
 		}
-		fprintf(pcfile, "DATA set %06x = %06x (%d) %9.2f, "
-				"%s[%06llx] %s\n", addr, log_data_ptr->val,
-				size, log_data_ptr->dcycs - start_dcycs, str,
+		val = log_data_ptr->val;
+		fprintf(pcfile, "DATA set %06x = ", addr);
+		if(size == 8) {
+			fprintf(pcfile, "%02x (8) ", val & 0xff);
+		} else if(size == 16) {
+			fprintf(pcfile, "%04x (16) ", val & 0xffff);
+		} else {
+			fprintf(pcfile, "%06x (%d) ", val, size);
+		}
+		fprintf(pcfile, "%9.2f, %s[%06llx] %s\n",
+				log_data_ptr->dcycs - start_dcycs, str,
 				offset64 & 0xffffffULL, shadow_str);
 	}
 }
@@ -1000,12 +1014,20 @@ debug_logpc_save(const char *cmd_str)
 	Pc_log	*log_pc_ptr;
 	Data_log *log_data_ptr;
 	char	*str;
-	double	dcycs, start_dcycs;
-	word32	instr, psr, acc, xreg, yreg, stack, direct, dbank, kpc;
-	int	data_wrap, accsize, xsize;
+	double	dcycs, start_dcycs, base_dcycs;
+	word32	instr, psr, acc, xreg, yreg, stack, direct, dbank, kpc, num;
+	int	data_wrap, accsize, xsize, abs_time;
 	int	i;
 
-	pcfile = fopen("pc_log_out", "w");
+	// See if there's an argument
+	num = debug_getnum(&cmd_str);
+	abs_time = 1;
+	if(num != (word32)-1L) {
+		dbg_printf("Doing relative time\n");
+		abs_time = 0;
+	}
+
+	pcfile = fopen("logpc_out", "w");
 	if(pcfile == 0) {
 		fprintf(stderr,"fopen failed...errno: %d\n", errno);
 		exit(2);
@@ -1014,29 +1036,50 @@ debug_logpc_save(const char *cmd_str)
 	log_pc_ptr = g_log_pc_ptr;
 	log_data_ptr = g_log_data_ptr;
 #if 0
+	printf("debug_logpc_save called, log_pc_ptr:%p, %p,%p log_data_ptr:%p, "
+		"%p,%p\n", log_pc_ptr, g_log_pc_start_ptr, g_log_pc_end_ptr,
+		log_data_ptr, g_log_data_start_ptr, g_log_data_end_ptr);
+#endif
+#if 0
 	fprintf(pcfile, "current pc_log_ptr: %p, start: %p, end: %p\n",
 		log_pc_ptr, log_pc_start_ptr, log_pc_end_ptr);
 #endif
 
+	// See if we haven't filled buffer yet
+	if(log_pc_ptr->dcycs == 0) {
+		log_pc_ptr = g_log_pc_start_ptr;
+	}
+	if(log_data_ptr->dcycs == 0) {
+		log_data_ptr = g_log_data_start_ptr;
+		data_wrap = 1;
+	}
+
 	start_dcycs = log_pc_ptr->dcycs;
+	// Round to an integer
+	start_dcycs = (double)((long long)start_dcycs);
+	base_dcycs = start_dcycs;
+	if(abs_time) {
+		base_dcycs = 0.0;			// Show absolute time
+	}
 	dcycs = start_dcycs;
 
 	data_wrap = 0;
 	/* find first data entry */
-	while(data_wrap < 2 && (log_data_ptr->dcycs < dcycs)) {
+	while((data_wrap < 2) && (log_data_ptr->dcycs < dcycs)) {
 		log_data_ptr++;
 		if(log_data_ptr >= g_log_data_end_ptr) {
 			log_data_ptr = g_log_data_start_ptr;
 			data_wrap++;
 		}
 	}
-	fprintf(pcfile, "start_dcycs: %9.2f\n", start_dcycs);
+	fprintf(pcfile, "start_dcycs: %9.2f, first entry:%9.2f\n", start_dcycs,
+							log_pc_ptr->dcycs);
 
 	for(i = 0; i < PC_LOG_LEN; i++) {
 		dcycs = log_pc_ptr->dcycs;
 		while((data_wrap < 2) && (log_data_ptr->dcycs <= dcycs) &&
 					(log_data_ptr->dcycs >= start_dcycs)) {
-			debug_logpc_out_data(pcfile, log_data_ptr, start_dcycs);
+			debug_logpc_out_data(pcfile, log_data_ptr, base_dcycs);
 			if(log_data_ptr->dcycs == 0) {
 				break;
 			}
@@ -1066,12 +1109,12 @@ debug_logpc_save(const char *cmd_str)
 		}
 
 		str = do_dis(kpc, accsize, xsize, 1, instr, 0);
-		fprintf(pcfile, "%06x: A:%04x X:%04x Y:%04x P:%03x "
+		fprintf(pcfile, "%06x] A:%04x X:%04x Y:%04x P:%03x "
 			"S:%04x D:%04x B:%02x %9.2f %s\n", i,
 			acc, xreg, yreg, psr, stack, direct, dbank,
-			(dcycs - start_dcycs), str);
+			(dcycs - base_dcycs), str);
 
-		if(dcycs == 0) {
+		if((dcycs == 0) && (i != 0)) {
 			break;
 		}
 		log_pc_ptr++;
@@ -1149,6 +1192,18 @@ delete_bp(word32 addr, word32 end_addr)
 	}
 
 	show_bp();
+}
+
+void
+debug_iwm(const char *str)
+{
+	iwm_show_track(-1, -1, 0.0);
+}
+
+void
+debug_iwm_check(const char *str)
+{
+	iwm_check_nibblization(0.0);
 }
 
 int

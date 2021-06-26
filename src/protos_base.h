@@ -11,7 +11,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_base_h[] = "@(#)$KmKId: protos_base.h,v 1.51 2021-01-23 22:46:05+00 kentd Exp $";
+const char rcsid_protos_base_h[] = "@(#)$KmKId: protos_base.h,v 1.62 2021-06-13 18:59:11+00 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -139,27 +139,39 @@ void config_parse_config_kegs_file(void);
 void config_generate_config_kegs_name(char *outstr, int maxlen, Disk *dsk, int with_extras);
 void config_write_config_kegs_file(void);
 void insert_disk(int slot, int drive, const char *name, int ejected, const char *partition_name, int part_num);
-int cfg_get_fd_size(int fd);
-int cfg_partition_read_block(int fd, void *buf, long blk, int blk_size);
-int cfg_partition_find_by_name_or_num(Disk *dsk, const char *partnamestr, int part_num);
+dword64 cfg_get_fd_size(int fd);
+word32 cfg_read_from_fd(int fd, byte *bufptr, dword64 dpos, word32 size);
+word32 cfg_write_to_fd(int fd, byte *bufptr, dword64 dpos, word32 size);
+int cfg_partition_maybe_add_dotdot(void);
+int cfg_partition_name_check(const byte *name_ptr, int name_len);
+int cfg_partition_read_block(int fd, void *buf, dword64 blk, int blk_size);
+int cfg_partition_find_by_name_or_num(Disk *dsk, const char *in_partnamestr, int part_num);
+int cfg_partition_make_list_from_name(const char *namestr);
 int cfg_partition_make_list(int fd);
 int cfg_maybe_insert_disk(int slot, int drive, const char *namestr);
 int cfg_stat(char *path, struct stat *sb);
+word32 cfg_get_le16(byte *bptr);
+word32 cfg_get_le32(byte *bptr);
+dword64 cfg_get_le64(byte *bptr);
 word32 cfg_get_be_word16(word16 *ptr);
 word32 cfg_get_be_word32(word32 *ptr);
+void cfg_set_le32(byte *bptr, word32 val);
 void config_file_to_pipe(Disk *dsk, const char *cmd_ptr, const char *name_ptr);
 void cfg_htab_vtab(int x, int y);
 void cfg_home(void);
 void cfg_cleol(void);
 void cfg_putchar(int c);
 void cfg_printf(const char *fmt, ...);
-void cfg_print_num(int num, int max_len);
+void cfg_print_dnum(dword64 dnum, int max_len);
 void cfg_get_disk_name(char *outstr, int maxlen, int type_ext, int with_extras);
 void cfg_parse_menu(Cfg_menu *menuptr, int menu_pos, int highlight_pos, int change);
 void cfg_get_base_path(char *pathptr, const char *inptr, int go_up);
+void cfg_name_new_image(void);
+int cfg_create_new_image_act(const char *str, int type, int size_kb);
+void cfg_create_new_image(void);
 void cfg_file_init(void);
 void cfg_free_alldirents(Cfg_listhdr *listhdrptr);
-void cfg_file_add_dirent(Cfg_listhdr *listhdrptr, const char *nameptr, int is_dir, int size, int image_start, int part_num);
+void cfg_file_add_dirent(Cfg_listhdr *listhdrptr, const char *nameptr, int is_dir, dword64 dsize, dword64 dimage_start, dword64 compr_dsize, int part_num);
 int cfg_dirent_sortfn(const void *obj1, const void *obj2);
 int cfg_str_match(const char *str1, const char *str2, int len);
 int cfg_strlcat(char *dstptr, const char *srcptr, int dstsize);
@@ -173,13 +185,14 @@ void cfg_file_update_ptr(char *str);
 void cfg_file_selected(void);
 void cfg_file_handle_key(int key);
 void cfg_draw_menu(void);
+void cfg_newdisk_pick_menu(int slotdrive);
 int cfg_control_panel_update(void);
 
 
 /* debugger.c */
 void debugger_init(void);
 int debugger_run_16ms(void);
-void dbg_log_info(double dcycs, word32 info1, word32 info2);
+void dbg_log_info(double dcycs, word32 info1, word32 info2, int type);
 void debugger_update_list_kpc(void);
 void debugger_key_event(int a2code, int is_up, int shift_down, int ctrl_down, int lock_down);
 void debugger_page_updown(int isup);
@@ -207,6 +220,8 @@ void debug_logpc_save(const char *cmd_str);
 void set_bp(word32 addr, word32 end_addr);
 void show_bp(void);
 void delete_bp(word32 addr, word32 end_addr);
+void debug_iwm(const char *str);
+void debug_iwm_check(const char *str);
 int do_blank(int mode, int old_mode);
 void do_go(void);
 void do_step(void);
@@ -296,44 +311,62 @@ void disk_set_num_tracks(Disk *dsk, int num_tracks);
 void iwm_init(void);
 void iwm_reset(void);
 void draw_iwm_status(int line, char *buf);
+void iwm_flush_cur_disk(void);
 void iwm_flush_disk_to_unix(Disk *dsk);
 void iwm_vbl_update(int doit_3_persec);
+void iwm_update_fast_disk_emul(int fast_disk_emul_en);
 void iwm_show_stats(void);
-void iwm_touch_switches(int loc, double dcycs);
+Disk *iwm_get_dsk(int drive);
+Disk *iwm_touch_switches(int loc, double dcycs);
 void iwm_move_to_track(Disk *dsk, int new_track);
-void iwm525_phase_change(int drive, int phase);
+void iwm525_phase_change(int drive, int phase, double dcycs);
 int iwm_read_status35(double dcycs);
 void iwm_do_action35(double dcycs);
-int iwm_read_c0ec(double dcycs);
 int read_iwm(int loc, double dcycs);
 void write_iwm(int loc, int val, double dcycs);
 int iwm_read_enable2(double dcycs);
 int iwm_read_enable2_handshake(double dcycs);
 void iwm_write_enable2(int val, double dcycs);
-void iwm_fastemul_start_write(Disk *dsk, double dcycs_passed, double dcycs);
-word32 iwm_read_data(Disk *dsk, int fast_disk_emul, double dcycs);
-void iwm_write_data(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
+word32 iwm_fastemul_start_write(Disk *dsk, double dcycs);
+word32 iwm_read_data_fast(Disk *dsk, double dcycs);
+word32 iwm_return_rand_data(Disk *dsk, word32 val, double dcycs);
+word32 iwm_read_data(Disk *dsk, double dcycs);
+word32 iwm_calc_forced_sync(Disk *dsk, word32 lsb_qbit_pos, word32 sync0_info, double dcycs);
+word32 iwm_return_bits_to_msb(Disk *dsk, word32 lsb_qbit_pos);
+word32 iwm_read_data_latch(Disk *dsk, double dcycs);
+void iwm_write_data(Disk *dsk, word32 val, double dcycs);
+void iwm_write_data35(Disk *dsk, word32 val, double dcycs);
+void iwm_write_end(Disk *dsk, double dcycs);
+void iwm_fix_first_last_bytes(Disk *dsk, double dcycs);
+void iwm_recalc_sync(Disk *dsk, word32 qbit_pos, double dcycs);
+void iwm_recalc_sync_from(Disk *dsk, word32 qbit_pos, double dcycs);
+void iwm_find_any_sync(Disk *dsk, double dcycs);
 void sector_to_partial_nib(byte *in, byte *nib_ptr);
 int disk_unnib_4x4(Disk *dsk);
-int iwm_denib_track525(Disk *dsk, Trk *trk, int qtr_track, byte *outbuf);
-int iwm_denib_track35(Disk *dsk, Trk *trk, int qtr_track, byte *outbuf);
-int disk_track_to_unix(Disk *dsk, int qtr_track, byte *outbuf);
+int iwm_denib_track525(Disk *dsk, byte *outbuf);
+int iwm_denib_track35(Disk *dsk, byte *outbuf);
+int disk_track_to_unix(Disk *dsk, byte *outbuf);
 void show_hex_data(byte *buf, int count);
-void disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size);
-void disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len, int nib_len);
-void iwm_nibblize_track_nib525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track);
-void iwm_nibblize_track_525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track);
-void iwm_nibblize_track_35(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track);
+void iwm_check_nibblization(double dcycs);
+void disk_check_nibblization(Disk *dsk, byte *in_buf, int size, double dcycs);
+void disk_unix_to_nib(Disk *dsk, int qtr_track, dword64 dunix_pos, word32 unix_len, int len_bits, double dcycs);
+void iwm_nibblize_track_nib525(Disk *dsk, byte *track_buf, int qtr_track, int unix_len, double dcycs);
+void iwm_nibblize_track_525(Disk *dsk, byte *track_buf, int qtr_track, int unix_len, double dcycs);
+void iwm_nibblize_track_35(Disk *dsk, byte *track_buf, int qtr_track, int unix_len, double dcycs);
 void disk_4x4_nib_out(Disk *dsk, word32 val);
-void disk_nib_out(Disk *dsk, byte val, int size);
-void disk_nib_out_raw(Disk *dsk, byte val, int size, double dcycs);
-void disk_nib_end_track(Disk *dsk);
+void disk_nib_out(Disk *dsk, word32 val, int size);
+void disk_nib_end_track(Disk *dsk, double dcycs);
+void disk_nib_out_zeroes(Disk *dsk, int bits, word32 qbit_pos, double dcycs);
+word32 disk_nib_out_raw(Disk *dsk, word32 val, int bits, word32 qbit_pos, double dcycs);
+word32 disk_nib_out_raw_act(Disk *dsk, word32 val, int bits, word32 qbit_pos, double dcycs);
 Disk *iwm_get_dsk_from_slot_drive(int slot, int drive);
 void iwm_eject_named_disk(int slot, int drive, const char *name, const char *partition_name);
 void iwm_eject_disk_by_num(int slot, int drive);
 void iwm_eject_disk(Disk *dsk);
-void iwm_show_track(int slot_drive, int track);
-void iwm_show_a_track(Disk *dsk, Trk *trk);
+void iwm_show_track(int slot_drive, int track, double dcycs);
+void iwm_show_a_track(Disk *dsk, Trk *trk, double dcycs);
+void dummy1(word32 psr);
+void dummy2(word32 psr);
 
 
 /* joystick_driver.c */
@@ -394,7 +427,7 @@ word32 mockingboard_read(word32 loc, double dcycs);
 void mockingboard_write(word32 loc, word32 val, double dcycs);
 word32 mock_6522_read(int pair_num, word32 loc, double dcycs);
 void mock_6522_write(int pair_num, word32 loc, word32 val, double dcycs);
-word32 mock_6522_new_ifr(word32 ifr, word32 ier);
+word32 mock_6522_new_ifr(double dcycs, int pair_num, word32 ifr, word32 ier);
 word32 mock_ay8913_read(int pair_num, double dcycs);
 void mock_ay8913_reg_read(int pair_num, double dcycs);
 void mock_ay8913_reg_write(int pair_num, double dcycs);
@@ -460,7 +493,7 @@ void do_stp(void);
 void size_fail(int val, word32 v1, word32 v2);
 int fatal_printf(const char *fmt, ...);
 int kegs_vprintf(const char *fmt, va_list ap);
-void must_write(int fd, char *bufptr, int len);
+word32 must_write(int fd, byte *bufptr, word32 size);
 void clear_fatal_logs(void);
 char *kegs_malloc_str(char *in_str);
 
@@ -470,8 +503,8 @@ void smartport_error(void);
 void smartport_log(word32 start_addr, int cmd, int rts_addr, int cmd_list);
 void do_c70d(word32 arg0);
 void do_c70a(word32 arg0);
-int do_read_c7(int unit_num, word32 buf, int blk);
-int do_write_c7(int unit_num, word32 buf, int blk);
+int do_read_c7(int unit_num, word32 buf, word32 blk);
+int do_write_c7(int unit_num, word32 buf, word32 blk);
 int do_format_c7(int unit_num);
 void do_c700(word32 ret);
 
@@ -524,6 +557,17 @@ int child_send_samples(byte *ptr, int size);
 void child_sound_loop(int read_fd, int write_fd, word32 *shm_addr);
 
 
+/* woz.c */
+void woz_parse_meta(Disk *dsk, byte *bptr, int size);
+void woz_parse_info(Disk *dsk, byte *bptr, int size);
+void woz_parse_tmap(Disk *dsk, byte *bptr, int size);
+void woz_parse_trks(Disk *dsk, byte *bptr, int size);
+int woz_add_track(Disk *dsk, int qtr_track, word32 tmap, double dcycs);
+int woz_parse_header(Disk *dsk, byte *wozptr, word32 woz_size, double dcycs);
+int woz_open(Disk *dsk, double dcycs);
+int woz_new(int fd, const char *str, int size_kb);
+
+
 /* unshk.c */
 word32 unshk_get_long4(byte *bptr);
 word32 unshk_get_word2(byte *bptr);
@@ -539,19 +583,25 @@ void unshk(Disk *dsk, const char *name_str);
 /* undeflate.c */
 void show_bits(unsigned *llptr, int nl);
 void show_huftb(unsigned *tabptr, int bits);
-void undeflate_init_len_dist_tab(word32 *tabptr, word64 drepeats, word32 start);
+void undeflate_init_len_dist_tab(word32 *tabptr, dword64 drepeats, word32 start);
 void undeflate_init_bit_rev_tab(word32 *tabptr, int num);
 word32 undeflate_bit_reverse(word32 val, word32 bits);
 word32 undeflate_calc_crc32(byte *bptr, word32 len);
 byte *undeflate_ensure_dest_len(Disk *dsk, byte *ucptr, word32 len);
 void undeflate_add_tab_code(word32 *tabptr, word32 tabsz_lg2, word32 code, word32 entry);
 word32 *undeflate_init_fixed_tabs(void);
+word32 *undeflate_init_tables(void);
+void undeflate_free_tables(void);
 void undeflate_check_bit_reverse(void);
 word32 *undeflate_build_huff_tab(word32 *tabptr, word32 *entry_ptr, word32 len_size, word32 *bl_count_ptr, int max_bits);
 word32 *undeflate_dynamic_table(byte *cptr, word32 *bit_pos_ptr, byte *cptr_base);
 byte *undeflate_block(Disk *dsk, byte *cptr, word32 *bit_pos_ptr, byte *cptr_base, byte *cptr_end);
-byte *undeflate_gzip_header(Disk *dsk, byte *cptr, int compr_size);
+byte *undeflate_gzip_header(Disk *dsk, byte *cptr, word32 compr_size);
 void undeflate_gzip(Disk *dsk, const char *name_str);
+byte *undeflate_zipfile_blocks(Disk *dsk, byte *cptr, word32 compr_size);
+int undeflate_zipfile(Disk *dsk, int fd, dword64 dlocal_header_off, dword64 uncompr_dsize, dword64 compr_dsize);
+int undeflate_zipfile_search(byte *bptr, byte *cmp_ptr, int size, int cmp_len, int min_size);
+int undeflate_zipfile_make_list(int fd);
 
 
 /* video.c */

@@ -1,8 +1,8 @@
-const char rcsid_unshk_c[] = "@(#)$KmKId: unshk.c,v 1.10 2020-09-13 23:03:10+00 kentd Exp $";
+const char rcsid_unshk_c[] = "@(#)$KmKId: unshk.c,v 1.11 2021-04-16 03:25:20+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -448,7 +448,7 @@ unshk_parse_header(Disk *dsk, byte *cptr, int compr_size, byte *base_cptr)
 				free(ucptr);
 			} else {
 				// Real success, set raw_size
-				dsk->raw_size = thread_eof;
+				dsk->raw_dsize = thread_eof;
 				dsk->raw_data = ucptr;
 				return;
 			}
