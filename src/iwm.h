@@ -1,5 +1,5 @@
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.22 2021-04-25 19:57:49+00 kentd Exp $";
+const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.23 2021-06-30 02:06:49+00 kentd Exp $";
 #endif
 
 /************************************************************************/
@@ -30,7 +30,7 @@ STRUCT(Trk) {
 	byte	*raw_bptr;
 	byte	*sync_ptr;
 	dword64	dunix_pos;
-	int	unix_len;
+	word32	unix_len;
 	word32	track_qbits;
 };
 

@@ -1,4 +1,4 @@
-const char rcsid_woz_c[] = "@(#)$KmKId: woz.c,v 1.7 2021-05-04 04:43:08+00 kentd Exp $";
+const char rcsid_woz_c[] = "@(#)$KmKId: woz.c,v 1.8 2021-06-30 02:03:59+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -214,7 +214,7 @@ woz_add_track(Disk *dsk, int qtr_track, word32 tmap, double dcycs)
 	iwm_move_to_track(dsk, qtr_track);
 	raw_bptr = &(trk->raw_bptr[2]);
 	sync_ptr = &(trk->sync_ptr[2]);
-	for(i = 0; i < raw_bytes; i++) {
+	for(i = 0; i < (int)raw_bytes; i++) {
 		raw_bptr[i] = bptr[i];
 		sync_ptr[i] = 0xff;
 	}
@@ -259,7 +259,7 @@ woz_parse_header(Disk *dsk, byte *wozptr, word32 woz_size, double dcycs)
 
 	printf("WOZ version: %d\n", version);
 	pos = 12;
-	while(pos < woz_size) {
+	while(pos < (int)woz_size) {
 		bptr = &(wozptr[pos]);
 		chunk_id = bptr[0] | (bptr[1] << 8) | (bptr[2] << 16) |
 				(bptr[3] << 24);
@@ -433,6 +433,9 @@ woz_new(int fd, const char *str, int size_kb)
 	size = must_write(fd, &buf[0], 0x600);
 	if(size != 0x600) {
 		return -1;
+	}
+	if(str) {
+		// Avoid unused var warning
 	}
 
 	return 0;

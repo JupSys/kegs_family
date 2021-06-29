@@ -1,4 +1,4 @@
-const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.41 2021-05-04 23:42:01+00 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.42 2021-06-30 02:05:41+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -109,10 +109,10 @@ do_c70d(word32 arg0)
 	int	param_cnt, block, status_code, ctl_code, stat_val, ret, ext;
 	int	i;
 
-	set_memory_c(0x7f8, 0xc7, 0);
+	set_memory_c(0x7f8, 0xc7);
 
 	if((engine.psr & 0x100) == 0) {
-		disk_printf("c70d called in native mode!\n");
+		disk_printf("c70d %02x called in native mode!\n", arg0);
 		if((engine.psr & 0x30) != 0x30) {
 			halt_printf("c70d called native, psr: %03x!\n",
 							engine.psr);
@@ -120,27 +120,27 @@ do_c70d(word32 arg0)
 	}
 
 	engine.stack = ((engine.stack + 1) & 0xff) + 0x100;
-	rts_lo = get_memory_c(engine.stack, 0);
+	rts_lo = get_memory_c(engine.stack);
 	engine.stack = ((engine.stack + 1) & 0xff) + 0x100;
-	rts_hi = get_memory_c(engine.stack, 0);
+	rts_hi = get_memory_c(engine.stack);
 	rts_addr = (rts_lo + (256*rts_hi) + 1) & 0xffff;
 	disk_printf("rts_addr: %04x\n", rts_addr);
 
-	cmd = get_memory_c(rts_addr, 0);
-	cmd_list_lo = get_memory_c((rts_addr + 1) & 0xffff, 0);
-	cmd_list_mid = get_memory_c((rts_addr + 2) & 0xffff, 0);
+	cmd = get_memory_c(rts_addr);
+	cmd_list_lo = get_memory_c((rts_addr + 1) & 0xffff);
+	cmd_list_mid = get_memory_c((rts_addr + 2) & 0xffff);
 	cmd_list_hi = 0;
 	mask = 0xffff;
 	if(cmd & 0x40) {
 		/* extended */
 		mask = 0xffffff;
-		cmd_list_hi = get_memory_c((rts_addr + 3) & 0xffff, 0);
+		cmd_list_hi = get_memory_c((rts_addr + 3) & 0xffff);
 	}
 
 	cmd_list = cmd_list_lo + (256*cmd_list_mid) + (65536*cmd_list_hi);
 
 	disk_printf("cmd: %02x, cmd_list: %06x\n", cmd, cmd_list);
-	param_cnt = get_memory_c(cmd_list, 0);
+	param_cnt = get_memory_c(cmd_list);
 
 	ext = 0;
 	if(cmd & 0x40) {
@@ -155,20 +155,20 @@ do_c70d(word32 arg0)
 			disk_printf("param_cnt %d is != 3!\n", param_cnt);
 			exit(8);
 		}
-		unit = get_memory_c((cmd_list+1) & mask, 0);
-		status_ptr_lo = get_memory_c((cmd_list+2) & mask, 0);
-		status_ptr_mid = get_memory_c((cmd_list+3) & mask, 0);
+		unit = get_memory_c((cmd_list+1) & mask);
+		status_ptr_lo = get_memory_c((cmd_list+2) & mask);
+		status_ptr_mid = get_memory_c((cmd_list+3) & mask);
 		status_ptr_hi = 0;
 		if(cmd & 0x40) {
-			status_ptr_hi = get_memory_c((cmd_list+4) & mask, 0);
+			status_ptr_hi = get_memory_c((cmd_list+4) & mask);
 		}
 
 		status_ptr = status_ptr_lo + (256*status_ptr_mid) +
 							(65536*status_ptr_hi);
 		if(cmd & 0x40) {
-			status_code = get_memory_c((cmd_list+6) & mask, 0);
+			status_code = get_memory_c((cmd_list+6) & mask);
 		} else {
-			status_code = get_memory_c((cmd_list+4) & mask, 0);
+			status_code = get_memory_c((cmd_list+4) & mask);
 		}
 
 		smartport_log(0, unit, status_ptr, status_code);
@@ -178,11 +178,11 @@ do_c70d(word32 arg0)
 		if(unit == 0 && status_code == 0) {
 			/* Smartport driver status */
 			/* see technotes/smpt/tn-smpt-002 */
-			set_memory_c(status_ptr, g_highest_smartport_unit+1, 0);
-			set_memory_c(status_ptr+1, 0xff, 0); /* interrupt stat*/
-			set_memory16_c(status_ptr+2, 0x0002, 0); /* vendor id */
-			set_memory16_c(status_ptr+4, 0x1000, 0); /* version */
-			set_memory16_c(status_ptr+6, 0x0000, 0);
+			set_memory_c(status_ptr, g_highest_smartport_unit+1);
+			set_memory_c(status_ptr+1, 0xff);	// intrpt stat
+			set_memory16_c(status_ptr+2, 0x0002);	/* vendor id */
+			set_memory16_c(status_ptr+4, 0x1000);	/* version */
+			set_memory16_c(status_ptr+6, 0x0000);
 
 			engine.xreg = 8;
 			engine.yreg = 0;
@@ -201,12 +201,12 @@ do_c70d(word32 arg0)
 				dsize = g_iwm.smartport[unit-1].dimage_size;
 				dsize = (dsize+511) / 512;
 			}
-			set_memory_c(status_ptr, stat_val, 0);
-			set_memory24_c(status_ptr + 1, (word32)dsize, 0);
+			set_memory_c(status_ptr, stat_val);
+			set_memory24_c(status_ptr + 1, (word32)dsize);
 			engine.xreg = 4;
 			if(cmd & 0x40) {
 				set_memory_c(status_ptr + 4,
-						(dsize >> 24) & 0xff, 0);
+							(dsize >> 24) & 0xff);
 				engine.xreg = 5;
 			}
 			engine.yreg = 0;
@@ -230,25 +230,25 @@ do_c70d(word32 arg0)
 				disk_printf("extended for stat_code 3!\n");
 			}
 			/* DIB for unit 1 */
-			set_memory_c(status_ptr, stat_val, 0);
-			set_memory24_c(status_ptr + 1, (word32)dsize, 0);
+			set_memory_c(status_ptr, stat_val);
+			set_memory24_c(status_ptr + 1, (word32)dsize);
 			if(cmd & 0x40) {
 				set_memory_c(status_ptr + 4,
-						(dsize >> 24) & 0xff, 0);
+							(dsize >> 24) & 0xff);
 				status_ptr++;
 			}
-			set_memory_c(status_ptr + 4, 4, 0);
+			set_memory_c(status_ptr + 4, 4);
 			for(i = 5; i < 21; i++) {
-				set_memory_c(status_ptr + i, 0x20, 0);
+				set_memory_c(status_ptr + i, 0x20);
 			}
-			set_memory_c(status_ptr + 5, 'K', 0);
-			set_memory_c(status_ptr + 6, 'E', 0);
-			set_memory_c(status_ptr + 7, 'G', 0);
-			set_memory_c(status_ptr + 8, 'S', 0);
+			set_memory_c(status_ptr + 5, 'K');
+			set_memory_c(status_ptr + 6, 'E');
+			set_memory_c(status_ptr + 7, 'G');
+			set_memory_c(status_ptr + 8, 'S');
 
 			/* hard disk supporting extended calls */
-			set_memory16_c(status_ptr + 21, 0xa002, 0);
-			set_memory16_c(status_ptr + 23, 0x0000, 0);
+			set_memory16_c(status_ptr + 21, 0xa002);
+			set_memory16_c(status_ptr + 23, 0x0000);
 
 			if(cmd & 0x40) {
 				engine.xreg = 26;
@@ -274,23 +274,23 @@ do_c70d(word32 arg0)
 			halt_printf("param_cnt %d is != 3!\n", param_cnt);
 			return;
 		}
-		unit = get_memory_c((cmd_list+1) & mask, 0);
-		buf_ptr_lo = get_memory_c((cmd_list+2) & mask, 0);
-		buf_ptr_hi = get_memory_c((cmd_list+3) & mask, 0);
+		unit = get_memory_c((cmd_list+1) & mask);
+		buf_ptr_lo = get_memory_c((cmd_list+2) & mask);
+		buf_ptr_hi = get_memory_c((cmd_list+3) & mask);
 
 		buf_ptr = buf_ptr_lo + (256*buf_ptr_hi);
 		if(cmd & 0x40) {
-			buf_ptr_lo = get_memory_c((cmd_list+4) & mask, 0);
-			buf_ptr_hi = get_memory_c((cmd_list+5) & mask, 0);
+			buf_ptr_lo = get_memory_c((cmd_list+4) & mask);
+			buf_ptr_hi = get_memory_c((cmd_list+5) & mask);
 			buf_ptr += ((buf_ptr_hi*256) + buf_ptr_lo)*65536;
 			cmd_list += 2;
 		}
-		block_lo = get_memory_c((cmd_list+4) & mask, 0);
-		block_mid = get_memory_c((cmd_list+5) & mask, 0);
-		block_hi = get_memory_c((cmd_list+6) & mask, 0);
+		block_lo = get_memory_c((cmd_list+4) & mask);
+		block_mid = get_memory_c((cmd_list+5) & mask);
+		block_hi = get_memory_c((cmd_list+6) & mask);
 		block_hi2 = 0;
 		if(cmd & 0x40) {
-			block_hi2 = get_memory_c((cmd_list+7) & mask, 0);
+			block_hi2 = get_memory_c((cmd_list+7) & mask);
 		}
 		block = (block_hi2 << 24) | (block_hi << 16) |
 					(block_mid << 8) | block_lo;
@@ -319,23 +319,23 @@ do_c70d(word32 arg0)
 			halt_printf("param_cnt %d is != 3!\n", param_cnt);
 			return;
 		}
-		unit = get_memory_c((cmd_list+1) & mask, 0);
-		buf_ptr_lo = get_memory_c((cmd_list+2) & mask, 0);
-		buf_ptr_hi = get_memory_c((cmd_list+3) & mask, 0);
+		unit = get_memory_c((cmd_list+1) & mask);
+		buf_ptr_lo = get_memory_c((cmd_list+2) & mask);
+		buf_ptr_hi = get_memory_c((cmd_list+3) & mask);
 
 		buf_ptr = buf_ptr_lo + (256*buf_ptr_hi);
 		if(cmd & 0x40) {
-			buf_ptr_lo = get_memory_c((cmd_list+4) & mask, 0);
-			buf_ptr_hi = get_memory_c((cmd_list+5) & mask, 0);
+			buf_ptr_lo = get_memory_c((cmd_list+4) & mask);
+			buf_ptr_hi = get_memory_c((cmd_list+5) & mask);
 			buf_ptr += ((buf_ptr_hi*256) + buf_ptr_lo)*65536;
 			cmd_list += 2;
 		}
-		block_lo = get_memory_c((cmd_list+4) & mask, 0);
-		block_mid = get_memory_c((cmd_list+5) & mask, 0);
-		block_hi = get_memory_c((cmd_list+6) & mask, 0);
+		block_lo = get_memory_c((cmd_list+4) & mask);
+		block_mid = get_memory_c((cmd_list+5) & mask);
+		block_hi = get_memory_c((cmd_list+6) & mask);
 		block_hi2 = 0;
 		if(cmd & 0x40) {
-			block_hi2 = get_memory_c((cmd_list+7) & mask, 0);
+			block_hi2 = get_memory_c((cmd_list+7) & mask);
 		}
 		block = (block_hi2 << 24) | (block_hi << 16) |
 					(block_mid << 8) | block_lo;
@@ -365,7 +365,7 @@ do_c70d(word32 arg0)
 			halt_printf("param_cnt %d is != 1!\n", param_cnt);
 			return;
 		}
-		unit = get_memory_c((cmd_list+1) & mask, 0);
+		unit = get_memory_c((cmd_list+1) & mask);
 
 		if((unit < 1) || (unit > MAX_C7_DISKS)) {
 			halt_printf("Unknown unit #: %d\n", unit);
@@ -394,18 +394,18 @@ do_c70d(word32 arg0)
 			halt_printf("param_cnt %d is != 3!\n", param_cnt);
 			return;
 		}
-		unit = get_memory_c((cmd_list+1) & mask, 0);
-		ctl_ptr_lo = get_memory_c((cmd_list+2) & mask, 0);
-		ctl_ptr_hi = get_memory_c((cmd_list+3) & mask, 0);
+		unit = get_memory_c((cmd_list+1) & mask);
+		ctl_ptr_lo = get_memory_c((cmd_list+2) & mask);
+		ctl_ptr_hi = get_memory_c((cmd_list+3) & mask);
 		ctl_ptr = (ctl_ptr_hi << 8) + ctl_ptr_lo;
 		if(cmd & 0x40) {
-			ctl_ptr_lo = get_memory_c((cmd_list+4) & mask, 0);
-			ctl_ptr_hi = get_memory_c((cmd_list+5) & mask, 0);
+			ctl_ptr_lo = get_memory_c((cmd_list+4) & mask);
+			ctl_ptr_hi = get_memory_c((cmd_list+5) & mask);
 			ctl_ptr += ((ctl_ptr_hi << 8) + ctl_ptr_lo) << 16;
 			cmd_list += 2;
 		}
 
-		ctl_code = get_memory_c((cmd_list +4) & mask, 0);
+		ctl_code = get_memory_c((cmd_list +4) & mask);
 
 		switch(ctl_code) {
 		case 0x00:
@@ -450,19 +450,19 @@ do_c70a(word32 arg0)
 	word32	prodos_unit;
 	int	ret;
 
-	set_memory_c(0x7f8, 0xc7, 0);
+	set_memory_c(0x7f8, 0xc7);
 
-	cmd = get_memory_c((engine.direct + 0x42) & 0xffff, 0);
-	prodos_unit = get_memory_c((engine.direct + 0x43) & 0xffff, 0);
-	buf_lo = get_memory_c((engine.direct + 0x44) & 0xffff, 0);
-	buf_hi = get_memory_c((engine.direct + 0x45) & 0xffff, 0);
-	blk_lo = get_memory_c((engine.direct + 0x46) & 0xffff, 0);
-	blk_hi = get_memory_c((engine.direct + 0x47) & 0xffff, 0);
+	cmd = get_memory_c((engine.direct + 0x42) & 0xffff);
+	prodos_unit = get_memory_c((engine.direct + 0x43) & 0xffff);
+	buf_lo = get_memory_c((engine.direct + 0x44) & 0xffff);
+	buf_hi = get_memory_c((engine.direct + 0x45) & 0xffff);
+	blk_lo = get_memory_c((engine.direct + 0x46) & 0xffff);
+	blk_hi = get_memory_c((engine.direct + 0x47) & 0xffff);
 
 	blk = (blk_hi << 8) + blk_lo;
 	buf = (buf_hi << 8) + buf_lo;
-	disk_printf("cmd: %02x, pro_unit: %02x, buf: %04x, blk: %04x\n",
-		cmd, prodos_unit, buf, blk);
+	disk_printf("c70a %02x cmd:%02x, pro_unit:%02x, buf:%04x, blk:%04x\n",
+		arg0, cmd, prodos_unit, buf, blk);
 
 	if((prodos_unit & 0x7f) == 0x70) {
 		unit = 0 + (prodos_unit >> 7);
@@ -583,7 +583,7 @@ do_read_c7(int unit_num, word32 buf, word32 blk)
 
 	for(i = 0; i < 0x200; i += 2) {
 		val = (local_buf[i+1] << 8) + local_buf[i];
-		set_memory16_c(buf + i, val, 0);
+		set_memory16_c(buf + i, val);
 	}
 
 	return 0;
@@ -615,7 +615,7 @@ do_write_c7(int unit_num, word32 buf, word32 blk)
 	}
 
 	for(i = 0; i < 0x200; i++) {
-		local_buf[i] = get_memory_c(buf + i, 0);
+		local_buf[i] = get_memory_c(buf + i);
 	}
 
 	if(dsk->write_prot || dsk->raw_data) {
@@ -724,10 +724,10 @@ do_c700(word32 ret)
 
 	ret = do_read_c7(0, 0x800, 0);
 
-	set_memory_c(0x7f8, 7, 0);
-	set_memory16_c(0x42, 0x7001, 0);
-	set_memory16_c(0x44, 0x0800, 0);
-	set_memory16_c(0x46, 0x0000, 0);
+	set_memory_c(0x7f8, 7);
+	set_memory16_c(0x42, 0x7001);
+	set_memory16_c(0x44, 0x0800);
+	set_memory16_c(0x46, 0x0000);
 	engine.xreg = 0x70;
 	engine.kpc = 0x801;
 

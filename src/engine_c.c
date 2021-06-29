@@ -1,4 +1,4 @@
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.81 2021-06-14 01:13:48+00 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.82 2021-06-29 22:44:29+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -13,7 +13,6 @@ const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.81 2021-06-14 01:13:
 /************************************************************************/
 
 #include "defc.h"
-#include "protos_engine_c.h"
 
 #if 0
 /* define FCYCS_PTR_FCYCLES_ROUND_SLOW to get accurate 1MHz write to slow mem*/
@@ -509,7 +508,7 @@ set_memory24_pieces_stub(word32 addr, word32 val, double *fcycs_ptr,
 
 
 word32
-get_memory_c(word32 addr, int cycs)
+get_memory_c(word32 addr)
 {
 	byte	*stat, *ptr;
 	double	fcycles, fcycles_tmp1, fplus_1, fplus_x_m1;
@@ -526,28 +525,22 @@ get_memory_c(word32 addr, int cycs)
 }
 
 word32
-get_memory16_c(word32 addr, int cycs)
+get_memory16_c(word32 addr)
 {
-	double	fcycs;
-
-	fcycs = 0;
-	return get_memory_c(addr, fcycs) +
-			(get_memory_c(addr+1, fcycs) << 8);
+	return get_memory_c(addr) +
+			(get_memory_c(addr+1) << 8);
 }
 
 word32
-get_memory24_c(word32 addr, int cycs)
+get_memory24_c(word32 addr)
 {
-	double	fcycs;
-
-	fcycs = 0;
-	return get_memory_c(addr, fcycs) +
-			(get_memory_c(addr+1, fcycs) << 8) +
-			(get_memory_c(addr+2, fcycs) << 16);
+	return get_memory_c(addr) +
+			(get_memory_c(addr+1) << 8) +
+			(get_memory_c(addr+2) << 16);
 }
 
 void
-set_memory_c(word32 addr, word32 val, int cycs)
+set_memory_c(word32 addr, word32 val)
 {
 	byte	*stat;
 	byte	*ptr;
@@ -563,7 +556,7 @@ set_memory_c(word32 addr, word32 val, int cycs)
 }
 
 void
-set_memory16_c(word32 addr, word32 val, int cycs)
+set_memory16_c(word32 addr, word32 val)
 {
 	byte	*stat;
 	byte	*ptr;
@@ -580,11 +573,11 @@ set_memory16_c(word32 addr, word32 val, int cycs)
 }
 
 void
-set_memory24_c(word32 addr, word32 val, int cycs)
+set_memory24_c(word32 addr, word32 val)
 {
-	set_memory_c(addr, val, 0);
-	set_memory_c(addr + 1, val >> 8, 0);
-	set_memory_c(addr + 2, val >> 16, 0);
+	set_memory_c(addr, val);
+	set_memory_c(addr + 1, val >> 8);
+	set_memory_c(addr + 2, val >> 16);
 }
 
 word32

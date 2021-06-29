@@ -1,4 +1,4 @@
-const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.90 2021-05-04 00:06:36+00 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.91 2021-06-29 22:44:19+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -656,6 +656,9 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 		g_kbd_ctl_addr = new_kbd;
 	}
 
+	if(val1) {
+		// Do nothing
+	}
 
 	tmp1 = val2 >> 4;
 	if(tmp1 == 4) {

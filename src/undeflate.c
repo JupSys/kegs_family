@@ -1,4 +1,4 @@
-const char rcsid_undeflate_c[] = "@(#)$KmKId: undeflate.c,v 1.9 2021-05-04 22:27:34+00 kentd Exp $";
+const char rcsid_undeflate_c[] = "@(#)$KmKId: undeflate.c,v 1.10 2021-06-30 02:04:22+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -11,6 +11,9 @@ const char rcsid_undeflate_c[] = "@(#)$KmKId: undeflate.c,v 1.9 2021-05-04 22:27
 /*	The KEGS web page is kegs.sourceforge.net			*/
 /*	You may contact the author at: kadickey@alumni.princeton.edu	*/
 /************************************************************************/
+
+// This file has routines for the undeflate uncompression algorithm for
+//  gzip/zip, and routines for reading .zip files.
 
 // Based on https://www.ietf.org/rfc/rfc1951.txt for Deflate algorithm,
 //  and https://www.ietf.org/rfc/rfc1952.txt for gzip file format.
@@ -120,7 +123,7 @@ undeflate_init_len_dist_tab(word32 *tabptr, dword64 drepeats, word32 start)
 			start--;		// 258, not 259
 			repeats = 1;
 		}
-		for(i = 0; i < repeats; i++) {
+		for(i = 0; i < (int)repeats; i++) {
 			tabptr[pos] = start | (extra_bits << 20) | (1 << 24);
 			//printf("Set table[%d]=%08x (%d) i:%d out of %d\n",
 			//	pos, tabptr[pos], start, i, repeats);
@@ -422,12 +425,12 @@ undeflate_build_huff_tab(word32 *tabptr, word32 *entry_ptr, word32 len_size,
 		next_code[i] = code;
 		// printf("Set next_code[%d] = %03x\n", i, code);
 	}
-	for(i = 0; i < tab_size; i++) {
+	for(i = 0; i < (int)tab_size; i++) {
 		tabptr[i] = 0;
 	}
 	tabptr[tab_size] = 0;
 
-	for(i = 0; i < len_size; i++) {
+	for(i = 0; i < (int)len_size; i++) {
 		entry = entry_ptr[i];
 		bits = (entry >> 16) & 0xf;
 		//printf("i:%03x, bits:%d, entry:%08x\n", i, bits, entry);
@@ -469,6 +472,9 @@ undeflate_dynamic_table(byte *cptr, word32 *bit_pos_ptr, byte *cptr_base)
 	printf("At +%06x, bit:%d, hlit:%02x hdist:%02x, hclen:%02x\n",
 		(word32)(cptr - cptr_base), bit_pos, hlit, hdist, hclen);
 #endif
+	if(cptr_base) {
+		// Avoid unused parameter warning
+	}
 	bit_pos += 14;
 	cptr += (bit_pos >> 3);
 	bit_pos = bit_pos & 7;
@@ -478,7 +484,7 @@ undeflate_dynamic_table(byte *cptr, word32 *bit_pos_ptr, byte *cptr_base)
 	}
 	hclen += 4;			// 19*3 = 57 bits, at most
 	max_bits = 0;
-	for(i = 0; i < hclen; i++) {
+	for(i = 0; i < (int)hclen; i++) {
 		val = ((cptr[0] + (cptr[1] << 8)) >> bit_pos) & 7;
 		entry = g_undeflate_lencode_positions[i];
 		entry = entry & (~0xf0000);		// clear bits from entry
@@ -556,7 +562,7 @@ undeflate_dynamic_table(byte *cptr, word32 *bit_pos_ptr, byte *cptr_base)
 				}
 			}
 		}
-		for(i = 0; i < repeat; i++) {
+		for(i = 0; i < (int)repeat; i++) {
 			code_list[code_pos] = entry;
 			// printf("Added code_list[%03x] = %08x\n", code_pos,
 			//						entry);
@@ -566,7 +572,7 @@ undeflate_dynamic_table(byte *cptr, word32 *bit_pos_ptr, byte *cptr_base)
 
 	// Fix lengths and literals
 	max_length_bits = 0;
-	for(i = 0; i < hlit; i++) {
+	for(i = 0; i < (int)hlit; i++) {
 		entry = code_list[i];
 		bits = (entry >> 16) & 0xf;
 		bl_count[bits]++;
@@ -583,7 +589,7 @@ undeflate_dynamic_table(byte *cptr, word32 *bit_pos_ptr, byte *cptr_base)
 
 	// Fix distances
 	max_distance_bits = 0;
-	for(i = 0; i < hdist; i++) {
+	for(i = 0; i < (int)hdist; i++) {
 		entry = code_list[i + hlit];
 		bits = (entry >> 16) & 0xf;
 		bl_count_dist[bits]++;
@@ -676,8 +682,7 @@ undeflate_block(Disk *dsk, byte *cptr, word32 *bit_pos_ptr, byte *cptr_base,
 			return 0;
 		}
 		cptr += 4;
-		for(i = 0; i < len; i++) {
-			//putc(*cptr, g_outf);
+		for(i = 0; i < (int)len; i++) {
 			*ucptr++ = *cptr++;
 		}
 		dsk->dimage_size += len;
@@ -825,7 +830,7 @@ undeflate_block(Disk *dsk, byte *cptr, word32 *bit_pos_ptr, byte *cptr_base,
 						dist, ucptr, dsk->raw_data);
 				return 0;
 			}
-			for(i = 0; i < len; i++) {
+			for(i = 0; i < (int)len; i++) {
 				ucptr[0] = ucptr[0-(int)dist];
 #if 0
 				putc(ucptr[0], g_outf);
@@ -1174,9 +1179,10 @@ undeflate_zipfile_make_list(int fd)
 	dword64	local_dheader, dneg1, dval, doff;
 	byte	*dirptr, *name_ptr, *bptr, *bptr2;
 	char	*str;
-	word32	name_len, extra_len, comment_len, ent, entries, part_len, inc;
+	word32	extra_len, comment_len, ent, entries, part_len, inc;
 	word32	tmp_off, ex_off, this_size, this_id;
 	int	pos, good, add_it, need_compr, need_unc, need_dheader;
+	int	name_len;
 	int	i;
 
 	dret = cfg_read_from_fd(fd, &buf[0], 0, 1024);
@@ -1274,7 +1280,7 @@ undeflate_zipfile_make_list(int fd)
 
 	pos = 0;
 	ent = 0;
-	while(pos < dir_dsize) {
+	while(pos < (int)dir_dsize) {
 #if 0
 		printf("Working on ent %d at pos %d\n", ent, pos);
 #endif
@@ -1299,7 +1305,7 @@ undeflate_zipfile_make_list(int fd)
 		extra_len = cfg_get_le16(&dirptr[pos + 30]);
 		comment_len = cfg_get_le16(&dirptr[pos + 32]);
 		local_dheader = cfg_get_le32(&dirptr[pos + 42]);
-		if((pos + 46 + name_len) > dir_dsize) {
+		if((pos + 46UL + name_len) > dir_dsize) {
 			printf("Corrupt entry: pos:%04x, name_len:%04x, "
 				"dir_dsize:%05llx\n", pos, name_len, dir_dsize);
 			break;
@@ -1321,7 +1327,7 @@ undeflate_zipfile_make_list(int fd)
 #endif
 			this_id = cfg_get_le16(&bptr[ex_off]);
 			this_size = cfg_get_le16(&bptr[ex_off + 2]);
-			if((this_size + ex_off + pos + 46 + name_len) >
+			if((this_size + ex_off + pos + 46UL + name_len) >
 								dir_dsize) {
 				printf("Corrupt ZIP64 extra info entry\n");
 				add_it = 0;

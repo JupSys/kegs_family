@@ -1,4 +1,4 @@
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.176 2021-06-25 02:42:44+00 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.177 2021-06-30 02:04:09+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -428,7 +428,7 @@ video_init(int mdepth)
 
 	g_new_a2_stat_cur_line = 0;
 
-	vid_printf("Zeroing out video memory\n");
+	vid_printf("Zeroing out video memory, mdepth:%d\n", mdepth);
 
 	for(i = 0; i < SLOW_MEM_CH_SIZE; i++) {
 		slow_mem_changed[i] = (word32)-1;
@@ -1215,7 +1215,7 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 
 void
 video_hgr_line_segment(byte *slow_mem_ptr, word32 *wptr, int x1,
-		int monochrome, int dbl, int pixels_per_line, int st_line)
+		int monochrome, int dbl, int pixels_per_line)
 {
 	word32	val0, val1, val2, prev_bits, val1_hi, dbl_step, pixel, color;
 	int	shift_per, shift;
@@ -1352,7 +1352,7 @@ redraw_changed_hgr(int start_offset, int start_line, int reparse,
 
 		wptr = in_wptr + offset;
 		video_hgr_line_segment(slow_mem_ptr, wptr, x1, monochrome,
-					dbl, pixels_per_line, st_line);
+							dbl, pixels_per_line);
 	}
 	g_a2_line_left_edge[st_line] = (left*14);
 	g_a2_line_right_edge[st_line] = (right*14);
@@ -1524,8 +1524,8 @@ redraw_changed_super_hires_oneline(word32 *in_wptr, int pixels_per_line,
 }
 
 void
-redraw_changed_super_hires(int start_offset, int start_line, int reparse,
-	word32 *wptr, int pixels_per_line)
+redraw_changed_super_hires(int start_line, int reparse, word32 *wptr,
+						int pixels_per_line)
 {
 	word32	*ch_ptr;
 	word32	mask_per_line, check0, check1, mask0, mask1;
@@ -1760,7 +1760,7 @@ video_refresh_line(int line, int must_reparse)
 		break;
 	case MODE_SUPER_HIRES:
 		g_num_lines_superhires++;
-		redraw_changed_super_hires(0, line, must_reparse, wptr,
+		redraw_changed_super_hires(line, must_reparse, wptr,
 							pixels_per_line);
 		break;
 	case MODE_BORDER:

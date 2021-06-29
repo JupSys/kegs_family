@@ -1,4 +1,4 @@
-const char rcsid_mockingboard_c[] = "@(#)$KmKId: mockingboard.c,v 1.20 2021-06-25 02:44:39+00 kentd Exp $";
+const char rcsid_mockingboard_c[] = "@(#)$KmKId: mockingboard.c,v 1.21 2021-06-30 02:05:50+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -35,6 +35,9 @@ mock_ay8913_reset(int pair_num, double dcycs)
 	Ay8913	*ay8913ptr;
 	int	i;
 
+	if(dcycs) {
+		// Avoid unused parameter warning
+	}
 	ay8913ptr = &(g_mockingboard.pair[pair_num].ay8913);
 	ay8913ptr->reg_addr_latch = 0;
 	for(i = 0; i < 16; i++) {
@@ -535,14 +538,8 @@ mock_6522_new_ifr(double dcycs, int pair_num, word32 ifr, word32 ier)
 	return ifr;
 }
 
-word32
-mock_ay8913_read(int pair_num, double dcycs)
-{
-	return 0;
-}
-
 void
-mock_ay8913_reg_read(int pair_num, double dcycs)
+mock_ay8913_reg_read(int pair_num)
 {
 	Mos6522	*mos6522ptr;
 	Ay8913	*ay8913ptr;
@@ -645,7 +642,7 @@ mock_ay8913_control_update(int pair_num, word32 new_val, word32 prev_val,
 		mock_ay8913_reg_write(pair_num, dcycs);
 	}
 	if(new_val == 5) {
-		mock_ay8913_reg_read(pair_num, dcycs);
+		mock_ay8913_reg_read(pair_num);
 	}
 }
 

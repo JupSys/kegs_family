@@ -1,4 +1,4 @@
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.417 2021-06-25 02:42:52+00 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.419 2021-06-30 02:19:44+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -96,7 +96,7 @@ int	g_serial_out_masking = 0;
 int	g_serial_modem[2] = { 0, 1 };
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "1.07";
+const char g_kegs_version_str[] = "1.08";
 
 #define START_DCYCS	(0.0)
 
@@ -217,9 +217,9 @@ toolbox_debug_4byte(word32 addr)
 		return (word32)-1;
 	}
 
-	part1 = get_memory16_c(addr, 0);
+	part1 = get_memory16_c(addr);
 	part1 = (part1 >> 8) + ((part1 & 0xff) << 8);
-	part2 = get_memory16_c(addr+2, 0);
+	part2 = get_memory16_c(addr+2);
 	part2 = (part2 >> 8) + ((part2 & 0xff) << 8);
 
 	return (part1 << 16) + part2;
@@ -276,33 +276,6 @@ show_toolbox_log()
 	}
 }
 
-#if 0
-/* get_memory_c is not used, get_memory_asm is, but this does what the */
-/*  assembly language would do */
-word32
-get_memory_c(word32 loc, int diff_cycles)
-{
-	byte	*addr;
-	word32	result;
-	int	index;
-
-#ifdef CHECK_BREAKPOINTS
-	check_breakpoints_c(loc);
-#endif
-
-	index = loc >> 8;
-	result = page_info[index].rd;
-	if(result & BANK_IO_BIT) {
-		return get_memory_io(loc, diff_cycles);
-	}
-
-	addr = (byte *)((result & 0xffffff00) + (loc & 0xff));
-
-	return *addr;
-}
-#endif
-
-
 word32
 get_memory_io(word32 loc, double *cyc_ptr)
 {
@@ -358,78 +331,6 @@ get_memory_io(word32 loc, double *cyc_ptr)
 
 	return 0;
 }
-
-#if 0
-word32
-get_memory16_pieces(word32 loc, int diff_cycles)
-{
-	return(get_memory_c(loc, diff_cycles) +
-		(get_memory_c(loc+1, diff_cycles) << 8));
-}
-
-word32
-get_memory24(word32 loc, int diff_cycles)
-{
-	return(get_memory_c(loc, diff_cycles) +
-		(get_memory_c(loc+1, diff_cycles) << 8) +
-		(get_memory_c(loc+2, diff_cycles) << 16));
-}
-#endif
-
-#if 0
-void
-set_memory(word32 loc, int val, int diff_cycles)
-{
-	byte *ptr;
-	word32	new_addr;
-	word32	tmp;
-	word32	or_val;
-	int	or_pos;
-	int	old_slow_val;
-
-#ifdef CHECK_BREAKPOINTS
-	check_breakpoints_c(loc);
-#endif
-
-	tmp = GET_PAGE_INFO_WR((loc>>8) & 0xffff);
-	if(tmp & BANK_IO) {
-		set_memory_io(loc, val, diff_cycles);
-		return;
-	}
-
-	if((loc & 0xfef000) == 0xe0c000) {
-		printf("set_memory_special: non-io for addr %08x, %02x, %d\n",
-			loc, val, diff_cycles);
-		halt_printf("tmp: %08x\n", tmp);
-	}
-
-	ptr = (byte *)(tmp & (~0xff));
-
-	new_addr = loc & 0xffff;
-	old_slow_val = val;
-
-	if(tmp & BANK_SHADOW) {
-		old_slow_val = g_slow_memory_ptr[new_addr];
-	} else if(tmp & BANK_SHADOW2) {
-		new_addr += 0x10000;
-		old_slow_val = g_slow_memory_ptr[new_addr];
-	}
-
-	if(old_slow_val != val) {
-		g_slow_memory_ptr[new_addr] = val;
-		or_pos = (new_addr >> SHIFT_PER_CHANGE) & 0x1f;
-		or_val = DEP1(1, or_pos, 0);
-		if((new_addr >> CHANGE_SHIFT) >= SLOW_MEM_CH_SIZE) {
-			printf("new_addr: %08x\n", new_addr);
-			exit(12);
-		}
-		slow_mem_changed[(new_addr & 0xffff) >> CHANGE_SHIFT] |= or_val;
-	}
-
-	ptr[loc & 0xff] = val;
-
-}
-#endif
 
 void
 set_memory_io(word32 loc, int val, double *cyc_ptr)
@@ -574,7 +475,7 @@ do_reset()
 
 	g_irq_pending = 0;
 
-	engine.kpc = get_memory16_c(0x00fffc, 0);
+	engine.kpc = get_memory16_c(0x00fffc);
 
 	g_stepping = 0;
 
@@ -890,7 +791,7 @@ load_roms_init_memory()
 	/*  at uninitialized $e1/15fe and if it is negative it will JMP */
 	/*  through $e1/1688 which ROM 03 left pointing to fc/0199 */
 	/* So set e1/15fe = 0 */
-	set_memory16_c(0xe115fe, 0, 0);
+	set_memory16_c(0xe115fe, 0);
 }
 
 void
@@ -1610,14 +1511,13 @@ take_irq(int is_it_brk)
 
 	if(engine.psr & 0x100) {
 		/* Emulation */
-		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff, 0);
+		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff);
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
-		set_memory_c(engine.stack, engine.kpc & 0xff, 0);
+		set_memory_c(engine.stack, engine.kpc & 0xff);
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
-		set_memory_c(engine.stack,
-					(engine.psr & 0xef)|(is_it_brk<<4),0);
+		set_memory_c(engine.stack, (engine.psr & 0xef)|(is_it_brk<<4));
 			/* Clear B bit in psr on stack */
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
@@ -1629,16 +1529,16 @@ take_irq(int is_it_brk)
 
 	} else {
 		/* native */
-		set_memory_c(engine.stack, (engine.kpc >> 16) & 0xff, 0);
+		set_memory_c(engine.stack, (engine.kpc >> 16) & 0xff);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff, 0);
+		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		set_memory_c(engine.stack, engine.kpc & 0xff, 0);
+		set_memory_c(engine.stack, engine.kpc & 0xff);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		set_memory_c(engine.stack, engine.psr & 0xff, 0);
+		set_memory_c(engine.stack, engine.psr & 0xff);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
 		if(is_it_brk) {
@@ -1657,8 +1557,8 @@ take_irq(int is_it_brk)
 
 	}
 
-	new_kpc = get_memory_c(va, 0);
-	new_kpc = new_kpc + (get_memory_c(va+1, 0) << 8);
+	new_kpc = get_memory_c(va);
+	new_kpc = new_kpc + (get_memory_c(va + 1) << 8);
 
 	engine.psr = ((engine.psr & 0x1f3) | 0x4);
 
@@ -1709,26 +1609,13 @@ update_60hz(double dcycs, double dtime_now)
 	char	status_buf[1024];
 	char	sim_mhz_buf[128];
 	char	total_mhz_buf[128];
-	char	*sim_mhz_ptr, *total_mhz_ptr;
-	char	*code_str1, *code_str2, *sp_str;
-	double	eff_pmhz;
-	double	planned_dcycs;
-	double	predicted_pmhz;
-	double	recip_predicted_pmhz;
-	double	dtime_this_vbl_sim;
-	double	dtime_diff_1sec;
-	double	dratio;
-	double	dtime_till_expected;
-	double	dtime_diff;
-	double	dtime_this_vbl;
-	double	dadjcycs_this_vbl;
-	double	dadj_cycles_1sec;
-	double	dtmp1, dtmp2, dtmp3, dtmp4, dtmp5;
+	char	*sim_mhz_ptr, *total_mhz_ptr, *code_str1, *code_str2, *sp_str;
+	double	eff_pmhz, planned_dcycs, predicted_pmhz, recip_predicted_pmhz;
+	double	dtime_this_vbl_sim, dtime_diff_1sec, dratio, dtime_diff;
+	double	dtime_till_expected, dtime_this_vbl, dadjcycs_this_vbl;
+	double	dadj_cycles_1sec, dtmp1, dtmp2, dtmp3, dtmp4, dtmp5;
 	double	dnatcycs_1sec;
-	int	tmp;
-	int	doit_3_persec;
-	int	cur_vbl_index;
-	int	prev_vbl_index;
+	int	tmp, doit_3_persec, cur_vbl_index, prev_vbl_index;
 
 	/* NOTE: this event is defined to occur before line 0 */
 	/* It's actually happening at the start of the border for line (-1) */
@@ -2023,7 +1910,7 @@ update_60hz(double dcycs, double dtime_now)
 	}
 
 	if(!g_scan_int_events) {
-		check_scan_line_int(dcycs, 0);
+		check_scan_line_int(0);
 	}
 
 	doit_3_persec = 0;
@@ -2034,10 +1921,10 @@ update_60hz(double dcycs, double dtime_now)
 		doit_3_persec = 1;
 	}
 
-	iwm_vbl_update(doit_3_persec);
+	iwm_vbl_update();
 	config_vbl_update(doit_3_persec);
 
-	sound_update(dcycs, dtime_now);
+	sound_update(dcycs);
 	clock_update();
 	scc_update(dcycs);
 	paddle_update_buttons();
@@ -2054,11 +1941,15 @@ do_vbl_int()
 	}
 }
 
-
 void
 do_scan_int(double dcycs, int line)
 {
 	int	c023_val;
+
+	if(dcycs) {
+		// Avoid unused param warning
+	}
+
 	g_scan_int_events = 0;
 
 	c023_val = g_c023_val;
@@ -2081,17 +1972,16 @@ do_scan_int(double dcycs, int line)
 	} else {
 		/* scan int bit cleared on scan line control byte */
 		/* look for next line, if any */
-		check_scan_line_int(dcycs, line+1);
+		check_scan_line_int(line+1);
 	}
 }
 
 void
-check_scan_line_int(double dcycs, int cur_video_line)
+check_scan_line_int(int cur_video_line)
 {
-	int	delay;
-	int	start;
-	int	line;
+	int	delay, start, line;
 	int	i;
+
 	/* Called during VBL interrupt phase */
 
 	if(!(g_cur_a2_stat & ALL_STAT_SUPER_HIRES)) {
@@ -2136,7 +2026,7 @@ check_for_new_scan_int(double dcycs)
 	int	cur_video_line;
 
 	cur_video_line = get_lines_since_vbl(dcycs) >> 8;
-	check_scan_line_int(dcycs, cur_video_line);
+	check_scan_line_int(cur_video_line);
 }
 
 void

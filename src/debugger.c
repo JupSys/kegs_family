@@ -1,4 +1,4 @@
-const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.36 2021-06-26 01:42:42+00 kentd Exp $";
+const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.37 2021-06-30 02:05:02+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -319,26 +319,26 @@ debug_draw_debug_line(Kimage *kimage_ptr, int line, int vid_line)
 Dbg_longcmd g_debug_bp_clear[] = {
 	{ "all",	debug_bp_clear_all,	0,
 					"clear all breakpoints" },
-	{ 0, 0 }
+	{ 0, 0, 0, 0 }
 };
 Dbg_longcmd g_debug_bp[] = {
 	{ "set",	debug_bp_set,	0,
 					"Set breakpoint: ADDR or ADDR0-ADDR1" },
 	{ "clear",	debug_bp_clear,	&g_debug_bp_clear[0],
 				"Clear breakpoint: ADDR OR ADDR0-ADDR1"},
-	{ 0, 0 }
+	{ 0, 0, 0, 0 }
 };
 
 Dbg_longcmd g_debug_logpc[] = {
 	{ "on",		debug_logpc_on,	0, "Turn on logging of pc and data" },
 	{ "off",	debug_logpc_off,0, "Turn off logging of pc and data" },
 	{ "save",	debug_logpc_save,0, "logpc save FILE: save to file" },
-	{ 0, 0 }
+	{ 0, 0, 0, 0 }
 };
 
 Dbg_longcmd g_debug_iwm[] = {
 	{ "check",	debug_iwm_check, 0, "Denibblize current track" },
-	{ 0, 0 }
+	{ 0, 0, 0, 0 }
 };
 
 // Main table of commands
@@ -348,7 +348,7 @@ Dbg_longcmd g_debug_longcmds[] = {
 					"bp ADDR: sets breakpoint on addr" },
 	{ "logpc",	debug_logpc,	&g_debug_logpc[0], "Log PC" },
 	{ "iwm",	debug_iwm,	&g_debug_iwm[0], "IWM" },
-	{ 0, 0 }
+	{ 0, 0, 0, 0 }
 };
 
 void
@@ -516,7 +516,7 @@ do_debug_cmd(const char *in_str)
 {
 	const char *line_ptr;
 	const char *newstr;
-	int	slot_drive, track, osc, ret_val, mode, old_mode, got_num;
+	int	slot_drive, track, ret_val, mode, old_mode, got_num;
 	int	save_to_stdout;
 
 	mode = 0;
@@ -588,11 +588,7 @@ do_debug_cmd(const char *in_str)
 			iwm_show_stats();
 			break;
 		case 'E':
-			osc = -1;
-			if(got_num) {
-				osc = g_a2;
-			}
-			doc_show_ensoniq_state(osc);
+			doc_show_ensoniq_state();
 			break;
 		case 'T':
 			if(got_num) {
@@ -753,7 +749,7 @@ do_debug_cmd(const char *in_str)
 			}
 			if(line_ptr == &in_str[1]) {
 				g_a2 = g_a1 | (g_hex_line_len - 1);
-				show_hex_mem(g_a1bank, g_a1, g_a2bank, g_a2,-1);
+				show_hex_mem(g_a1bank, g_a1, g_a2, -1);
 				g_a1 = g_a2 + 1;
 			} else {
 				if((got_num == 1) || (mode == 's')) {
@@ -776,9 +772,9 @@ dis_get_memory_ptr(word32 addr)
 {
 	word32	tmp1, tmp2, tmp3;
 
-	tmp1 = get_memory_c(addr, 0);
-	tmp2 = get_memory_c(addr + 1, 0);
-	tmp3 = get_memory_c(addr + 2, 0);
+	tmp1 = get_memory_c(addr);
+	tmp2 = get_memory_c(addr + 1);
+	tmp3 = get_memory_c(addr + 2);
 
 	return (tmp3 << 16) + (tmp2 << 8) + tmp1;
 }
@@ -901,6 +897,9 @@ debug_bp_clear(const char *str)
 void
 debug_bp_clear_all(const char *str)
 {
+	if(str) {
+		// Use str to avoid warning
+	}
 	if(g_num_breakpoints) {
 		g_num_breakpoints = 0;
 		setup_pageinfo();
@@ -940,6 +939,9 @@ debug_bp_setclr(const char *str, int is_set_clear)
 void
 debug_logpc(const char *str)
 {
+	if(str) {
+		// Dummy use of argument
+	}
 	dbg_printf("logpc enable:%d, cur offset:%08lx\n", g_log_pc_enable,
 			g_log_pc_ptr - g_log_pc_start_ptr);
 }
@@ -947,6 +949,9 @@ debug_logpc(const char *str)
 void
 debug_logpc_on(const char *str)
 {
+	if(str) {
+		// Dummy use of argument
+	}
 	g_log_pc_enable = 1;
 	g_fcycles_end = 0;
 	dbg_printf("Enabled logging of PC and data accesses\n");
@@ -955,6 +960,9 @@ debug_logpc_on(const char *str)
 void
 debug_logpc_off(const char *str)
 {
+	if(str) {
+		// Dummy use of argument
+	}
 	g_log_pc_enable = 0;
 	g_fcycles_end = 0;
 	dbg_printf("Disabled logging of PC and data accesses\n");
@@ -1197,12 +1205,18 @@ delete_bp(word32 addr, word32 end_addr)
 void
 debug_iwm(const char *str)
 {
+	if(str) {
+		// Dummy use of argument
+	}
 	iwm_show_track(-1, -1, 0.0);
 }
 
 void
 debug_iwm_check(const char *str)
 {
+	if(str) {
+		// Dummy use of argument
+	}
 	iwm_check_nibblization(0.0);
 }
 
@@ -1230,7 +1244,7 @@ do_blank(int mode, int old_mode)
 		/* video_update_through_line(262); */
 		break;
 	case ':':
-		set_memory_c(((g_a3bank << 16) + g_a3), g_a2, 0);
+		set_memory_c(((g_a3bank << 16) + g_a3), g_a2);
 		g_a3++;
 		mode = old_mode;
 		break;
@@ -1287,13 +1301,12 @@ do_step()
 void
 xam_mem(int count)
 {
-	show_hex_mem(g_a1bank, g_a1, g_a2bank, g_a2, count);
+	show_hex_mem(g_a1bank, g_a1, g_a2, count);
 	g_a1 = g_a2 + 1;
 }
 
 void
-show_hex_mem(word32 startbank, word32 start, word32 endbank, word32 end,
-								int count)
+show_hex_mem(word32 startbank, word32 start, word32 end, int count)
 {
 	char	ascii[MAXNUM_HEX_PER_LINE];
 	word32	i;
@@ -1311,8 +1324,8 @@ show_hex_mem(word32 startbank, word32 start, word32 endbank, word32 end,
 		if( (i==start) || (count == 16) ) {
 			dbg_printf("%04x:",i);
 		}
-		dbg_printf(" %02x", get_memory_c((startbank <<16) + i, 0));
-		val = get_memory_c((startbank << 16) + i, 0) & 0x7f;
+		dbg_printf(" %02x", get_memory_c((startbank <<16) + i));
+		val = get_memory_c((startbank << 16) + i) & 0x7f;
 		if((val < 32) || (val >= 0x7f)) {
 			val = '.';
 		}
@@ -1364,8 +1377,8 @@ dis_do_memmove()
 	dbg_printf("Memory move from %02x/%04x.%04x to %02x/%04x\n", g_a1bank,
 						g_a1, g_a2, g_a4bank, g_a4);
 	while(g_a1 <= (g_a2 & 0xffff)) {
-		val = get_memory_c((g_a1bank << 16) + g_a1, 0);
-		set_memory_c((g_a4bank << 16) + g_a4, val, 0);
+		val = get_memory_c((g_a1bank << 16) + g_a1);
+		set_memory_c((g_a4bank << 16) + g_a4, val);
 		g_a1++;
 		g_a4++;
 	}
@@ -1388,8 +1401,8 @@ dis_do_compare()
 	dbg_printf("Memory Compare from %02x/%04x.%04x with %02x/%04x\n",
 					g_a1bank, g_a1, g_a2, g_a4bank, g_a4);
 	while(g_a1 <= (g_a2 & 0xffff)) {
-		val1 = get_memory_c((g_a1bank << 16) + g_a1, 0);
-		val2 = get_memory_c((g_a4bank << 16) + g_a4, 0);
+		val1 = get_memory_c((g_a1bank << 16) + g_a1);
+		val2 = get_memory_c((g_a4bank << 16) + g_a4);
 		if(val1 != val2) {
 			dbg_printf("%02x/%04x: %02x vs %02x\n", g_a1bank, g_a1,
 								val1, val2);
@@ -1502,7 +1515,7 @@ do_dis(word32 kpc, int accsize, int xsize, int op_provided, word32 instr,
 	if(op_provided) {
 		opcode = (instr >> 24) & 0xff;
 	} else {
-		opcode = (int)get_memory_c(kpc, 0) & 0xff;
+		opcode = (int)get_memory_c(kpc) & 0xff;
 	}
 
 	kpc++;
@@ -1529,21 +1542,21 @@ do_dis(word32 kpc, int accsize, int xsize, int op_provided, word32 instr,
 		if(op_provided) {
 			val = instr & 0xff;
 		} else {
-			val = get_memory_c(kpc, 0);
+			val = get_memory_c(kpc);
 		}
 		break;
 	case 2:
 		if(op_provided) {
 			val = instr & 0xffff;
 		} else {
-			val = get_memory16_c(kpc, 0);
+			val = get_memory16_c(kpc);
 		}
 		break;
 	case 3:
 		if(op_provided) {
 			val = instr & 0xffffff;
 		} else {
-			val = get_memory24_c(kpc, 0);
+			val = get_memory24_c(kpc);
 		}
 		break;
 	default:
@@ -1760,7 +1773,7 @@ debug_get_view_line(int back)
 }
 
 int
-debug_add_output_line(char *in_str, int len)
+debug_add_output_line(char *in_str)
 {
 	Debug_entry *line_ptr;
 	byte	*out_bptr;
@@ -1832,7 +1845,7 @@ debug_add_output_string(char *in_str, int len)
 	while((len > 0) || (tries == 0)) {
 		// printf("DEBUG: adding str: %s, len:%d, ret:%d\n", in_str,
 		//						len, ret);
-		ret = debug_add_output_line(in_str, len);
+		ret = debug_add_output_line(in_str);
 		len -= ret;
 		in_str += ret;
 		tries++;

@@ -1,5 +1,5 @@
 adb.o: adb.c defc.h defcomm.h iwm.h protos.h protos_base.h
-engine_c.o: engine_c.c defc.h defcomm.h iwm.h protos.h protos_base.h protos_engine_c.h size_c.h op_routs.h engine.h defs_instr.h instable.h
+engine_c.o: engine_c.c defc.h defcomm.h iwm.h protos.h protos_base.h size_c.h op_routs.h engine.h defs_instr.h instable.h
 clock.o: clock.c defc.h defcomm.h iwm.h protos.h protos_base.h
 compile_time.o: compile_time.c
 config.o: config.c defc.h defcomm.h iwm.h protos.h protos_base.h config.h

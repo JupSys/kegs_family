@@ -1,4 +1,4 @@
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.269 2021-06-26 01:42:26+00 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.270 2021-06-30 02:06:02+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -1211,7 +1211,7 @@ io_read(word32 loc, double *cyc_ptr)
 			return scc_read_data(0, dcycs);
 		case 0x3c: /* 0xc03c */
 			/* doc control */
-			return doc_read_c03c(dcycs);
+			return doc_read_c03c();
 		case 0x3d: /* 0xc03d */
 			return doc_read_c03d(dcycs);
 		case 0x3e: /* 0xc03e */

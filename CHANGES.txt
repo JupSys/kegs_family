@@ -1,4 +1,8 @@
 
+Changes in KEGS v1.08 since v1.07 (06/29/21)
+- Fixed a stupid bug in iwm.c that would cause KEGS to crash when many WOZ
+	images were mounted.
+
 Changes in KEGS v1.07 since v1.05 (06/26/21)
 - Can create new disk images while running: press N in the disk image
 	selection screen.

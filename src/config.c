@@ -1,4 +1,4 @@
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.85 2021-05-04 22:27:13+00 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.87 2021-06-30 02:06:10+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -492,9 +492,9 @@ cfg_set_config_panel(int panel)
 		// Leave config panel, go back to A2 emulation
 
 		for(i = 0; i < 0x400; i++) {
-			set_memory_c(0xe00400+i, g_save_text_screen_bytes[i],0);
+			set_memory_c(0xe00400+i, g_save_text_screen_bytes[i]);
 			set_memory_c(0xe10400+i,
-					g_save_text_screen_bytes[0x400+i], 0);
+					g_save_text_screen_bytes[0x400+i]);
 		}
 
 		// And quit
@@ -1157,9 +1157,9 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 	byte	buf_2img[512];
 	Disk	*dsk;
 	char	*name_ptr, *part_ptr;
-	dword64	dsize, dunix_pos;
+	dword64	dsize, dunix_pos, exp_dsize, dtmp;
 	int	image_type, part_len, ret, can_write, len, nibs, name_len;
-	int	exp_size, save_track, tmp, is_po;
+	int	save_track, is_po;
 	int	i;
 
 	g_config_kegs_update_needed = 1;
@@ -1397,20 +1397,20 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		dsk->dimage_start = dunix_pos;
 		dsk->dimage_size = dsize;
 	}
-	exp_size = 800*1024;
+	exp_dsize = 800*1024;
 	if(dsk->disk_525) {
-		exp_size = 140*1024;
+		exp_dsize = 140*1024;
 	}
 	if(!image_type) {
 		/* See if it might be the Mac diskcopy format */
-		tmp = (buf_2img[0x40] << 24) + (buf_2img[0x41] << 16) +
+		dtmp = (buf_2img[0x40] << 24) + (buf_2img[0x41] << 16) +
 				(buf_2img[0x42] << 8) + buf_2img[0x43];
-		if((dsize >= (exp_size + 0x54)) && (tmp == exp_size)) {
+		if((dsize >= (exp_dsize + 0x54)) && (dtmp == exp_dsize)) {
 			/* It's diskcopy since data size field matches */
 			printf("Image named %s is in Mac diskcopy format\n",
 								dsk->name_ptr);
 			dsk->dimage_start += 0x54;
-			dsk->dimage_size = exp_size;
+			dsk->dimage_size = exp_dsize;
 			image_type = DSK_TYPE_PRODOS;	/* ProDOS */
 		}
 	}
@@ -1457,7 +1457,7 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 			len = (dsk->dimage_size / 35);
 			nibs = len * 8;
 		}
-		if(dsize != 35*len) {
+		if(dsize != (dword64)35*len) {
 			fatal_printf("Disk 5.25 error: size is %lld, not %d.  "
 				"Will try to mount anyway\n", dsize, 35*len);
 		}
@@ -2037,7 +2037,7 @@ cfg_putchar(int c)
 	if(g_cfg_curs_mousetext) {
 		c = (c & 0x1f) | 0x40;
 	}
-	set_memory_c(0xe00400 + offset + (x >> 1), c, 0);
+	set_memory_c(0xe00400 + offset + (x >> 1), c);
 	x++;
 	if(x >= 80) {
 		x = 0;
@@ -2775,10 +2775,10 @@ cfg_file_readdir(const char *pathptr)
 		if((len > 3) && !strcasecmp(&g_cfg_tmp_path[len - 3], ".gz")) {
 			is_gz = 1;
 		}
-		if((len > 4) && !strcasecmp(&g_cfg_tmp_path[len - 3], ".bz2")) {
+		if((len > 4) && !strcasecmp(&g_cfg_tmp_path[len - 4], ".bz2")) {
 			is_gz = 1;
 		}
-		if((len > 4) && !strcasecmp(&g_cfg_tmp_path[len - 3], ".zip")) {
+		if((len > 4) && !strcasecmp(&g_cfg_tmp_path[len - 4], ".zip")) {
 			is_gz = 1;
 		}
 		if(ret != 0) {
