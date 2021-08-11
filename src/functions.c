@@ -8,7 +8,7 @@
 
 function_e func_f7 = FUNCTION_TOGGLE_FAST_DISK_EMUL;
 function_e func_f8 = FUNCTION_TOGGLE_WARP_POINTER;
-function_e func_f9 = FUNCTION_TOGGLE_WARP_POINTER;
+function_e func_f9 = FUNCTION_TOGGLE_SLOW_PADDLES;
 function_e func_f10 = FUNCTION_TOGGLE_VIDEOMODE;
 function_e func_f11 = FUNCTION_TOGGLE_FULLSCREEN;
 function_e func_f12 = FUNCTION_NONE;
@@ -18,13 +18,13 @@ function_e func_button3 = FUNCTION_ENTER_DEBUGGER;
 static void
 function_toggle_fast_disk_emul(int x, int y)
 {
-    set_fast_disk_emul(!g_fast_disk_emul);
+    set_fast_disk_emul(!get_fast_disk_emul());
 }
 
 static void
 function_toggle_warp_pointer(int x, int y)
 {
-    set_warp_pointer(!(g_warp_pointer|0x1));
+    set_warp_pointer(!get_warp_pointer());
 }
 
 static void
@@ -65,6 +65,18 @@ function_toggle_invert_paddles(int x, int y)
 {
     set_invert_paddles(!get_invert_paddles());
     printf("Invert paddles is now: %d\n", get_invert_paddles());
+}
+
+static void
+function_toggle_slow_paddles(int x, int y)
+{
+    set_slow_paddles(!get_slow_paddles());
+    if (get_slow_paddles()) {
+        printf("Paddles slowed\n");
+    }
+    else {
+        printf("Paddles at full speed\n");
+    }
 }
 
 static void
@@ -121,6 +133,9 @@ function_execute(function_e which, int x, int y)
         break;
     case FUNCTION_TOGGLE_INVERT_PADDLES:
         function_toggle_invert_paddles(x,y);
+        break;
+    case FUNCTION_TOGGLE_SLOW_PADDLES:
+        function_toggle_slow_paddles(x,y);
         break;
     case FUNCTION_TOGGLE_LIMIT_SPEED:
         function_toggle_limit_speed(x,y);

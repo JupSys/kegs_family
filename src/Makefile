@@ -2,7 +2,7 @@
 
 include vars
 
-VERSION = 0.61
+VERSION = 0.62
 OBJECTS1 = adb.o clock.o dis.o joystick_driver.o paddles.o scc.o scc_driver.o iwm.o moremem.o sim65816.o smartport.o sound.o video.o video_driver.o video_driver_x11.o video_driver_win32.o video_driver_sdl.o config_sdl.o config.o sound_driver.o functions.o
 PROJROOT = .
 

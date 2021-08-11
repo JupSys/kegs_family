@@ -458,7 +458,7 @@ video_init_sdl()
 #endif
     
     /* Set the titlebar */
-    SDL_WM_SetCaption("KEGS 0.60", "kegs");
+    SDL_WM_SetCaption("KEGS 0.62", "kegs");
     /* Grab input if necessary */
     video_warp_pointer_sdl();
 

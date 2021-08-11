@@ -19,6 +19,7 @@ const char rcsid_paddles_c[] = "@(#)$Header: paddles.c,v 1.3 99/05/31 17:21:44 k
 double	g_paddle_trig_dcycs = 0.0;
 int	g_swap_paddles = 0;
 int	g_invert_paddles = 0;
+int	g_slow_paddles = 0;
 
 int	g_joystick_type = JOYSTICK_MOUSE;
 
@@ -59,6 +60,11 @@ read_paddles(int paddle, double dcycs)
 		val = 255 - val;
 	}
 
+	if (g_slow_paddles) {
+        /* original suggestion: val = val - 66; */
+        val = 128 + (val - 128)*190/255;
+	}
+
 	/* convert 0->255 into 0->2816.0 cycles (the paddle delay const) */
 	trig_dcycs = g_paddle_trig_dcycs + (val * 11.0);
 
@@ -92,5 +98,18 @@ int
 set_invert_paddles(int val)
 {
     g_invert_paddles = val;
+    return 1;
+}
+
+int
+get_slow_paddles(void)
+{
+    return g_slow_paddles;
+}
+
+int
+set_slow_paddles(int val)
+{
+    g_slow_paddles = val;
     return 1;
 }

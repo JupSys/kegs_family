@@ -1616,7 +1616,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.60");
+		update_status_line(6, "KEGS v0.62");
 
 		g_status_refresh_needed = 1;
 

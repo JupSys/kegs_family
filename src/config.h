@@ -1,5 +1,5 @@
 
-#define CONFIG_MAX_CHOICES 9
+#define CONFIG_MAX_CHOICES 10
 #define CONFIG_MAX_ITEMS 7
 
 typedef struct config_choice {

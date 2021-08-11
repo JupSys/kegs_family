@@ -62,6 +62,7 @@ const config_menu_t config_panel[] = {
             {"Toggle Fullscreen", FUNCTION_TOGGLE_FULLSCREEN},
             {"Toggle Swap Paddles", FUNCTION_TOGGLE_SWAP_PADDLES},
             {"Toggle Invert Paddles", FUNCTION_TOGGLE_INVERT_PADDLES},
+            {"Toggle Slow Paddles", FUNCTION_TOGGLE_SLOW_PADDLES},
             {"Toggle Emulation Speed", FUNCTION_TOGGLE_LIMIT_SPEED},
             {NULL}}},
         {"F8 Function", get_func_f8, set_func_f8, {
@@ -72,6 +73,7 @@ const config_menu_t config_panel[] = {
             {"Toggle Fullscreen", FUNCTION_TOGGLE_FULLSCREEN},
             {"Toggle Swap Paddles", FUNCTION_TOGGLE_SWAP_PADDLES},
             {"Toggle Invert Paddles", FUNCTION_TOGGLE_INVERT_PADDLES},
+            {"Toggle Slow Paddles", FUNCTION_TOGGLE_SLOW_PADDLES},
             {"Toggle Emulation Speed", FUNCTION_TOGGLE_LIMIT_SPEED},
             {NULL}}},
         {"F9 Function", get_func_f9, set_func_f9, {
@@ -82,6 +84,7 @@ const config_menu_t config_panel[] = {
             {"Toggle Fullscreen", FUNCTION_TOGGLE_FULLSCREEN},
             {"Toggle Swap Paddles", FUNCTION_TOGGLE_SWAP_PADDLES},
             {"Toggle Invert Paddles", FUNCTION_TOGGLE_INVERT_PADDLES},
+            {"Toggle Slow Paddles", FUNCTION_TOGGLE_SLOW_PADDLES},
             {"Toggle Emulation Speed", FUNCTION_TOGGLE_LIMIT_SPEED},
             {NULL}}},
         {"F10 Function", get_func_f10, set_func_f10, {
@@ -92,6 +95,7 @@ const config_menu_t config_panel[] = {
             {"Toggle Fullscreen", FUNCTION_TOGGLE_FULLSCREEN},
             {"Toggle Swap Paddles", FUNCTION_TOGGLE_SWAP_PADDLES},
             {"Toggle Invert Paddles", FUNCTION_TOGGLE_INVERT_PADDLES},
+            {"Toggle Slow Paddles", FUNCTION_TOGGLE_SLOW_PADDLES},
             {"Toggle Emulation Speed", FUNCTION_TOGGLE_LIMIT_SPEED},
             {NULL}}},
         {"F11 Function", get_func_f11, set_func_f11, {
@@ -102,6 +106,7 @@ const config_menu_t config_panel[] = {
             {"Toggle Fullscreen", FUNCTION_TOGGLE_FULLSCREEN},
             {"Toggle Swap Paddles", FUNCTION_TOGGLE_SWAP_PADDLES},
             {"Toggle Invert Paddles", FUNCTION_TOGGLE_INVERT_PADDLES},
+            {"Toggle Slow Paddles", FUNCTION_TOGGLE_SLOW_PADDLES},
             {"Toggle Emulation Speed", FUNCTION_TOGGLE_LIMIT_SPEED},
             {NULL}}},
         {"F12 Function", get_func_f12, set_func_f12, {
@@ -112,6 +117,7 @@ const config_menu_t config_panel[] = {
             {"Toggle Fullscreen", FUNCTION_TOGGLE_FULLSCREEN},
             {"Toggle Swap Paddles", FUNCTION_TOGGLE_SWAP_PADDLES},
             {"Toggle Invert Paddles", FUNCTION_TOGGLE_INVERT_PADDLES},
+            {"Toggle Slow Paddles", FUNCTION_TOGGLE_SLOW_PADDLES},
             {"Toggle Emulation Speed", FUNCTION_TOGGLE_LIMIT_SPEED},
             {NULL}}},
         {NULL}}},
@@ -121,6 +127,10 @@ const config_menu_t config_panel[] = {
             {"Yes", 1},
             {NULL}}},
         {"Invert Paddles", get_invert_paddles, set_invert_paddles, {
+            {"No", 0},
+            {"Yes", 1},
+            {NULL}}},
+        {"Slow Paddles", get_slow_paddles, set_slow_paddles, {
             {"No", 0},
             {"Yes", 1},
             {NULL}}},

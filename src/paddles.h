@@ -15,5 +15,7 @@ int get_swap_paddles(void);
 int set_swap_paddles(int);
 int get_invert_paddles(void);
 int set_invert_paddles(int);
+int get_slow_paddles(void);
+int set_slow_paddles(int);
 
 #endif /* KEGS_PADDLES_H */
