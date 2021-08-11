@@ -1,4 +1,20 @@
-    *  possibility to paste text to the emulator (on X11 and possibly Win32)
-    * disk swapping facility (probably OS-specific too, possibly drag'n'drop).
-    * support for keyboards other than QWERTY (like the infamous French keyboard).
+* Possibility to paste text to the emulator (on X11 and possibly Win32)
 
+* Disk swapping facility (probably OS-specific too, possibly drag'n'drop).
+
+* Support for keyboards other than QWERTY (like the infamous French
+  keyboard). We need help from people who have access to "Apple IIGS
+  Firmware Reference" manual.
+
+* Support for displaying foreign character sets
+
+* There is probably a bug in the ADB code which keeps the
+  language-switching C-OA-ESC control panel from working on ROM01
+
+Can somebody tell me why the "translation" item from the "general"
+control panel of GS/OS 6.01 has no effect on the "video keyboard", and
+how it is supposed to work? At ADB level or at the toolbox level?
+
+What key codes should ADB return for dead keys and accents?
+
+ <frederic.devernay@m4x.org>

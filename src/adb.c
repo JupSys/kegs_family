@@ -20,6 +20,13 @@ const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.38 99/10/11 01:30:41 kentd Ex
 #include "video.h"
 #include "dis.h"
 
+static const char *const adb_languages[]={"U.S.A.","U.K.","French","Danish",
+			      "Spanish","Italian","German","Swedish",
+			      "Dvorak","French Canadian","Flemish",
+			      "Hebrew","Japanese","Arabic","Greek",
+			      "Turkish","Finnish","Portuguese","Tamil",
+			      "Hindu"};
+
 enum {
 	ADB_IDLE = 0,
 	ADB_IN_CMD,
@@ -54,6 +61,7 @@ static void write_adb_ram(word32 addr, int val);
 static void adb_key_event(int a2code, int is_up);
 static void adb_virtual_key_update(int a2code, int is_up);
 
+/* g_warp_pointer: bit 0 changed with F8, bit 1 set in fullscreen mode */
 int g_warp_pointer = 0;
 int g_mouse_cur_x = 0;
 int g_mouse_cur_y = 0;
@@ -655,7 +663,8 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 		g_kbd_ctl_addr = new_kbd;
 	}
 
-
+	printf("ADB config: Display Language is %s\n", adb_languages[val1>>4]);
+	printf("ADB config: Keyboard Layout is %s\n", adb_languages[val1&0xf]);
 	tmp1 = val2 >> 4;
 	if(tmp1 == 4) {
 		g_adb_repeat_delay = 0;
@@ -698,6 +707,7 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 	case 9:
 		/* I don't know what this should be, ROM 03 uses it */
 		g_adb_repeat_rate = 60;
+		break;
 	default:
 		halt_printf("Bad repeat rate: %02x\n", tmp1);
 	}
@@ -1004,7 +1014,7 @@ do_adb_cmd()
 		adb_set_new_mode(val);
 		break;
 	case 0x06:	/* Set config */
-		adb_printf("Set ADB config to %02x %02x %02x\n",
+	    adb_printf("Set ADB config to %02x %02x %02x\n",
 			g_adb_cmd_data[0], g_adb_cmd_data[1],g_adb_cmd_data[2]);
 
 		adb_set_config(g_adb_cmd_data[0], g_adb_cmd_data[1],
@@ -1139,8 +1149,10 @@ adb_read_c027()
 		ret |= ADB_C027_MOUSE_COORD;
 	}
 
+	/*
 	adb_printf("Read c027: %02x, int_byte: %02x, d_pend: %d\n",
 		ret, g_adb_interrupt_byte, g_adb_data_pending);
+	*/
 #if 0
 	adb_log(0xc027, ret);
 #endif

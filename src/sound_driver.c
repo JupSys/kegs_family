@@ -878,7 +878,7 @@ sound_init_device_sdl()
 
     /* Set the desired format */
     wanted.freq = g_preferred_rate;
-    wanted.format = AUDIO_S16LSB;
+    wanted.format = AUDIO_S16SYS;
     wanted.channels = NUM_CHANNELS;
     wanted.samples = 512;
     wanted.callback = _snd_callback;

@@ -1,6 +1,6 @@
 
 #define CONFIG_MAX_CHOICES 10
-#define CONFIG_MAX_ITEMS 7
+#define CONFIG_MAX_ITEMS 8
 
 typedef struct config_choice {
     const unsigned char *name;

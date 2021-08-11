@@ -15,7 +15,6 @@ extern int enter_debug;
 extern int Verbose;
 extern word32 stop_run_at;
 extern int Halt_on;
-extern int g_testing_enabled;
 extern int g_irq_pending;
 extern Engine_reg engine;
 extern double g_fcycles_stop;

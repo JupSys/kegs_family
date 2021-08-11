@@ -6,12 +6,13 @@
 #include "paddles.h"
 #include "dis.h"
 
+function_e func_f6 = FUNCTION_ENTER_DEBUGGER;
 function_e func_f7 = FUNCTION_TOGGLE_FAST_DISK_EMUL;
 function_e func_f8 = FUNCTION_TOGGLE_WARP_POINTER;
 function_e func_f9 = FUNCTION_TOGGLE_SLOW_PADDLES;
 function_e func_f10 = FUNCTION_TOGGLE_VIDEOMODE;
 function_e func_f11 = FUNCTION_TOGGLE_FULLSCREEN;
-function_e func_f12 = FUNCTION_NONE;
+function_e func_f12 = FUNCTION_TOGGLE_LIMIT_SPEED;
 function_e func_button2 = FUNCTION_TOGGLE_LIMIT_SPEED;
 function_e func_button3 = FUNCTION_ENTER_DEBUGGER;
 
@@ -171,6 +172,19 @@ int
 set_button3_function(int val)
 {
     func_button3 = val;
+    return 1;
+}
+
+int
+get_func_f6(void)
+{
+    return func_f6;
+}
+
+int
+set_func_f6(int val)
+{
+    func_f6 = val;
     return 1;
 }
 

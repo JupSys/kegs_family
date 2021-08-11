@@ -54,6 +54,17 @@ const config_menu_t config_panel[] = {
             {NULL}}},
         {NULL}}},
     {"Keyboard", {
+        {"F6 Function", get_func_f6, set_func_f6, {
+            {"None", FUNCTION_NONE},
+            {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},
+            {"Toggle Grab Mouse", FUNCTION_TOGGLE_WARP_POINTER},
+            {"Toggle Display Size", FUNCTION_TOGGLE_VIDEOMODE},
+            {"Toggle Fullscreen", FUNCTION_TOGGLE_FULLSCREEN},
+            {"Toggle Swap Paddles", FUNCTION_TOGGLE_SWAP_PADDLES},
+            {"Toggle Invert Paddles", FUNCTION_TOGGLE_INVERT_PADDLES},
+            {"Toggle Slow Paddles", FUNCTION_TOGGLE_SLOW_PADDLES},
+            {"Toggle Emulation Speed", FUNCTION_TOGGLE_LIMIT_SPEED},
+            {NULL}}},
         {"F7 Function", get_func_f7, set_func_f7, {
             {"None", FUNCTION_NONE},
             {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},

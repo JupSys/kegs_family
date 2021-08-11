@@ -198,6 +198,9 @@ video_warp_pointer_sdl(void)
         SDL_ShowCursor(SDL_DISABLE);
         SDL_WM_GrabInput(SDL_GRAB_ON);
         SDL_WarpMouse(X_A2_WINDOW_WIDTH/2,X_A2_WINDOW_HEIGHT/2);
+	if (g_fullscreen) {	/* update screen to remove cursor shadow */
+	    SDL_UpdateRect(screen,0,0,0,0);
+	}
         printf("Mouse Pointer grabbed\n");
     } else {
         SDL_ShowCursor(SDL_ENABLE);
@@ -209,7 +212,7 @@ video_warp_pointer_sdl(void)
 static void 
 sdl_handle_keysym(const SDL_KeyboardEvent *key)
 {
-    const SDL_keysym keysym = key->keysym;
+    SDL_keysym keysym = key->keysym;
     const Uint8 type = key->type;
     const Uint8 state = key->state;
     int is_up;
@@ -222,84 +225,82 @@ sdl_handle_keysym(const SDL_KeyboardEvent *key)
 
 	is_up = 0;
     if( type == SDL_KEYUP ) {
-		is_up = 1;
-	}
+      is_up = 1;
+    }
 
 #if 0
-	if(keysym.sym == SDLK_F1) {
-		/* Alias F1 to escape for OS/2 */
-		keysym.sym = SDLK_ESCAPE;
-	}
+    if(keysym.sym == SDLK_F1) {
+      /* Alias F1 to escape for OS/2 */
+      keysym.sym = SDLK_ESCAPE;
+    }
 #endif
     /* ctrl-apple-tab = kegs configuration menu */
     if((keysym.sym == SDLK_TAB) && !is_up &&
        ((keysym.mod & KMOD_LCTRL) || (keysym.mod & KMOD_RCTRL)) &&
        ((keysym.mod & KMOD_LALT) || (keysym.mod & KMOD_RALT))) {
-        printf("configuration menu!\n");
+        printf("Configuration menu!\n");
         configuration_menu_sdl();
         /*adb_init();*/
         adb_physical_key_update(A2KEY_TAB, 1);
         adb_physical_key_update(A2KEY_COMMAND, 1);
         adb_physical_key_update(A2KEY_RCTRL, 1);
     }
-
-	if((keysym.sym == SDLK_F7) && !is_up) {
-        if(function_execute(func_f7,-1,-1))
-            return;
-	}
-	else if((keysym.sym == SDLK_F8) && !is_up) {
-        if(function_execute(func_f8,-1,-1))
-            return;
-	}
-	else if((keysym.sym == SDLK_F9) && !is_up) {
-        if(function_execute(func_f9,-1,-1))
-            return;
-	}
-	else if((keysym.sym == SDLK_F10) && !is_up) {
-        if(function_execute(func_f10,-1,-1))
-            return;
-	}
-	else if((keysym.sym == SDLK_F11) && !is_up) {
-        if(function_execute(func_f11,-1,-1))
-            return;
-	}
-	else if((keysym.sym == SDLK_F12) && !is_up) {
-        if(function_execute(func_f12,-1,-1))
-            return;
-	}
-#if 0
-	if(keysym.sym == SDLK_F10 && !is_up) {
-		change_a2vid_palette((g_a2vid_palette + 1) & 0xf);
-	}
-
-	if(keysym.sym == SDLK_F11 && !is_up) {
-        function_toggle_swap_paddles();
-	}
-	if(keysym.sym == SDLK_F12 && !is_up) {
-		function_toggle_invert_paddles();
-	}
-#endif
+    else if((keysym.sym == SDLK_F6) && !is_up) {
+	if(function_execute(func_f6,-1,-1))
+	    return;
+    }
+    else if((keysym.sym == SDLK_F7) && !is_up) {
+	if(function_execute(func_f7,-1,-1))
+	    return;
+    }
+    else if((keysym.sym == SDLK_F8) && !is_up) {
+	if(function_execute(func_f8,-1,-1))
+	    return;
+    }
+    else if((keysym.sym == SDLK_F9) && !is_up) {
+	if(function_execute(func_f9,-1,-1))
+	    return;
+    }
+    else if((keysym.sym == SDLK_F10) && !is_up) {
+	if(function_execute(func_f10,-1,-1))
+	    return;
+    }
+    else if((keysym.sym == SDLK_F11) && !is_up) {
+	if(function_execute(func_f11,-1,-1))
+	    return;
+    }
+    else if((keysym.sym == SDLK_F12) && !is_up) {
+	if(function_execute(func_f12,-1,-1))
+	    return;
+    }
+    /* ctrl-delete = Mac OS X reset ˆ la Bernie ! */
+    else if((keysym.sym == SDLK_BACKSPACE) && !is_up &&
+	    ((keysym.mod & KMOD_LCTRL) || (keysym.mod & KMOD_RCTRL))) {
+	printf("Reset pressed !! \n");
+	keysym.sym = SDLK_PAUSE;
+    }
     process_keysym(keysym.sym, is_up);
 }
 
 void
 process_keysym(SDLKey sym, int is_up)
 {
-	int	a2code;
-
+    int	a2code;
+    
     a2code = sdlksym_to_a2key[sym];
+      
     if (a2code >= 0) {
         adb_physical_key_update(a2code, is_up);
         /*printf("keysym %x -> a2code %x\n",keysym.sym,a2code);*/
 	} 
     else {
-		if((sym >= SDLK_F7) && (sym <= SDLK_F12)) {
-			/* just get out quietly */
-			return;
-		}
-		printf("Keysym: %04x unknown\n",
-               sym);
+	if((sym >= SDLK_F6) && (sym <= SDLK_F12)) {
+	    /* just get out quietly */
+	    return;
 	}
+	printf("Keysym: %04x unknown\n",
+               sym);
+    }
 }
 
 static void
@@ -392,7 +393,7 @@ video_update_physical_colormap_sdl()
             a2v_palette[palette+i].r = r;
             a2v_palette[palette+i].g = g;
             a2v_palette[palette+i].b = b;
-            //a2v_palette[palette+i].unused = 0;
+            /*a2v_palette[palette+i].unused = 0;*/
         }
     }
 
@@ -402,10 +403,13 @@ video_update_physical_colormap_sdl()
         sdl_palette=&(a2v_palette[0]);
     }
 
-	SDL_SetPalette(screen, SDL_PHYSPAL, sdl_palette, 0, 256);
+    SDL_SetPalette(screen, SDL_PHYSPAL, sdl_palette, 0, 256);
 
-    a2_screen_buffer_changed = -1;
-    g_full_refresh_needed = -1;
+    /* since SDL emulates the hardware palette, we don't, and shouldn't */
+    /* force a full video refresh */
+    /*a2_screen_buffer_changed = -1;*/
+    /*g_full_refresh_needed = -1;*/
+    /* The palette changed though, so these need to be updated */
     g_border_sides_refresh_needed = 1;
     g_border_special_refresh_needed = 1;
     g_status_refresh_needed = 1;
@@ -422,7 +426,7 @@ video_init_sdl()
     vidflags = SDL_HWPALETTE | SDL_HWSURFACE;
     if(g_fullscreen) {
         vidflags |= SDL_FULLSCREEN;
-        printf("fullscreen!");
+        printf("fullscreen!\n");
     }
     switch(g_videomode) {
     case KEGS_640X480:
@@ -446,7 +450,7 @@ video_init_sdl()
     screen = SDL_SetVideoMode(g_window_width, g_window_height,
                               8, vidflags);
     if(!screen) {
-        fprintf(stderr, "sdl: Couldn't set %dx%dx%d/%d video mode: %s!",
+        fprintf(stderr, "sdl: Couldn't set %dx%dx%d/%d video mode: %s!\n",
                 g_window_width, g_window_height, 8, vidflags, SDL_GetError());
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return 0;
@@ -458,7 +462,7 @@ video_init_sdl()
 #endif
     
     /* Set the titlebar */
-    SDL_WM_SetCaption("KEGS 0.62", "kegs");
+    SDL_WM_SetCaption("KEGS 0.63", "kegs");
     /* Grab input if necessary */
     video_warp_pointer_sdl();
 
@@ -565,6 +569,12 @@ video_refresh_image_sdl()
     int    left, right;
     SDL_Surface *last_xim, *cur_xim;
 
+    if(a2_screen_buffer_changed == 0) {
+        return;
+    }
+
+    GET_ITIMER(start_time);
+
     if(g_border_sides_refresh_needed) {
         g_border_sides_refresh_needed = 0;
         sdl_refresh_border_sides();
@@ -573,12 +583,6 @@ video_refresh_image_sdl()
         g_border_special_refresh_needed = 0;
         sdl_refresh_border_special();
     }
-
-    if(a2_screen_buffer_changed == 0) {
-        return;
-    }
-
-    GET_ITIMER(start_time);
 
     start = -1;
     mask = 1;

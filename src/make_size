@@ -1,6 +1,9 @@
-#!/usr/local/bin/perl -w
+eval '(exit $?0)' && eval 'exec perl -S $0 ${1+"$@"}' && eval 'exec perl -S $0 $argv:q'
+  if 0;
+use strict;
 
-$repl = shift;
+my $repl = shift;
+my $line;
 
 while(<>) {
 	$line = $_;
@@ -27,3 +30,7 @@ while(<>) {
 #	if(/^inst(..)_SYM		(.*)$/) {
 #		print "OPCODE($1)	/* $2 */\n";
 #	} else if(/^(
+
+# Local Variables:
+# mode: perl
+# End:

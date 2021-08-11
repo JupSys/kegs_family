@@ -32,7 +32,6 @@ static int get_num(void);
 static word32 dis_get_memory_ptr(word32 addr);
 static void show_one_toolset(FILE *toolfile, int toolnum, word32 addr);
 static void show_toolset_tables(word32 a2bank, word32 addr);
-static void do_gen_test(int got_num, int base_seed);
 static void set_bp(word32 addr);
 static void show_bp(void);
 static void delete_bp(word32 addr);
@@ -99,6 +98,54 @@ get_num()
 		}
 		return tmp1;
 	}
+}
+
+static void
+debugger_help()
+{
+    puts("KEGS Debugger help");
+    puts("General command syntax: [bank]/[address][command]");
+    puts("e.g. 'e1/0010B' to set a breakpoint at the interrupt jump point.");
+    puts("As with the IIgs monitor, you can omit the bank number after having set it:");
+    puts("'e1/0010B' followed by '14B' will set breakpoints at e1/0010 and e1/0014");
+    puts("");
+    puts("g                             Go");
+    puts("[bank]/[address]g             Go from [bank]/[address]");
+    puts("[bank]/[address]g             Go from [bank]/[address]");
+    puts("s                             Step one instruction");
+    puts("[bank]/[address]s             Step one instruction at [bank]/[address]");
+    puts("[bank]/[address]B             Set breakpoint at [bank]/[address].");
+    puts("B                             Show all breakpoints.");
+    puts("[bank]/[address]D             Delete breakpoint at [bank]/[address].");
+    puts("[bank]/[address1].[address2]  View memory.");
+    puts("[bank]/[address]L             Disassemble memory.");
+
+    puts("P                             Dump the trace to 'pc_log_out'.");
+    puts("Z                             Dump SCC state.");
+    puts("I                             Dump IWM state.");
+    puts("[drive].[track]I              Dump IWM state.");
+    puts("E                             Dump Ensoniq state.");
+    puts("[osc]E                        Dump oscillator [osc] state.");
+    puts("R                             Dump dtime array and events.");
+    puts("T                             Show toolbox log.");
+    puts("[bank]/[address]T             Dump tools using ptr at [bank]/[address] to");
+    puts("                              'tool_set_info'.");
+    puts("[mode]V                       XOR verbose mode with [mode]. 1=DISK, 2=IRQ,");
+    puts("                              4=CLK, 8=SHADOW, 10=IWM, 20=DOC, 40=ADB,");
+    puts("                              80=SCC, 100=TEST, 200=VIDEO.");
+    puts("[mode]H                       XOR halt_on with [mode]. 1=SCAN_INT, 2=IRQ,");
+    puts("                              4=SHADOW_REG, 8=C70D_WRITES.");
+    puts("r                             Reset.");
+    puts("[0/1]=m                       ???");
+    puts("[0/1]=x                       ???");
+    puts("[t]=z                         ????");
+    puts("S                             show_bankptrs_bank0rdwr & smartport_error");
+    puts("P                             show_pmhz");
+    puts("A                             show_a2_line_stuff show_adb_log");
+    puts("C-e                           Dump registers.");
+    puts("[bank]/[address1].[address2]us[filename]  Save memory area to [filename].");
+    puts("[bank]/[address1].[address2]ul[filename]  Load memory area from [filename].");
+    puts("q                             Exit Debugger.");
 }
 
 void
@@ -278,11 +325,7 @@ do_debug_intfc()
 				if(got_num) {
 					engine.kpc = (a2bank<<16) + (a2&0xffff);
 				}
-				if(ret_val == 'G' && g_testing_enabled) {
-					do_gen_test(got_num, a2);
-				} else {
-					do_go();
-				}
+				do_go();
 				list_kpc = engine.kpc;
 				break;
 			case 'q':
@@ -333,6 +376,10 @@ do_debug_intfc()
 				stop_on_c03x = !stop_on_c03x;
 				printf("stop_on_c03x set to %d\n",stop_on_c03x);
 				break;
+			case 'h':
+			case '?':
+			    debugger_help();
+			    break;
 			default:
 				printf("\nUnrecognized command: %s\n",linebuf);
 				*line_ptr = 0;

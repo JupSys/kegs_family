@@ -1471,7 +1471,7 @@ video_redraw_status_lines_win32(void)
     }
 	
     if (win_status !=NULL && !g_fullscreen) {
-        SendMessage(win_status, SB_SETTEXT,0,(LPARAM)"KEGS 0.60");
+        SendMessage(win_status, SB_SETTEXT,0,(LPARAM)"KEGS 0.63");
         sprintf(buffer,"Vol:%d",g_doc_vol);
         SendMessage(win_status, SB_SETTEXT,1,(LPARAM)buffer);
         buf=strstr(g_status_buf[0],"sim MHz:");

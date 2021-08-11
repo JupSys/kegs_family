@@ -59,7 +59,9 @@ static void do_cop(word32 ret);
 const char *g_kegs_default_paths[] = { "", "./", "~/", "/usr/local/lib/",
 	"/usr/local/kegs/", "/usr/local/lib/kegs/", "/usr/share/kegs/",
 	"/usr/share/", "/var/lib/", "/usr/lib/", "/lib/", "/etc/",
-	"/etc/kegs/", 0 };
+	"/etc/kegs/",
+	"./KEGS.app/Contents/Resources/", /* MacOS X resources folder */
+	0 };
 
 #define MAX_EVENTS	64
 
@@ -112,7 +114,6 @@ int	g_engine_scan_int = 0;
 int	g_engine_doc_int = 0;
 
 int	g_testing = 0;
-int	g_testing_enabled = 0;
 
 
 word32 stop_run_at;
@@ -670,6 +671,37 @@ static char g_display_env[512];
 int	g_force_depth = -1;
 int	g_screen_depth = 8;
 
+void
+usage(const char *progname)
+{
+  printf("Usage: %s [OPTION]...\n",progname);
+  puts("Apple IIgs emulator.\n");
+  puts("  --badrd            Halt on bad reads.");
+  puts("  --ignbadacc        Ignore bad memory accesses (e.g. for Appleworks GS).");
+  puts("  --mem BYTES        Set memory size to BYTES.");
+  puts("  --skip FRAMES      Skip FRAMES frames between screen redraws.");
+  puts("  --audio DEVNUM     Use audio device type DEVNUM (0=none, 1=native, 2=SDL,");
+  puts("                     3=Alib).");
+  puts("  --arate RATE       Use RATE as preferred audio rate.");
+  puts("  --video DEVNUM     Use video device type DEVNUM (0=none, 1=X11, 2=Win32,");
+  puts("                     3=SDL).");
+#ifdef HAVE_VIDEO_X11
+  puts("  --display DISPLAY  Use DISPLAy as X11 display.");
+  puts("  --noshm            Don't use X11 shared memory.");
+  puts("  --24               Force 24-bits visual (X11 only).");
+  puts("  --16               Force 16-bits visual (X11 only).");
+  puts("  --15               Force 15-bits visual (X11 only).");
+  puts("  --8                Force 8-bits visual (X11 only).");
+#endif
+  puts("  --dhr140           Use simple dhires colormap.");
+  puts("  --joystick DEVNUM  Use joystick device type DEVNUM (0=none, 1=mouse, 2=linux,");
+  puts("                     3=keypad, 4=Win32, 5=SDL).");
+  puts("  --verbose MODE     Set verbose mode to MODE (obtained by or-ing the following");
+  puts("                     values: 0x001=DISK, 0x002=IRQ, 0x004=CLK, 0x008=SHADOW,");
+  puts("                     0x010=IWM, 0x020=DOC, 0x040=ADB, 0x080=SCC, 0x100=TEST,");
+  puts("                     0x200=VIDEO).");
+}
+
 int
 main(int argc, char **argv)
 {
@@ -682,28 +714,29 @@ main(int argc, char **argv)
 
 	/* parse args */
 	for(i = 1; i < argc; i++) {
-		if(!strcmp("-badrd", argv[i])) {
+		if(!strcmp("--help", argv[i]) || !strcmp("-h", argv[i])
+		   || !strcmp("-?", argv[i])) {
+		    usage(argv[0]);
+		    exit(0);
+		} else if(!strcmp("--badrd", argv[i])) {
 			printf("Halting on bad reads\n");
 			g_halt_on_bad_read = 1;
-		} else if(!strcmp("-ignbadacc", argv[i])) {
+		} else if(!strcmp("--ignbadacc", argv[i])) {
 			printf("Ignoring bad memory accesses\n");
 			g_ignore_bad_acc = 1;
-		} else if(!strcmp("-test", argv[i])) {
-			printf("Allowing testing\n");
-			g_testing_enabled = 1;
-		} else if(!strcmp("-24", argv[i])) {
+		} else if(!strcmp("--24", argv[i])) {
 			printf("Using 24-bit visual\n");
 			g_force_depth = 24;
-		} else if(!strcmp("-16", argv[i])) {
+		} else if(!strcmp("--16", argv[i])) {
 			printf("Using 16-bit visual\n");
 			g_force_depth = 16;
-		} else if(!strcmp("-15", argv[i])) {
+		} else if(!strcmp("--15", argv[i])) {
 			printf("Using 15-bit visual\n");
 			g_force_depth = 15;
-		} else if(!strcmp("-8", argv[i])) {
+		} else if(!strcmp("--8", argv[i])) {
 			printf("Using 8-bit visual\n");
 			g_force_depth = 8;
-		} else if(!strcmp("-mem", argv[i])) {
+		} else if(!strcmp("--mem", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
 				exit(1);
@@ -711,7 +744,7 @@ main(int argc, char **argv)
 			g_mem_size_exp = strtol(argv[i+1], 0, 0) & 0x00ff0000;
 			printf("Using %d as memory size\n", g_mem_size_exp);
 			i++;
-		} else if(!strcmp("-skip", argv[i])) {
+		} else if(!strcmp("--skip", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
 				exit(1);
@@ -720,7 +753,7 @@ main(int argc, char **argv)
 			printf("Using %d as skip_amt\n", skip_amt);
 			g_screen_redraw_skip_amt = skip_amt;
 			i++;
-		} else if(!strcmp("-audio", argv[i])) {
+		} else if(!strcmp("--audio", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
 				exit(1);
@@ -729,7 +762,7 @@ main(int argc, char **argv)
 			printf("Using %d as audio device type\n", tmp1);
 			audio_devtype = tmp1;
 			i++;
-		} else if(!strcmp("-video", argv[i])) {
+		} else if(!strcmp("--video", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
 				exit(1);
@@ -738,7 +771,7 @@ main(int argc, char **argv)
 			printf("Using %d as video device type\n", tmp1);
 			video_devtype = tmp1;
 			i++;
-		} else if(!strcmp("-arate", argv[i])) {
+		} else if(!strcmp("--arate", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
 				exit(1);
@@ -747,7 +780,7 @@ main(int argc, char **argv)
 			printf("Using %d as preferred audio rate\n", tmp1);
 			g_preferred_rate = tmp1;
 			i++;
-		} else if(!strcmp("-v", argv[i])) {
+		} else if(!strcmp("-v", argv[i]) || !strcmp("--verbose", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
 				exit(1);
@@ -757,7 +790,7 @@ main(int argc, char **argv)
 			Verbose = tmp1;
 			i++;
 #ifndef __NeXT__
-		} else if(!strcmp("-display", argv[i])) {
+		} else if(!strcmp("--display", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
 				exit(1);
@@ -1120,7 +1153,7 @@ double	g_dtime_exp_array[60];
 double	g_dtime_pmhz_array[60];
 double	g_dtime_eff_pmhz_array[60];
 int	speed_changed = 0;
-int	g_limit_speed = 0;
+int	g_limit_speed = 2;
 double	sim_time[60];
 double	g_sim_sum = 0.0;
 
@@ -1361,7 +1394,9 @@ run_prog()
 		printf("leaving run_prog, halt_sim:%d\n", halt_sim);
 	}
     set_warp_pointer(0);
-	video_auto_repeat_on(0);
+    if(get_fullscreen())
+	set_fullscreen(0);
+    video_auto_repeat_on(0);
 }
 
 void
@@ -1616,7 +1651,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.62");
+		update_status_line(6, "KEGS v0.63");
 
 		g_status_refresh_needed = 1;
 

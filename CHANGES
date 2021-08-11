@@ -1,8 +1,18 @@
-Changes in KEGS v0.62 since v0.61 (06/22/02)
+Changes in KEGS v0.63 since v0.62 (08/15/02) <frederic.devernay@m4x.org>
+- Added F6 function, which defaults to "enter debugger" (for 1-button mouse)
+- F12 now defaults to "switch speed limit" (for 1-button mouse)
+- Command-line help ('kegs -\?' or 'kegs -h')
+- Debugger help ('?')
+- make_size script should work with any perl installation
+- Config files can be found in the resources folder on MacOS X
+  (KEGS.app/Contents/Resources)
+- Control-backspace resets KEGS (for MacOS users who don't have a Pause key)
+
+Changes in KEGS v0.62 since v0.61 (06/22/02) <frederic.devernay@m4x.org>
 - Slow paddles mode (<inwards@inwards.com>)
 - Fixed pointer warping (F8 by default) <inwards@inwards.com>
 
-Changes in KEGS v0.61 since v0.60 (02/19/02)
+Changes in KEGS v0.61 since v0.60 (02/19/02) <frederic.devernay@m4x.org>
 - SDL video/sound/joystick driver, see www.libsdl.org
 - code cleanups (prototypes, etc.)
 
