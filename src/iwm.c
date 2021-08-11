@@ -1941,9 +1941,9 @@ void
 iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 {
 	int	phys_to_log_sec[16];
-	word32	buf_c00[0x100];
-	word32	buf_d00[0x100];
-	word32	buf_e00[0x100];
+	word32	buf_c00[0x100]={0};
+	word32	buf_d00[0x100]={0};
+	word32	buf_e00[0x100]={0};
 	byte	*buf;
 	word32	*word_ptr;
 	word32	val;

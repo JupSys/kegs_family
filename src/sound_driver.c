@@ -32,21 +32,16 @@ extern int errno;
 #else
 #include <windows.h>
 #include <mmsystem.h>
-#define NUM_BUFFERS 8
+#define NUM_BUFFERS 10 
 void CheckWaveError(char *,int);
 void child_sound_init_win32(void *);
 
-typedef struct {
-    int busyFlag;
-    WAVEHDR waveHdr;
-} WAVESTRUCT;
-
 HWAVEOUT WaveHandle;
-WAVESTRUCT WaveHeader[NUM_BUFFERS];
-extern word32  g_soundSize;
-extern int cond_read_flag;
+WAVEHDR WaveHeader[NUM_BUFFERS];
+extern int g_pipe_fd[2];
 #endif
 
+extern int g_audio_enable;
 extern int Verbose;
 extern int g_use_alib;
 extern int g_audio_rate;
@@ -70,21 +65,18 @@ void child_sound_init_linux();
 void child_sound_init_hpdev();
 void child_sound_init_alib();
 void child_sound_init_win32(void *);
+
+#ifdef _WIN32
 unsigned int __stdcall child_sound_loop_win32(void *);
+#endif
 
 void
 reliable_buf_write(word32 *shm_addr, int pos, int size)
 {
     byte    *ptr;
     int     ret,i,found=0;
-    int     remSize=0;
     int wave_buf=0;
 
-    if((size + pos) > SOUND_SHM_SAMP_SIZE) {
-        remSize = (pos + size) - SOUND_SHM_SAMP_SIZE;
-        size= SOUND_SHM_SAMP_SIZE - pos;
-    }
- 
     if(size < 1 || pos < 0 || pos > SOUND_SHM_SAMP_SIZE ||
                 size > SOUND_SHM_SAMP_SIZE ||
                 (pos + size) > SOUND_SHM_SAMP_SIZE) {
@@ -95,7 +87,6 @@ reliable_buf_write(word32 *shm_addr, int pos, int size)
 
     ptr = (byte *)&(shm_addr[pos]);
     size = size * 4;
-    remSize=remSize*4;
 
     #ifndef _WIN32
     while(size > 0) {
@@ -109,24 +100,11 @@ reliable_buf_write(word32 *shm_addr, int pos, int size)
         ptr += ret;
         g_bytes_written += ret;
     }
-    ptr = shm_addr;
-    while (remSize >0) {
-        ret = write(g_audio_socket, ptr,remSize);
-
-        if(ret < 0) {
-            printf("audio write, errno: %d\n", errno);
-            exit(1);
-        }
-        remSize = remSize - ret;
-        ptr += ret;
-        g_bytes_written += ret;
-    }
     #else
     i=0;
     found=0;
-
     while ((i < NUM_BUFFERS)) {
-		if (WaveHeader[i].busyFlag == FALSE) {
+		if (WaveHeader[i].dwUser == FALSE) {
             wave_buf=i;
             found=1;
             break;
@@ -135,25 +113,18 @@ reliable_buf_write(word32 *shm_addr, int pos, int size)
     }
 
     if (!found) {
-        /* Should not entered here if the number of buffers are set
-         * properly.  In an experiment. The maximum wave channels used
-         * are 7. 
-         */   
         return ;
     }
 
-    memcpy(WaveHeader[wave_buf].waveHdr.lpData,ptr,size);
-    if (remSize > 0) {
-        memcpy(WaveHeader[wave_buf].waveHdr.lpData+size,shm_addr,remSize);
-    }
-        
-    WaveHeader[wave_buf].waveHdr.dwBufferLength=size+remSize;
-    WaveHeader[wave_buf].busyFlag=TRUE;
-    ret=waveOutWrite(WaveHandle,&WaveHeader[wave_buf].waveHdr,
+    memcpy(WaveHeader[wave_buf].lpData,ptr,size);
+    WaveHeader[wave_buf].dwBufferLength=size;
+    WaveHeader[wave_buf].dwUser=TRUE;
+
+    ret=waveOutWrite(WaveHandle,&WaveHeader[wave_buf],
                      sizeof(WaveHeader));
     CheckWaveError("Writing wave out",ret);
 
-    g_bytes_written += (size+remSize);
+    g_bytes_written += (size);
     #endif
 }
 
@@ -175,8 +146,8 @@ reliable_zero_write(int amt)
 void
 child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
 {
-    word32    tmp;
-    long    status_return;
+    word32 tmp;
+    long   status_return;
     int    zeroes_buffered;
     int    zeroes_seen;
     int    sound_paused;
@@ -205,16 +176,19 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
 
     tmp = g_audio_rate;
     
-    #ifndef _WIN32
     ret = write(write_fd, &tmp, 4);
     if(ret != 4) {
         printf("Unable to send back audio rate to parent\n");
         exit(1);
     }
+
+    #ifndef _WIN32
     close(write_fd);
-    #else
-    cond_read_flag = 1;
     #endif
+
+	if (!g_audio_enable) {
+		return;
+	}
 
     zeroes_buffered = 0;
     zeroes_seen = 0;
@@ -224,7 +198,6 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
     vbl = 0;
     while(1) {
         errno = 0;
-        #ifndef _WIN32
         ret = read(read_fd, &tmp, 4);
 
         if(ret <= 0) {
@@ -232,16 +205,6 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
                 ret, errno);
             break;
         }
-        #else
-        while (cond_read_flag) {
-            Sleep(1);
-            if (!cond_read_flag) {
-                break;
-            }
-        }
-        tmp=g_soundSize;
-        cond_read_flag=1;
-        #endif
         
         size = tmp & 0xffffff;
 
@@ -269,11 +232,13 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
             zeroes_buffered = 0;
             zeroes_seen = 0;
 
+			if((size + pos) > SOUND_SHM_SAMP_SIZE) {
+				reliable_buf_write(shm_addr, pos,
+						SOUND_SHM_SAMP_SIZE - pos);
+				size = (pos + size) - SOUND_SHM_SAMP_SIZE;
+				pos = 0;
+			}
             reliable_buf_write(shm_addr, pos, size);
-            if((size + pos) > SOUND_SHM_SAMP_SIZE) {
-                size = (pos + size) - SOUND_SHM_SAMP_SIZE;
-                pos = 0;
-            } 
 
         } else if((tmp >> 24) == 0xa1) {
             if(sound_paused) {
@@ -604,29 +569,22 @@ void CheckWaveError(char *s, int res) {
     }
     waveOutGetErrorText(res,message,sizeof(message));
     printf ("%s: %s\n",s,message);
-    exit(0);
+    exit(1);
 }
 
 unsigned int __stdcall child_sound_loop_win32(void *param) {
     SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_HIGHEST);
-    child_sound_loop(0,0,param);
+    child_sound_loop(g_pipe_fd[0],g_pipe_fd[1],param);
+	return 0;
 }
 
 void CALLBACK handle_wav_snd(HWAVEOUT hwo, UINT uMsg, DWORD dwInstance,
                              DWORD dwParam1, DWORD dwParam2)
 {
-    int i,done;
     /* Only service "buffer done playing" messages */
     if ( uMsg == WOM_DONE ) {
-		if (((LPWAVEHDR) dwParam1)->dwFlags == WHDR_DONE | WHDR_PREPARED) {
-			i = done = 0;
-			while ((i < NUM_BUFFERS) && (!done)) {
-				if ((LPWAVEHDR) dwParam1 == &WaveHeader[i].waveHdr) {
-					WaveHeader[i].busyFlag = FALSE;
-					done = 1;
-				}
-				i++;
-			}	
+		if (((LPWAVEHDR) dwParam1)->dwFlags == (WHDR_DONE | WHDR_PREPARED)) {
+			((LPWAVEHDR)dwParam1)->dwUser=FALSE;
 		}
         return;
     }
@@ -650,28 +608,39 @@ void child_sound_init_win32(void *shmaddr) {
         WaveFmt.nSamplesPerSec * WaveFmt.nBlockAlign;
 
     res=waveOutOpen(&WaveHandle,WAVE_MAPPER,&WaveFmt,0,0,WAVE_FORMAT_QUERY);
-    CheckWaveError("Quering wave format",res);
+
+	if (res != MMSYSERR_NOERROR) {
+		printf ("Cannot open audio device\n");
+		g_audio_enable=0;
+		return;
+	}
+
     res=waveOutOpen(&WaveHandle,WAVE_MAPPER,&WaveFmt,(DWORD)handle_wav_snd,
-                    0,CALLBACK_FUNCTION);
-    CheckWaveError("Opening Wave Mapper",res);
+                    0,CALLBACK_FUNCTION | WAVE_ALLOWSYNC );
+
+	if (res != MMSYSERR_NOERROR) {
+		printf ("Cannot open audio device\n");
+		g_audio_enable=0;
+		return;
+	}
 
     g_audio_rate= WaveFmt.nSamplesPerSec;
 
-    blen=SOUND_SHM_SAMP_SIZE*SAMPLE_CHAN_SIZE;
-
+    blen=SOUND_SHM_SAMP_SIZE*2;
+	tmp=malloc(blen*NUM_BUFFERS);
+    if (tmp==NULL) {
+        printf ("Unable to allocate sound buffer\n");
+        exit(1);
+    }
     for (i=0;i<NUM_BUFFERS;i++) {
-        memset(&WaveHeader[i],0,sizeof(WAVESTRUCT));
-        tmp=malloc(blen);
-        if (tmp==NULL) {
-            printf ("Unable to allocate sound buffer\n");
-            exit(0);
-        }
-        WaveHeader[i].busyFlag=FALSE;
-        WaveHeader[i].waveHdr.lpData=tmp;
-        WaveHeader[i].waveHdr.dwBufferLength=blen;
-        WaveHeader[i].waveHdr.dwFlags=0L;
-        WaveHeader[i].waveHdr.dwLoops=0L;
-        res = waveOutPrepareHeader(WaveHandle,&WaveHeader[i].waveHdr,
+        memset(&WaveHeader[i],0,sizeof(WAVEHDR)); 
+		// dwUser contains the busy state
+        WaveHeader[i].dwUser=FALSE;
+        WaveHeader[i].lpData=tmp+i*blen;
+        WaveHeader[i].dwBufferLength=blen;
+        WaveHeader[i].dwFlags=0L;
+        WaveHeader[i].dwLoops=0L;
+        res = waveOutPrepareHeader(WaveHandle,&WaveHeader[i],
                                    sizeof(WAVEHDR));
         CheckWaveError("WaveOutPrepareHeader()",res);
     }

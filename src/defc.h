@@ -22,7 +22,11 @@ typedef unsigned char byte;
 typedef unsigned short word16;
 typedef unsigned int word32;
 //typedef unsigned long long word64;
+#if _MSC_VER
+typedef unsigned __int64 word64;
+#else
 typedef unsigned long long word64;
+#endif
 
 void U_STACK_TRACE();
 

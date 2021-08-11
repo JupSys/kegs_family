@@ -17,14 +17,12 @@ const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.19 99/12/20 23:33:06 kent
 
 #ifdef _WIN32
 #include <windows.h>
-#endif
-
 #include <mmsystem.h>
-#include <time.h>
-
-#ifndef _WIN32
+#else
 #include <sys/time.h>
 #endif
+
+#include <time.h>
 
 extern int Verbose;
 extern int g_vbl_count;
@@ -67,8 +65,8 @@ get_dtime()
 	gettimeofday(&tp1, (struct timezone *)0);
 #endif
 #endif
-    
-#ifndef _WIN32   
+
+#ifndef _WIN32
 	dsec = (double)tp1.tv_sec;
 	dusec = (double)tp1.tv_usec;
 
@@ -101,17 +99,21 @@ micro_sleep(double dtime)
 #endif
 
 #ifndef _WIN32
+    soc=socket(AF_INET,SOCK_STREAM,0);
 	Timer.tv_sec = 0;
 	Timer.tv_usec = (dtime * 1000000.0);
-	if( (ret = select(0, 0, 0, 0, &Timer)) < 0) {
+    FD_ZERO(&fdr);
+    FD_SET(soc,&fdr);
+	if( (ret = select(0, &fdr, 0, 0, &Timer)) < 0) {
 		fprintf(stderr, "micro_sleep (select) ret: %d, errno: %d\n",
 			ret, errno);
 		return -1;
 	}
+
+    close(soc);
 #else
     Sleep(dtime*1000);
 #endif
-
 	return 0;
 }
 

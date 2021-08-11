@@ -222,6 +222,7 @@ void eject_disk_by_num(int slot, int drive);
 /* joystick_driver.c */
 void joystick_init(void);
 void joystick_update(void);
+void joystick_update_button(void);
 
 /* moremem.c */
 void fixup_brks(void);
@@ -259,8 +260,10 @@ int read_vid_counters(int loc, double dcycs);
 
 /* paddles.c */
 void paddle_trigger(double dcycs);
+void paddle_trigger_button();
 void paddle_trigger_mouse(double dcycs);
 void paddle_trigger_linux(double dcycs);
+void paddle_trigger_win32(double dcycs);
 int read_paddles(int paddle, double dcycs);
 
 /* sim65816.c */

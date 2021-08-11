@@ -25,9 +25,9 @@ const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.89 2000/09/24 00:56:31 ke
 
 #ifdef _WIN32
 #include <windows.h>
+#include <process.h>
+#include <io.h>
 extern unsigned int __stdcall child_sound_loop_win32(void *);
-word32 g_soundSize;
-int    cond_read_flag=0;
 #endif
 
 extern int Verbose;
@@ -329,19 +329,23 @@ sound_init()
 	}
 
 #else
+	if(g_audio_enable == 0) {
+		set_audio_rate(g_preferred_rate);
+		return;
+	}
     printf ("Sound shared memory size=%d\n", 
             SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
 
     shmaddr = malloc(SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
     memset(shmaddr,0,SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
 	g_sound_shm_addr = shmaddr;
-    set_audio_rate(g_preferred_rate);
-    _beginthreadex(NULL,0,child_sound_loop_win32,shmaddr,0,&tid);
-    while (!cond_read_flag) {
-        Sleep(1);
+
+    if (_pipe(g_pipe_fd,0,_O_BINARY) <0) {
+        printf ("Unable to create sound pipes\n");
+        exit(1);
     }
-    cond_read_flag=1;
-	set_audio_rate(g_audio_rate);
+    _beginthreadex(NULL,0,child_sound_loop_win32,shmaddr,0,(void *)&tid);
+    parent_sound_get_sample_rate(g_pipe_fd[0]);
     printf ("Audio rate=%d\n",g_audio_rate);
 #endif
 }
@@ -357,7 +361,11 @@ parent_sound_get_sample_rate(int read_fd)
 		printf("parent dying, could not get sample rate from child\n");
 		exit(1);
 	}
+
+    #ifndef _WIN32
 	close(read_fd);
+    #endif
+
 	set_audio_rate(tmp);
 }
 
@@ -578,18 +586,12 @@ send_sound(int fd, int real_samps, int size)
 	}
 	DOC_LOG("send_sound", -1, g_last_sound_play_dsamp,
 						(real_samps << 30) + size);
-    g_soundSize=tmp; 
 
-    while (!cond_read_flag) {
-        Sleep(1);
-        //WaitForSingleObject(sound_event,INFINITE);
-        if (cond_read_flag) {
-            break;
-        }
-    }
-    cond_read_flag=0;
-    //send_sound_win32(tmp);
-    //PulseEvent(sound_event);
+	ret = write(fd, &tmp, 4);
+	if(ret != 4) {
+		halt_printf("send_sound, wr ret: %d, errno: %d\n", ret, errno);
+	}
+
 }
 
 void

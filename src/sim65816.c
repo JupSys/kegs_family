@@ -691,16 +691,9 @@ char g_display_env[512];
 int	g_force_depth = -1;
 int	g_screen_depth = 8;
 
-#ifndef _WIN32
 int
 main(int argc, char **argv)
-#else
-int APIENTRY WinMain (HINSTANCE curr,HINSTANCE prev, LPSTR cmd, int nShow)
-#endif
 {
-#ifdef _WIN32
-    int argc = __argc; char **argv=__argv;
-#endif
 	int	skip_amt;
 	int	diff;
 	int	tmp1;
@@ -1260,7 +1253,7 @@ run_prog()
 
         if (now_dtime < prev_dtime) {
             printf ("Wrap around time\n");
-            prev_dtime = prev_dtime-(~(DWORD)0);
+            prev_dtime = prev_dtime-(~(int)0);
         }
 
 		g_cur_sim_dtime += (now_dtime - prev_dtime);

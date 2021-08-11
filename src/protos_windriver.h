@@ -27,4 +27,5 @@ void win_refresh_lines(HBITMAP xim, int start_line, int end_line, int left_pix, 
 void win_redraw_border_sides_lines(int end_x, int width, int start_line, int end_line);
 void win_refresh_border_sides(void);
 void win_refresh_border_special(void);
-
+unsigned int __stdcall dev_video_init_ex(void *param); 
+int win_keysym_to_a2code(int keysym, int is_up);

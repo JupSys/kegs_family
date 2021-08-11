@@ -84,7 +84,11 @@ main(int argc, char **argv)
 
 	for(i = 0; i < num_files; i++) {
 		name = files[i];
+		#ifdef _WIN32
+		in = open(name, O_RDONLY | O_BINARY);
+		#else
 		in = open(name, O_RDONLY);
+		#endif
 		if(in < 0) {
 			fprintf(stderr, "opening %s returned %d, errno: %d\n",
 				name, in, errno);
@@ -248,7 +252,12 @@ allocate_memdisk(char *out_name, int size)
 	ProDisk	*disk;
 	int	out;
 
-	out = open(out_name, O_RDWR | O_CREAT | O_TRUNC, 0x1b6);
+	#ifdef _WIN32
+	out = open(out_name, O_RDWR | O_CREAT | O_TRUNC | O_BINARY , 0x1b6);
+	#else
+	out = open(out_name, O_RDWR | O_CREAT | O_TRUNC , 0x1b6);
+	#endif
+
 	if(out < 0) {
 		fprintf(stderr, "opening %s returned %d, errno: %d\n",
 			out_name, out, errno);

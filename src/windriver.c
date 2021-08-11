@@ -5,22 +5,29 @@
 /*    This code may not be used in a commercial product         */
 /*    without prior written permission of the author.           */
 /*                                                              */
+/*    Windows Code by akilgard@yahoo.com                        */
 /*    You may freely distribute this code.                      */ 
 /*                                                              */
 /****************************************************************/
 
+//#define KEGS_DIRECTDRAW
 #define STRICT
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 #include <windowsx.h>
 #include <mmsystem.h>
 #include <winsock.h>
-#if 0
+#include <commctrl.h>
+#include <Commdlg.h>
+#include <process.h>
+#if defined(KEGS_DIRECTDRAW)
 #include <ddraw.h>
 #endif
 #include <conio.h>
 #include "defc.h"
 #include "protos_windriver.h"
+#include "resource.h"
 
 extern int Verbose;
 extern int lores_colors[];
@@ -43,12 +50,16 @@ extern int g_a2vid_palette;
 extern int g_fast_disk_emul;
 extern int g_warp_pointer;
 extern int g_cur_a2_stat;
+extern int g_doc_vol;
+extern char g_kegs_conf_name[256];
+extern int g_joystick_type;
 
 int g_use_shmem=0;
-int	g_x_shift_control_state = 0;
+int    g_x_shift_control_state = 0;
 word32 g_cycs_in_xredraw = 0;
 word32 g_refresh_bytes_xfer = 0;
-int	g_num_a2_keycodes = 0;
+int    g_num_a2_keycodes = 0;
+int g_fullscreen=0;
 
 byte *data_text[2];
 byte *data_hires[2];
@@ -60,13 +71,21 @@ byte *dint_border_sides;
 byte *dint_border_special;
 byte *dint_main_win;
 
-#define MAX_STATUS_LINES	7
-#define X_LINE_LENGTH		88
+#define MAX_STATUS_LINES    7
+#define X_LINE_LENGTH        88
+#define STATUS_HEIGHT       ((BASE_MARGIN_TOP)+(A2_WINDOW_HEIGHT)+\
+                            (BASE_MARGIN_BOTTOM)+\
+                            (win_toolHeight.bottom-win_toolHeight.top)+\
+                            (win_statHeight.bottom-win_statHeight.top)+\
+                            ((win_stat_debug>0) ? MAX_STATUS_LINES*15:0)\
+                            )
+
 DWORD   dwchary;
-char	g_status_buf[MAX_STATUS_LINES][X_LINE_LENGTH + 1];
+char    g_status_buf[MAX_STATUS_LINES][X_LINE_LENGTH + 1];
 
 // Windows specific stuff
 HWND hwndMain;
+HWND hwndHidden;
 HDC  hcdc;
 HDC hdcRef;
 RGBQUAD lores_palette[256];
@@ -79,8 +98,17 @@ HBITMAP ximage_hires[2];
 HBITMAP ximage_superhires;
 HBITMAP ximage_border_special;
 HBITMAP ximage_border_sides;
+int     win_pause=0;
+int     win_stat_debug=0;
+HMENU   win_menu=NULL;
+HWND    win_status=NULL;
+HWND    win_toolbar=NULL;
+RECT    win_rect_oldpos;
+RECT    win_toolHeight;
+RECT    win_statHeight;
 
-#if 0
+
+#ifdef KEGS_DIRECTDRAW 
 LPDIRECTDRAW lpDD=NULL;
 LPDIRECTDRAWSURFACE primsurf=NULL;
 LPDIRECTDRAWSURFACE backsurf=NULL; 
@@ -182,60 +210,241 @@ int a2_key_to_wsym[][3] = {
     { -1, -1, -1 }
 };
 
+//
+// read kegs config into disk config dialog
+// entry. The Entry control ID are specially
+// organized
+//
+int
+read_disk_entry(HWND hDlg)
+{
+    char    buf[1024], buf2[1024];
+    FILE    *fconf;
+    char    *ptr;
+    int    line, slot, drive;
+    HWND hwnd;
+
+    fconf = fopen(g_kegs_conf_name, "rt");
+    if(fconf == 0) {
+        return 1;
+    }
+    line = 0;
+    while(1) {
+        ptr = fgets(buf, 1024, fconf);
+        if(ptr == 0) {
+            /* done */
+            break;
+        }
+        line++;
+    
+        if((buf[0] == 's') && (buf[2] == 'd')) {
+           slot = (buf[1]- 0x30);
+           drive = (buf[3] -0x30);
+        
+           if (drive>=1 && drive<=2 && slot>=5 && slot<=7) {
+               hwnd = GetDlgItem(hDlg,10000+slot*10+drive );
+               if (hwnd) {
+                   buf2[0]='\0';
+                   sscanf(strstr(buf+4,"=")+1,"%s",buf2);
+                   SetWindowText(hwnd,buf2);
+               }
+           }
+        }
+    };
+    return 0;
+}
+
+int
+write_disk_entry(HWND hDlg)
+{
+    char    buf[1024];
+    FILE    *fconf;
+    int    slot, drive;
+    HWND hwnd;
+
+    printf ("Writing disk configuration to %s\n",g_kegs_conf_name);
+    fconf = fopen(g_kegs_conf_name, "wt");
+    if(fconf == 0) {
+        return 1;
+    }
+    for (slot=1;slot<=7;slot++) {
+        for (drive=1;drive<=2;drive++) {
+            if (slot<5) continue;
+            hwnd = GetDlgItem(hDlg,10000+slot*10+drive);
+            if (!hwnd) continue;
+            ZeroMemory(buf,1024);
+            GetWindowText(hwnd,buf,1024);
+            if (lstrlen(buf)>0) {
+                fprintf(fconf,"s%dd%d = %s\n",slot,drive,buf);   
+            } else {
+                fprintf(fconf,"#s%dd%d = <nofile>\n",slot,drive);
+            }
+        }
+    };
+    fclose(fconf);
+    return 0;
+}
+
 void win_update_modifier_state(int state)
 {
-	int	state_xor;
-	int	is_up;
+    int    state_xor;
+    int    is_up;
 
     #define CAPITAL  4  
     #define SHIFT    2
     #define CONTROL  1 
 
-	state = state & (CONTROL | CAPITAL | SHIFT);
-	state_xor = g_x_shift_control_state ^ state;
-	is_up = 0;
-	if(state_xor & CONTROL) {
-		is_up = ((state & CONTROL) == 0);
-		adb_physical_key_update(0x36, is_up);
-	}
-	if(state_xor & CAPITAL) {
-		is_up = ((state & CAPITAL) == 0);
-		adb_physical_key_update(0x39, is_up);
-	}
-	if(state_xor & SHIFT) {
-		is_up = ((state & SHIFT) == 0);
-		adb_physical_key_update(0x38, is_up);
-	}
+    state = state & (CONTROL | CAPITAL | SHIFT);
+    state_xor = g_x_shift_control_state ^ state;
+    is_up = 0;
+    if(state_xor & CONTROL) {
+        is_up = ((state & CONTROL) == 0);
+        adb_physical_key_update(0x36, is_up);
+    }
+    if(state_xor & CAPITAL) {
+        is_up = ((state & CAPITAL) == 0);
+        adb_physical_key_update(0x39, is_up);
+    }
+    if(state_xor & SHIFT) {
+        is_up = ((state & SHIFT) == 0);
+        adb_physical_key_update(0x38, is_up);
+    }
 
-	g_x_shift_control_state = state;
+    g_x_shift_control_state = state;
+}
+
+// Use the way keys update_mouse works
+// to get this to work
+void win_warp_cursor(HWND hwnd)
+{
+    POINT p;
+    p.x = X_A2_WINDOW_WIDTH/2;
+    p.y = X_A2_WINDOW_HEIGHT/2;
+    ClientToScreen(hwnd,&p);
+    SetCursorPos(p.x,p.y);
+}
+
+int
+win_toggle_mouse_cursor(HWND hwnd)
+{
+    RECT rect;
+    g_warp_pointer = !g_warp_pointer;
+    if(g_warp_pointer) {
+        SetCapture(hwnd);
+        ShowCursor(FALSE);
+        GetWindowRect(hwnd,&rect);
+        ClipCursor(&rect);
+        win_warp_cursor(hwnd);
+        printf("Mouse Pointer grabbed\n");
+    } else {
+	    ClipCursor(NULL);
+        ShowCursor(TRUE);
+	    ReleaseCapture();
+        printf("Mouse Pointer released\n");
+    }
+	return g_warp_pointer;
+}
+
+void 
+handle_vk_keys(UINT vk)
+{
+    int    style;
+    int    adjx,adjy;
+    RECT   wrect,rect;
+
+    // Check the state for caps lock,shift and control
+    // This checking must be done in the main window and not in the hidden
+    // window.  Some configuration of windows doesn't work in the hidden
+    // window
+    win_update_modifier_state(
+        ((GetKeyState(VK_CAPITAL)&0x1) ?1:0) << 2 | 
+        ((GetKeyState(VK_SHIFT)&0x80)?1:0) << 1 | 
+        ((GetKeyState(VK_CONTROL)&0x80)?1:0) << 0); 
+
+    // Toggle fast disk
+    if (vk == VK_F7) {
+        g_fast_disk_emul = !g_fast_disk_emul;
+        printf("g_fast_disk_emul is now %d\n", g_fast_disk_emul);
+    }
+
+    // Handle mouse pointer display toggling
+    if (vk == VK_F9 || vk == VK_F8) {
+        win_toggle_mouse_cursor(hwndMain);
+    }
+
+    // Set full screen 
+    if (vk == VK_F11) {
+        g_fullscreen = !g_fullscreen;
+        if (g_fullscreen) {
+            GetWindowRect(hwndMain,&win_rect_oldpos);
+            style=GetWindowLong(hwndMain,GWL_STYLE);
+            style &= ~WS_CAPTION;
+            SetWindowLong(hwndMain,GWL_STYLE,style);
+            win_menu=GetMenu(hwndMain);
+            SetMenu(hwndMain,NULL);
+            ShowWindow(win_status,FALSE);
+            ShowWindow(win_toolbar,FALSE);
+           
+            SetWindowPos(hwndMain,HWND_TOPMOST,-4,-4,
+                         GetSystemMetrics(SM_CXSCREEN)+8,
+                         GetSystemMetrics(SM_CYSCREEN)+8,
+                         SWP_SHOWWINDOW);
+           
+            PatBlt(hdcRef,
+                   -4,-4,
+                   GetSystemMetrics(SM_CXSCREEN)+8,
+                   GetSystemMetrics(SM_CYSCREEN)+8,
+                   BLACKNESS
+            );
+            
+            if (g_warp_pointer) {
+        		GetWindowRect(hwndMain,&rect);
+		        ClipCursor(&rect);
+                win_warp_cursor(hwndMain);
+	        }             
+            a2_screen_buffer_changed = -1;
+            g_full_refresh_needed = -1;
+            g_border_sides_refresh_needed = 1;
+            g_border_special_refresh_needed = 1;
+            g_status_refresh_needed = 1;
+            x_refresh_ximage();
+            redraw_status_lines();
+        } else {
+            style=GetWindowLong(hwndMain,GWL_STYLE);
+            style |= WS_CAPTION;
+            SetWindowLong(hwndMain,GWL_STYLE,style);
+            SetMenu(hwndMain,win_menu);
+            ShowWindow(win_status,TRUE);
+            ShowWindow(win_toolbar,TRUE);
+            win_menu=NULL;
+            GetClientRect(hwndMain,&rect);
+            GetWindowRect(hwndMain,&wrect);
+            adjx=(wrect.right-wrect.left)-(rect.right-rect.left);
+            adjy=(wrect.bottom-wrect.top)-(rect.bottom-rect.top);
+            SetWindowPos(hwndMain,HWND_NOTOPMOST,
+                 win_rect_oldpos.left,win_rect_oldpos.top,
+                 BASE_WINDOW_WIDTH+adjx,
+                 //BASE_WINDOW_HEIGHT+adjy,
+                 //BASE_MARGIN_TOP+A2_WINDOW_HEIGHT+BASE_MARGIN_BOTTOM+adjy+
+                 //MAX_STATUS_LINES*15+48,
+                 STATUS_HEIGHT+adjy,
+                 SWP_SHOWWINDOW );
+            ZeroMemory(&win_rect_oldpos,sizeof(RECT));
+            if (g_warp_pointer) {
+		        GetWindowRect(hwndMain,&rect);
+		        ClipCursor(&rect);
+	        }      
+        }
+    }
 }
 
 int
 handle_keysym(UINT vk,BOOL fdown, int cRepeat,UINT flags)
 {
     int    a2code;
-    int    type;
 
-	if((vk == VK_F7) && fdown) {
-        g_fast_disk_emul = !g_fast_disk_emul;
-        printf("g_fast_disk_emul is now %d\n", g_fast_disk_emul);
-    }
-
-    if((vk == VK_F9 || vk == VK_F8) && fdown) {
-        g_warp_pointer = !g_warp_pointer;
-        if(g_warp_pointer) {
-            SetCapture(hwndMain);
-            ShowCursor(FALSE);
-            printf("Mouse Pointer grabbed\n");
-        } else {
-            ReleaseCapture();
-            ShowCursor(TRUE);
-            printf("Mouse Pointer released\n");
-		}
-	}
 
     // Fixup the numlock & other keys
-
     if (!(flags & 0x100)) {
         switch(vk) {
         case VK_UP:
@@ -274,10 +483,7 @@ handle_keysym(UINT vk,BOOL fdown, int cRepeat,UINT flags)
         }
     }
 
-    win_update_modifier_state(
-        ((GetKeyState(VK_CAPITAL)&0x1) ?1:0) << 2 | 
-        ((GetKeyState(VK_SHIFT)&0x80)?1:0) << 1 | 
-        ((GetKeyState(VK_CONTROL)&0x80)?1:0) << 0); 
+
     a2code = win_keysym_to_a2code(vk, !fdown);
     if (fdown) {
         //printf ("Keysym=0x%x a2code=0x%x cRepeat=0x%x flag=0x%x\n",
@@ -400,10 +606,15 @@ void x_auto_repeat_on(int must) {
 }
 
 void xdriver_end(void) {
-    printf ("Close Window\n");
+    win_pause=1;
+    printf ("Close Window.\n");
+
+    // Wait for display thread to finish and stall
+    // so we can free resources
+    Sleep(300);  
 
     // Cleanup direct draw objects
-    #if 0
+    #if defined(KEGS_DIRECTDRAW)
     if (lpClipper)
         IDirectDrawClipper_Release(lpClipper);
     if (backsurf)
@@ -435,15 +646,37 @@ void xdriver_end(void) {
     WSACleanup();
 }
 
+void win_centroid (int *centerx, int *centery) {
+
+    RECT wrect,rect;
+    int  adjx,adjy;
+
+    GetClientRect(hwndMain,&rect);
+    GetWindowRect(hwndMain,&wrect);
+    adjx=(wrect.right-wrect.left)-(rect.right-rect.left);
+    adjy=(wrect.bottom-wrect.top)-(rect.bottom-rect.top);
+
+    if (wrect.right-wrect.left > BASE_WINDOW_WIDTH+adjx) {
+        *centerx=((wrect.right-wrect.left)-(BASE_WINDOW_WIDTH+adjx));
+        *centerx=(*centerx)/2;
+    }
+
+    if (wrect.bottom-wrect.top > STATUS_HEIGHT+adjy) {
+        *centery=((wrect.bottom-wrect.top)-(STATUS_HEIGHT+adjy));
+        *centery=(*centery)/2;
+    }
+
+}
+
 void win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
                         int destx,int desty, int width,int height) {
     HBITMAP hbmOld;
     HBITMAP holdbm=NULL;
     HDC hdcBack;
     POINT p;
-    RECT rcRectSrc,rect;
-
-    int i,hr;
+    RECT  rcRectSrc,rect;
+    int   centerx,centery;
+    int hr;
 
     if (hwndMain == NULL)
         return;
@@ -452,33 +685,50 @@ void win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
         return;
     }
 
+    centerx=centery=0;
+    win_centroid(&centerx,&centery);
     p.x = 0; p.y = 0;
     ClientToScreen(hwndMain, &p);
     hbmOld = SelectObject(hcdc,hbm);
     SetDIBColorTable(hcdc,0,256,(RGBQUAD *)win_palette);
-    BitBlt(hdc,destx,desty,width,height,hcdc,srcx,srcy,SRCCOPY);
+
+    if (!g_fullscreen) {
+        centery+=(win_toolHeight.bottom-win_toolHeight.top);
+    }
+
+    #if !defined(KEGS_DIRECTDRAW)
+    BitBlt(hdc,destx+centerx,desty+centery,
+           width,height,hcdc,srcx,srcy,SRCCOPY);
  
-    #if 0 
-    if (hr=IDirectDrawSurface_GetDC(backsurf,&hdcBack) != DD_OK) {
+    #else 
+    if ((hr=IDirectDrawSurface_GetDC(backsurf,&hdcBack)) != DD_OK) {
         printf ("Error blitting surface (back_surf) %x\n",hr);
         exit(0);
         return;
     }
 
    
-    BitBlt(hdcBack,destx,desty,width,height,hcdc,srcx,srcy,SRCCOPY);
+    BitBlt(hdcBack,destx+centerx,desty+centery,width,height,hcdc,srcx,srcy,
+           SRCCOPY);
     IDirectDrawSurface_ReleaseDC(backsurf,hdcBack);
 
-    SetRect(&rect,p.x+destx,p.y+desty,
-            p.x+destx+width,p.y+desty+height);
-    SetRect(&rcRectSrc,destx,desty,destx+width,desty+height);
-    IDirectDrawSurface_Restore(primsurf);
+    SetRect(&rect,p.x+destx+centerx,p.y+desty+centery,
+            p.x+destx+width+centerx,p.y+desty+height+centery);
+    SetRect(&rcRectSrc,destx+centerx,desty+centery,
+            destx+width+centerx,desty+height+centery);
+    hr=IDirectDrawSurface_Restore(primsurf);
+    if (hr != DD_OK) {
+        printf ("Error restoring surface (prim_surf) %x\n",hr);
+        exit(0);
+    }
+
     hr=IDirectDrawSurface_Blt(primsurf, 
                               &rect,backsurf,&rcRectSrc,DDBLT_WAIT, NULL);
     if (hr != DD_OK) {
         printf ("Error blitting surface (prim_surf) %x\n",hr);
         exit(0);
     }
+
     #endif 
     
     SelectObject(hcdc,hbmOld);
@@ -487,24 +737,23 @@ void win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
 }
 
 BOOL A2W_OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)  {
-   
     RECT rect;
     RECT wrect;
     int  adjx,adjy;
+    ZeroMemory(&win_rect_oldpos,sizeof(RECT));
     GetClientRect(hwnd,&rect);
     GetWindowRect(hwnd,&wrect);
     adjx=(wrect.right-wrect.left)-(rect.right-rect.left);
     adjy=(wrect.bottom-wrect.top)-(rect.bottom-rect.top);
     SetWindowPos(hwnd,NULL,0,0,BASE_WINDOW_WIDTH+adjx,
                  //BASE_WINDOW_HEIGHT+adjy,
-                 BASE_MARGIN_TOP+A2_WINDOW_HEIGHT+BASE_MARGIN_BOTTOM+adjy+
-                 MAX_STATUS_LINES*15,
+                 BASE_MARGIN_TOP+A2_WINDOW_HEIGHT+BASE_MARGIN_BOTTOM+adjy+48,
                  SWP_NOMOVE | SWP_NOZORDER | SWP_SHOWWINDOW );
     return TRUE;
 }
 
 void A2W_OnKeyChar(HWND hwnd, UINT vk, BOOL fDown, int cRepeat, UINT flags) {
-    handle_keysym(vk,fDown,cRepeat,flags);
+        handle_keysym(vk,fDown,cRepeat,flags);
 }
 
 void A2W_OnDestroy(HWND hwnd) {
@@ -515,9 +764,66 @@ void A2W_OnDestroy(HWND hwnd) {
 }
 
 BOOL A2W_OnEraseBkgnd(HWND hwnd, HDC hdc)  {
+    RECT rect;
+    RECT wrect;
+    int  adjx,adjy;
+    int  centerx,centery;
     if (ximage_superhires == NULL) {
         return FALSE;   
     }
+
+    if (!g_fullscreen) {
+        SendMessage(win_toolbar,TB_AUTOSIZE,0,0);
+        SendMessage(win_status,WM_SIZE,0,0);
+    }
+
+    GetClientRect(hwnd,&rect);
+    GetWindowRect(hwnd,&wrect);
+    adjx=(wrect.right-wrect.left)-(rect.right-rect.left);
+    adjy=(wrect.bottom-wrect.top)-(rect.bottom-rect.top);
+
+    centerx=centery=0;
+    if (wrect.right-wrect.left > BASE_WINDOW_WIDTH+adjx) {
+        centerx=((wrect.right-wrect.left)-(BASE_WINDOW_WIDTH+adjx))/2;
+    }
+    if (wrect.bottom-wrect.top > STATUS_HEIGHT+adjy) {
+        centery=((wrect.bottom-wrect.top)-(STATUS_HEIGHT+adjy))/2;
+    }
+
+    if (wrect.right-wrect.left > BASE_WINDOW_WIDTH+adjx) {
+        PatBlt(hdcRef,
+               BASE_WINDOW_WIDTH+centerx,0,
+               (wrect.right-wrect.left)-BASE_WINDOW_WIDTH-adjx, 
+               (wrect.bottom-wrect.top),
+               BLACKNESS
+              );
+        PatBlt(hdcRef,
+               0,0,
+               BASE_WINDOW_WIDTH, 
+               (wrect.bottom-wrect.top),
+               BLACKNESS
+              );
+    }
+
+    if (wrect.bottom-wrect.top > (STATUS_HEIGHT+adjy)) {
+        PatBlt(hdcRef,
+               centerx, centery+(BASE_MARGIN_TOP)+(A2_WINDOW_HEIGHT)+
+               (BASE_MARGIN_BOTTOM),
+               BASE_WINDOW_WIDTH+adjx,
+               wrect.bottom-
+               (centery+(BASE_MARGIN_TOP)+(A2_WINDOW_HEIGHT)+
+               (BASE_MARGIN_BOTTOM)),
+               BLACKNESS
+              );
+        PatBlt(hdcRef,
+               centerx,0,
+               BASE_WINDOW_WIDTH+adjx,
+               centery,
+               BLACKNESS
+              );
+
+    }
+
     a2_screen_buffer_changed = -1;
     g_full_refresh_needed = -1;
     g_border_sides_refresh_needed = 1;
@@ -528,26 +834,231 @@ BOOL A2W_OnEraseBkgnd(HWND hwnd, HDC hdc)  {
     return TRUE;
 }
 
+// Message handler for about box.
+LRESULT CALLBACK A2W_Dlg_About_Dialog(HWND hDlg, UINT message, WPARAM wParam, 
+                                      LPARAM lParam)
+{
+    RECT rc, rcDlg,rcOwner;
+    HWND hwndOwner;
+
+    switch (message) {
+    case WM_INITDIALOG:
+          if ((hwndOwner = GetParent(hDlg)) == NULL) {
+            hwndOwner = GetDesktopWindow();
+          }
+
+          GetWindowRect(hwndOwner,&rcOwner);
+          GetWindowRect(hDlg,&rcDlg);
+          CopyRect(&rc,&rcOwner);
+          OffsetRect(&rcDlg,-rcDlg.left,-rcDlg.top);
+          OffsetRect(&rc,-rc.left,-rc.top);
+          OffsetRect(&rc,-rcDlg.right,-rcDlg.bottom);
+
+          SetWindowPos(hDlg,hwndMain,rcOwner.left+(rc.right/2),
+                       rcOwner.top+(rc.bottom/2), 0,0,
+                       SWP_SHOWWINDOW | SWP_NOSIZE );
+          return TRUE;
+    case WM_COMMAND:
+       switch (LOWORD(wParam)) {
+       case IDOK:
+           EndDialog(hDlg, LOWORD(wParam));
+           return TRUE;
+       case IDCANCEL:
+           EndDialog(hDlg, LOWORD(wParam));
+           return FALSE;
+       }
+    }
+    return FALSE;
+}
+
+// Message handler for disk config.
+LRESULT CALLBACK A2W_Dlg_Disk(HWND hDlg, UINT message, WPARAM wParam, 
+                              LPARAM lParam)
+{
+    RECT rc, rcDlg,rcOwner;
+    HWND hwndOwner;
+
+    switch (message) {
+    case WM_INITDIALOG:
+          if ((hwndOwner = GetParent(hDlg)) == NULL) {
+            hwndOwner = GetDesktopWindow();
+          }
+
+          GetWindowRect(hwndOwner,&rcOwner);
+          GetWindowRect(hDlg,&rcDlg);
+          CopyRect(&rc,&rcOwner);
+          OffsetRect(&rcDlg,-rcDlg.left,-rcDlg.top);
+          OffsetRect(&rc,-rc.left,-rc.top);
+          OffsetRect(&rc,-rcDlg.right,-rcDlg.bottom);
+          SetWindowPos(hDlg,hwndMain,rcOwner.left+(rc.right/2),
+                       rcOwner.top+(rc.bottom/2), 0,0,
+                       SWP_SHOWWINDOW | SWP_NOSIZE );
+
+          // Clean entry field (init)
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S5D1),"");
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S5D2),"");
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S6D1),"");
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S6D2),"");
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S7D1),"");
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S7D2),"");
+          read_disk_entry(hDlg);
+          return TRUE;
+    case WM_COMMAND:
+       switch (LOWORD(wParam)) {
+       case IDOK:
+           if (write_disk_entry(hDlg)) {
+               MessageBox(hDlg,"Failed to save disk configuration.\n"
+                   "Please check or restore from backup.\n"
+                   "Aborting Operation.\nYou can quit by pressing Cancel.",
+                   "Disk configuration save failure",
+                   MB_OK|MB_ICONEXCLAMATION);
+               break;
+           }
+           EndDialog(hDlg, LOWORD(wParam));
+           return TRUE;
+       case IDCANCEL:
+           EndDialog(hDlg, LOWORD(wParam));
+           return FALSE;
+       case IDC_BTN_S5D1:
+       case IDC_BTN_S5D2:
+       case IDC_BTN_S6D1:
+       case IDC_BTN_S6D2:
+       case IDC_BTN_S7D1:
+       case IDC_BTN_S7D2:
+           {
+               OPENFILENAME opfn;
+               char filename[1024];
+               filename[0]=0;
+               ZeroMemory(&opfn,sizeof(opfn));
+               opfn.lStructSize=sizeof(opfn);
+               opfn.hwndOwner=hDlg;
+               opfn.lpstrFilter="2mg format (*.2mg)\0*.2mg\0"
+                                "Prodos order format (*.po)\0*.po\0"
+                                "Dos order format (*.dsk)\0*.dsk\0"
+                                "\0\0";
+               opfn.lpstrFile=filename;
+               opfn.nMaxFile=1024;
+               opfn.Flags=OFN_EXPLORER | OFN_FILEMUSTEXIST | 
+                          OFN_HIDEREADONLY | OFN_NOCHANGEDIR ;
+               if (GetOpenFileName(&opfn)) {
+                   SetWindowText(GetDlgItem(hDlg,LOWORD(wParam-1000)),
+                                 filename);
+               }
+
+           }
+           break;
+       }
+       break;
+    }
+    return FALSE;
+}
+
+void A2W_OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify) {
+   switch (id) {
+   case ID_HELP_ABOUT:
+      win_pause=1;
+      DialogBoxParam(GetModuleHandle(NULL), 
+                     (LPCTSTR)IDD_ABOUT_DIALOG,
+                     hwnd, 
+                     (DLGPROC)A2W_Dlg_About_Dialog,0);
+      win_pause=0;
+      break;
+   case ID_FILE_JOYSTICK:
+       if (g_joystick_type == JOYSTICK_MOUSE) {
+            joystick_init();
+            if (g_joystick_type != JOYSTICK_MOUSE){
+                CheckMenuItem(GetMenu(hwndMain),ID_FILE_JOYSTICK,
+                              MF_CHECKED);
+            };
+       } else {
+           g_joystick_type = JOYSTICK_MOUSE;
+           CheckMenuItem(GetMenu(hwndMain),ID_FILE_JOYSTICK,
+                         MF_UNCHECKED);
+       }
+       break;
+   case ID_FILE_DISK:
+      win_pause=1; 
+      DialogBoxParam(GetModuleHandle(NULL), 
+                     (LPCTSTR)IDD_DLG_DISKCONF,
+                     hwnd, 
+                     (DLGPROC)A2W_Dlg_Disk,0);
+      win_pause=0;
+      break;
+   case ID_FILE_EXIT:
+      PostQuitMessage(0);
+      break;
+   case ID_FILE_DEBUGSTAT:
+       win_stat_debug = ! win_stat_debug;
+       {
+           RECT rect,wrect;
+           int adjx,adjy;
+           GetClientRect(hwndMain,&rect);
+           GetWindowRect(hwndMain,&wrect);
+           adjx=(wrect.right-wrect.left)-(rect.right-rect.left);
+           adjy=(wrect.bottom-wrect.top)-(rect.bottom-rect.top);
+           SetWindowPos(hwndMain,HWND_NOTOPMOST,
+                        win_rect_oldpos.left,win_rect_oldpos.top,
+                        BASE_WINDOW_WIDTH+adjx,
+                        STATUS_HEIGHT+adjy,
+                        SWP_NOMOVE | SWP_SHOWWINDOW );
+       }
+
+       if (win_stat_debug) {
+           CheckMenuItem(GetMenu(hwndMain),ID_FILE_DEBUGSTAT,MF_CHECKED);
+       } else {
+           CheckMenuItem(GetMenu(hwndMain),ID_FILE_DEBUGSTAT,MF_UNCHECKED);
+       }
+       break;
+   case ID_FILE_SENDRESET:
+      if (hwndHidden) {
+          // Simulate key pressing to send reset
+          SendMessage(hwndHidden,WM_KEYDOWN,0x11,0x1d0001L);
+		  adb_physical_key_update(0x36, 0);
+          SendMessage(hwndHidden,WM_KEYDOWN,0x3,0x1460001L);
+	
+          SendMessage(hwndHidden,WM_KEYUP,3,0xc1460001L);
+		  SendMessage(hwndHidden,WM_KEYUP,0x11,0xc01d0001L); 
+		  adb_physical_key_update(0x36, 1);
+      }
+      break;
+   case ID_FILE_FULLSCREEN:
+	  handle_vk_keys(VK_F11);
+	  break;
+   }
+}
+
 void A2W_OnMouseMove(HWND hwnd, int x, int y, UINT keyFlags) {
     int motion=0;
+    int centerx,centery;
+    centerx=centery=0;
+    win_centroid(&centerx,&centery);
     motion=update_mouse(x,y, 0, 0);
     if (motion && g_warp_pointer) {
+        win_warp_cursor(hwndMain);
         update_mouse(-1,-1,-1,-1);
     }
 }
 
 void A2W_OnLButtonDown(HWND hwnd, BOOL fDClick, int x, int y, UINT keyFlags) {
     int motion=0;
+    int centerx,centery;
+    centerx=centery=0;
+    win_centroid(&centerx,&centery);
     motion=update_mouse(x,y,1,1);
     if (motion && g_warp_pointer) {
+        win_warp_cursor(hwndMain);
         update_mouse(-1,-1,-1,-1);
     }
 }
 
 void A2W_OnLButtonUp(HWND hwnd, int x, int y, UINT keyFlags) {
     int motion=0;
+    int centerx,centery;
+    centerx=centery=0;
+    win_centroid(&centerx,&centery);
     motion=update_mouse(x,y,0,1);
     if (motion && g_warp_pointer) {
+        win_warp_cursor(hwndMain);
         update_mouse(-1,-1,-1,-1);
     }
 }
@@ -572,13 +1083,19 @@ void A2W_OnRButtonDown(HWND hwnd, BOOL fDClick, int x, int y, UINT keyFlags) {
     }
 }
 
-LRESULT CALLBACK A2WndProc(HWND hwnd,UINT uMsg,WPARAM wParam,  
-                           LPARAM lParam) {
+LRESULT CALLBACK A2WndProcHidden(HWND hwnd,UINT uMsg,WPARAM wParam,  
+                                 LPARAM lParam) {
+    /*
+    if (uMsg == WM_KEYDOWN) {
+        printf ("Down:%x %x\n",wParam,lParam);
+    }
+    if (uMsg == WM_KEYUP) {
+        printf ("UP:%x %x\n",wParam,lParam);
+    }
+	*/
+    
     switch (uMsg) 
-    { 
-        HANDLE_MSG(hwnd,WM_CREATE,A2W_OnCreate); 
-        HANDLE_MSG(hwnd,WM_DESTROY,A2W_OnDestroy);
-        HANDLE_MSG(hwnd,WM_ERASEBKGND,A2W_OnEraseBkgnd);
+    {
         HANDLE_MSG(hwnd,WM_MOUSEMOVE,A2W_OnMouseMove);
         HANDLE_MSG(hwnd,WM_KEYUP,A2W_OnKeyChar);
         HANDLE_MSG(hwnd,WM_KEYDOWN,A2W_OnKeyChar);
@@ -586,17 +1103,41 @@ LRESULT CALLBACK A2WndProc(HWND hwnd,UINT uMsg,WPARAM wParam,
         HANDLE_MSG(hwnd,WM_SYSKEYDOWN,A2W_OnKeyChar);
         HANDLE_MSG(hwnd,WM_LBUTTONDOWN,A2W_OnLButtonDown);
         HANDLE_MSG(hwnd,WM_LBUTTONUP,A2W_OnLButtonUp);
-        HANDLE_MSG(hwnd,WM_RBUTTONDOWN,A2W_OnRButtonDown);
     } 
     return DefWindowProc(hwnd, uMsg, wParam, lParam); 
 }
 
-#if 0
+LRESULT CALLBACK A2WndProc(HWND hwnd,UINT uMsg,WPARAM wParam,  
+                           LPARAM lParam) {
+    switch (uMsg) 
+    {  
+        case WM_KEYDOWN:
+           handle_vk_keys(wParam);
+        case WM_MOUSEMOVE:
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+        case WM_SYSKEYDOWN:
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+            if (hwndHidden != NULL) {
+                PostMessage(hwndHidden,uMsg,wParam,lParam);
+            }
+            return 0;
+		
+        HANDLE_MSG(hwnd,WM_CREATE,A2W_OnCreate); 
+        HANDLE_MSG(hwnd,WM_DESTROY,A2W_OnDestroy);
+        HANDLE_MSG(hwnd,WM_ERASEBKGND,A2W_OnEraseBkgnd);
+        HANDLE_MSG(hwnd,WM_RBUTTONDOWN,A2W_OnRButtonDown);
+        HANDLE_MSG(hwnd,WM_COMMAND,A2W_OnCommand);
+    } 
+    return DefWindowProc(hwnd, uMsg, wParam, lParam); 
+}
+
+#if defined(KEGS_DIRECTDRAW)
 BOOL initDirectDraw()
 {
     HRESULT ddrval;
     DDSURFACEDESC ddsd;
-    HMODULE hmod;
 
     ddrval = DirectDrawCreate( NULL, &lpDD, NULL );
     if (FAILED(ddrval))
@@ -620,7 +1161,7 @@ BOOL initDirectDraw()
     ddrval = IDirectDraw_CreateSurface(lpDD,&ddsd, &primsurf, NULL );
     if (FAILED(ddrval))
     {
-        printf ("Error creating primary surface = %x\n",ddrval);
+        printf ("Error creating primary surface = %ld\n",ddrval);
         IDirectDraw_Release(lpDD);
         return(FALSE);
     }
@@ -628,13 +1169,14 @@ BOOL initDirectDraw()
     ddrval = IDirectDraw_CreateClipper(lpDD,0, &lpClipper, NULL );
     if (FAILED(ddrval))
     {
-        printf ("Error creating direct draw clipper = %x\n",ddrval);
+        printf ("Error creating direct draw clipper = %ld\n",ddrval);
         IDirectDrawSurface_Release(primsurf);
         IDirectDraw_Release(lpDD);
         return(FALSE);
     }
 
-    // setting it to our hwnd gives the clipper the coordinates from our window
+    // setting it to our hwnd gives the clipper the coordinates from 
+    // our window
     ddrval = IDirectDrawClipper_SetHWnd(lpClipper, 0, hwndMain );
     if (FAILED(ddrval))
     {
@@ -662,7 +1204,8 @@ BOOL initDirectDraw()
     ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN;
     ddsd.dwWidth =  BASE_WINDOW_WIDTH;
     ddsd.dwHeight = BASE_MARGIN_TOP+A2_WINDOW_HEIGHT+BASE_MARGIN_BOTTOM;
-
+    ddsd.dwWidth =  GetSystemMetrics(SM_CXSCREEN);
+    ddsd.dwHeight = GetSystemMetrics(SM_CYSCREEN);
     // create the backbuffer separately
     ddrval = IDirectDraw_CreateSurface(lpDD,&ddsd, &backsurf, NULL );
     if (FAILED(ddrval))
@@ -678,41 +1221,79 @@ BOOL initDirectDraw()
 #endif
 
 void dev_video_init(void) {
-    int    width;
-    int    height;
-    int    depth;
-    int    mdepth;
+    unsigned int tid;
+    int waitVar=0;
+    WNDCLASS wc; 
+
+    _beginthreadex(NULL,0,dev_video_init_ex,(void *)&waitVar,0,&tid);
+
+    // Wait for the background thread to finish initializing
+    while (!waitVar) {
+        Sleep(1);
+    }
+
+    // Create a hidden window
+    wc.style = 0; 
+    wc.lpfnWndProc = (WNDPROC) A2WndProcHidden; 
+    wc.cbClsExtra = 0; 
+    wc.cbWndExtra = 0; 
+    wc.hInstance =  GetModuleHandle(NULL);
+    wc.hIcon = LoadIcon((HINSTANCE) NULL, IDI_APPLICATION); 
+    wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW); 
+    wc.hbrBackground = GetStockObject(WHITE_BRUSH); 
+    wc.lpszMenuName =  NULL;
+    wc.lpszClassName = "Kegs32 Hidden Window"; 
+    if (!RegisterClass(&wc)) {
+        printf ("Register window failed\n");
+        return; 
+    }
+    hwndHidden = CreateWindow(
+        "Kegs32 Hidden Window", 
+        "Kegs32 Hidden Window", 
+        WS_OVERLAPPED,
+        CW_USEDEFAULT, CW_USEDEFAULT, 
+        CW_USEDEFAULT, CW_USEDEFAULT, NULL,NULL,GetModuleHandle(NULL),NULL); 
+   
+}
+unsigned int __stdcall dev_video_init_ex(void *param) {
     int i;
-	int	keycode;
-	int	tmp_array[0x80];
-    byte *ptr;
+    int    keycode;
+    int    tmp_array[0x80];
+    int *waitVar=(int *)param;
+    MSG msg;
+    HACCEL hAccel;
+
     WNDCLASS wc; 
     LPBITMAPINFOHEADER pDib;
     TEXTMETRIC tm;  
     WORD wVersionRequested;
     WSADATA wsaData;
+    int iStatusWidths[] = {60, 100,200,300, -1};
 
     // Create key-codes
-	g_num_a2_keycodes = 0;
-	for(i = 0; i <= 0x7f; i++) {
-		tmp_array[i] = 0;
-	}
-	for(i = 0; i < 0x7f; i++) {
-		keycode = a2_key_to_wsym[i][0];
-		if(keycode < 0) {
-			g_num_a2_keycodes = i;
-			break;
-		} else if(keycode > 0x7f) {
-			printf("a2_key_to_wsym[%d] = %02x!\n", i, keycode);
-				exit(2);
-		} else {
-			if(tmp_array[keycode]) {
-				printf("a2_key_to_x[%d] = %02x used by %d\n",
-					i, keycode, tmp_array[keycode] - 1);
-			}
-			tmp_array[keycode] = i + 1;
-		}
-	}
+    g_num_a2_keycodes = 0;
+    for(i = 0; i <= 0x7f; i++) {
+        tmp_array[i] = 0;
+    }
+    for(i = 0; i < 0x7f; i++) {
+        keycode = a2_key_to_wsym[i][0];
+        if(keycode < 0) {
+            g_num_a2_keycodes = i;
+            break;
+        } else if(keycode > 0x7f) {
+            printf("a2_key_to_wsym[%d] = %02x!\n", i, keycode);
+                exit(2);
+        } else {
+            if(tmp_array[keycode]) {
+                printf("a2_key_to_x[%d] = %02x used by %d\n",
+                    i, keycode, tmp_array[keycode] - 1);
+            }
+            tmp_array[keycode] = i + 1;
+        }
+    }
+
+    // Initialize Common Controls;
+    InitCommonControls();
 
     // Initialize Winsock
     wVersionRequested = MAKEWORD(1, 1);
@@ -723,47 +1304,81 @@ void dev_video_init(void) {
     }
 
     // Create a window
-    
     wc.style = 0; 
     wc.lpfnWndProc = (WNDPROC) A2WndProc; 
     wc.cbClsExtra = 0; 
     wc.cbWndExtra = 0; 
     wc.hInstance =  GetModuleHandle(NULL);
-    wc.hIcon = LoadIcon((HINSTANCE) NULL, 
-        IDI_APPLICATION); 
-    wc.hCursor = LoadCursor((HINSTANCE) NULL, 
-        IDC_ARROW); 
+    wc.hIcon = LoadIcon((HINSTANCE) GetModuleHandle(NULL), 
+               MAKEINTRESOURCE(IDC_KEGS32)); 
+    wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW); 
     wc.hbrBackground = GetStockObject(WHITE_BRUSH); 
-    wc.lpszMenuName =  "Kegs32"; 
+    wc.lpszMenuName =  MAKEINTRESOURCE(IDC_KEGS32);
     wc.lpszClassName = "Kegs32"; 
 
     printf ("Registering Window\n");
     if (!RegisterClass(&wc)) {
         printf ("Register window failed\n");
-        return; 
+        return 0; 
     } 
  
     // Create the main window. 
  
     printf ("Creating Window\n");
-    hwndMain = CreateWindow("Kegs32", "Kegs32", 
+    hwndMain = CreateWindow(
+        "Kegs32", 
+        "Kegs32 - GS Emulator", 
         WS_OVERLAPPEDWINDOW&(~(WS_MAXIMIZEBOX | WS_SIZEBOX)), 
         //WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 
         CW_USEDEFAULT, CW_USEDEFAULT, NULL,NULL,GetModuleHandle(NULL),NULL); 
-   
+      
     // If the main window cannot be created, terminate 
     // the application. 
  
     if (!hwndMain) {
         printf ("Window create failed\n");
-        return;
+        return 0;
     }
 
-    SetWindowLong(hwndMain,GWL_STYLE,
-                  GetWindowLong(hwndMain,GWL_STYLE) & (~WS_MAXIMIZE));
+    // Loading Accelerators
+    hAccel=LoadAccelerators(GetModuleHandle(NULL),MAKEINTRESOURCE(IDR_ACCEL));
 
-    #if 0
+    // Create Toolbar	
+    win_toolbar = CreateWindowEx(0, TOOLBARCLASSNAME, NULL,
+                  WS_CHILD | WS_VISIBLE | TBSTYLE_TOOLTIPS, 0, 0, 0, 0,
+                  hwndMain, (HMENU)IDR_TOOLBAR, GetModuleHandle(NULL), NULL);
+    SendMessage(win_toolbar,TB_BUTTONSTRUCTSIZE,(WPARAM)sizeof(TBBUTTON),0);
+  
+    {
+        TBADDBITMAP tbab;
+        TBBUTTON tbb[1];
+
+        tbab.hInst = GetModuleHandle(NULL);
+        tbab.nID = IDR_TOOLBAR;
+        SendMessage(win_toolbar, TB_ADDBITMAP, 0, (LPARAM)&tbab);
+    
+        ZeroMemory(tbb, sizeof(tbb));
+        tbb[0].iBitmap = 0;
+        tbb[0].fsState = TBSTATE_ENABLED;
+        tbb[0].fsStyle = TBSTYLE_BUTTON;
+        tbb[0].idCommand = ID_FILE_DISK;
+
+        SendMessage(win_toolbar, TB_ADDBUTTONS, 1, (LPARAM)tbb);
+		GetWindowRect(win_toolbar,&win_toolHeight);
+    }
+  
+    // Create Status
+    win_status  = CreateWindowEx(0, STATUSCLASSNAME, NULL,
+                  WS_CHILD | WS_VISIBLE , 0, 0, 0, 0,
+                  hwndMain, (HMENU)ID_STATUSBAR, GetModuleHandle(NULL), NULL);
+    SendMessage(win_status, SB_SETPARTS, 5, (LPARAM)iStatusWidths);
+    GetWindowRect(win_status,&win_statHeight);
+
+    SendMessage(win_toolbar,TB_AUTOSIZE,0,0);
+    SendMessage(win_status,WM_SIZE,0,0);
+ 
+    #if defined(KEGS_DIRECTDRAW) 
     if (!initDirectDraw()) {
         printf ("Unable to initialize Direct Draw\n");
         exit(0);
@@ -798,8 +1413,9 @@ void dev_video_init(void) {
                                    (VOID **)&data_hires[0],NULL,0);
     ximage_hires[1]=CreateDIBSection(hdcRef,(BITMAPINFO *)pDib,DIB_RGB_COLORS,
                                    (VOID **)&data_hires[1],NULL,0);
-    ximage_superhires=CreateDIBSection(hdcRef,(BITMAPINFO *)pDib,DIB_RGB_COLORS,
-                                   (VOID **)&data_superhires,NULL,0);
+    ximage_superhires=CreateDIBSection(hdcRef,(BITMAPINFO *)pDib,
+                                       DIB_RGB_COLORS,
+                                       (VOID **)&data_superhires,NULL,0);
     pDib->biWidth = EFF_BORDER_WIDTH;
     ximage_border_sides=CreateDIBSection(hdcRef,(BITMAPINFO *)pDib,
                                          DIB_RGB_COLORS,
@@ -808,11 +1424,21 @@ void dev_video_init(void) {
     pDib->biHeight = - (X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8);
     ximage_border_special=CreateDIBSection(hdcRef,(BITMAPINFO *)pDib,
                                            DIB_RGB_COLORS,
-                                          (VOID **)&data_border_special,NULL,0);
+                                          (VOID **)&data_border_special,
+                                          NULL,0);
     GlobalFree(pDib);
 
     ShowWindow(hwndMain, SW_SHOWDEFAULT); 
     UpdateWindow(hwndMain); 
+    *waitVar=1;
+
+    while (GetMessage(&msg,hwndMain,0,0)>0) {
+        if (!(TranslateAccelerator(hwndMain,hAccel,&msg)))
+            TranslateMessage(&msg); 
+        DispatchMessage(&msg); 
+    }
+    my_exit(0);
+    return 0;
 }
 
 void update_colormap(int mode) {
@@ -825,51 +1451,104 @@ void redraw_border(void) {
 
 void check_input_events(void) {
     MSG msg;
+   
+    // Try to update joystick buttons 
+    joystick_update_button(); 
 
-    if (PeekMessage(&msg, NULL ,0,0, PM_NOREMOVE)) 
-    { 
-        if (GetMessage(&msg, NULL ,0,0)) {
-            TranslateMessage(&msg); 
-            DispatchMessage(&msg); 
-        } else {
-            my_exit(0);
-        }
-    } 
+    while (win_pause) {
+        Sleep(1);
+    }
+
+    if (PeekMessage(&msg,hwndHidden,0,0,PM_NOREMOVE)) {
+        do {
+            if (GetMessage(&msg,hwndHidden,0,0)>0) {
+                TranslateMessage(&msg); 
+                DispatchMessage(&msg); 
+            } else {
+                my_exit(0);
+            }
+        } while (PeekMessage(&msg,hwndHidden,0,0,PM_NOREMOVE));
+    }
 }
 
 void update_status_line(int line, const char *string) {
-	char	*buf;
-	const char *ptr;
-	int	i;
+    char    *buf;
+    const char *ptr;
+    int    i;
 
-	if(line >= MAX_STATUS_LINES || line < 0) {
-		printf("update_status_line: line: %d!\n", line);
-		exit(1);
-	}
+    if(line >= MAX_STATUS_LINES || line < 0) {
+        printf("update_status_line: line: %d!\n", line);
+        exit(1);
+    }
 
-	ptr = string;
-	buf = &(g_status_buf[line][0]);
-	for(i = 0; i < X_LINE_LENGTH; i++) {
-		if(*ptr) {
-			buf[i] = *ptr++;
-		} else {
-			buf[i] = ' ';
-		}
-	}
+    ptr = string;
+    buf = &(g_status_buf[line][0]);
+    for(i = 0; i < X_LINE_LENGTH; i++) {
+        if(*ptr) {
+            buf[i] = *ptr++;
+        } else {
+            buf[i] = ' ';
+        }
+    }
 
-	buf[X_LINE_LENGTH] = 0;
+    buf[X_LINE_LENGTH] = 0;
 }
 
 void redraw_status_lines(void) {
+    
     int line=0;
-	char	*buf;
+    char *buf;
+    char buffer[255]; 
     int height=dwchary;
+    int centerx,centery;
 
-	for(line = 0; line < MAX_STATUS_LINES; line++) {
-		buf = &(g_status_buf[line][0]);
-		TextOut(hdcRef, 0, X_A2_WINDOW_HEIGHT + height*line,
-			buf, strlen(buf));
-	}
+    centerx=centery=0;
+    win_centroid(&centerx,&centery);
+    if (!g_fullscreen) {
+        centery+=28;
+    }
+    if (win_stat_debug) {
+        for(line = 0; line < MAX_STATUS_LINES; line++) {
+            buf = &(g_status_buf[line][0]);
+            TextOut(hdcRef, 0+centerx, X_A2_WINDOW_HEIGHT+
+                    height*line+centery,buf, strlen(buf));
+        }
+    }
+	
+    if (win_status !=NULL && !g_fullscreen) {
+        SendMessage(win_status, SB_SETTEXT,0,(LPARAM)"KEGS 0.60");
+        sprintf(buffer,"Vol:%d",g_doc_vol);
+        SendMessage(win_status, SB_SETTEXT,1,(LPARAM)buffer);
+        buf=strstr(g_status_buf[0],"sim MHz:");
+        
+        if (buf) {
+            memset(buffer,0,255);
+            strncpy(buffer,buf,strchr(buf+8,' ')-buf);
+            SendMessage(win_status, SB_SETTEXT,2,(LPARAM) buffer);
+        } else {
+            SendMessage(win_status, SB_SETTEXT,2,(LPARAM) "sim MHz:???");
+        }
+		
+        buf=strstr(g_status_buf[0],"Eff MHz:");
+        if (buf) {
+            memset(buffer,0,255);
+            strncpy(buffer,buf,strchr(buf+8,',')-buf);           
+            SendMessage(win_status, SB_SETTEXT,3,(LPARAM) buffer);
+        } else {
+            SendMessage(win_status, SB_SETTEXT,3,(LPARAM) "Eff MHz:???");
+        }
+        
+        buf=strstr(g_status_buf[5],"fast");
+        if (buf) {
+            memset(buffer,0,255);
+            strncpy(buffer,g_status_buf[5],buf-&(g_status_buf[5][0]));
+            SendMessage(win_status, SB_SETTEXT,4,(LPARAM) buffer);
+        } else {
+           
+        }
+
+    }
+   
 }
 
 void
@@ -883,7 +1562,6 @@ x_refresh_ximage()
     int    left_pix, right_pix;
     int    left, right;
     HBITMAP last_xim, cur_xim;
-    HDC  hbmOld;
 
     if(g_border_sides_refresh_needed) {
         g_border_sides_refresh_needed = 0;
@@ -968,7 +1646,6 @@ win_refresh_lines(HBITMAP xim, int start_line, int end_line, int left_pix,
         int right_pix)
 {
     int srcy;
-    HDC hdc;
 
     if(left_pix >= right_pix || left_pix < 0 || right_pix <= 0) {
         halt_printf("win_refresh_lines: lines %d to %d, pix %d to %d\n",
@@ -1009,7 +1686,6 @@ x_redraw_border_sides_lines(int end_x, int width, int start_line,
     int end_line)
 {
     HBITMAP    xim;
-    HDC hdc;
 
     if(start_line < 0 || width < 0) {
         return;
@@ -1087,7 +1763,6 @@ void
 win_refresh_border_special()
 {
     HBITMAP    xim;
-    HDC hdc;
     int    width, height;
 
     width = X_A2_WINDOW_WIDTH;

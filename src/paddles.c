@@ -32,6 +32,12 @@ int	g_paddle_val[4] = { 0, 0, 0, 0 };
 
 
 void
+paddle_trigger_button()
+{
+        joystick_update_button();
+}
+
+void
 paddle_trigger(double dcycs)
 {
 	/* Called by read/write to $c070 */
@@ -43,6 +49,8 @@ paddle_trigger(double dcycs)
 		paddle_trigger_mouse(dcycs);
 	} else if(g_joystick_type == JOYSTICK_LINUX) {
 		paddle_trigger_linux(dcycs);
+	} else if(g_joystick_type == JOYSTICK_WIN32) {
+		paddle_trigger_win32(dcycs);
 	}
 }
 
@@ -88,6 +96,12 @@ paddle_trigger_linux(double dcycs)
 	joystick_update();
 }
 
+void
+paddle_trigger_win32(double dcycs)
+{
+	joystick_update();
+}
+
 int
 read_paddles(int paddle, double dcycs)
 {
@@ -110,7 +124,7 @@ read_paddles(int paddle, double dcycs)
 	/* convert 0->255 into 0->2816.0 cycles (the paddle delay const) */
 	trig_dcycs = g_paddle_trig_dcycs + (val * 11.0);
 
-	if(dcycs < trig_dcycs) {
+	if(dcycs < trig_dcycs) { 
 		return 0x80;
 	} else {
 		return 0x00;

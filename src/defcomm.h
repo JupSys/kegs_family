@@ -32,7 +32,7 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:
 #define JOYSTICK_MOUSE		1
 #define JOYSTICK_LINUX		2
 #define JOYSTICK_KEYPAD		3
-
+#define JOYSTICK_WIN32      4
 
 #define HALT_EVENT	0x10
 
