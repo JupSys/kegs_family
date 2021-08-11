@@ -1,3 +1,15 @@
+/****************************************************************/
+/*    	Apple IIgs emulator                                     */
+/*                                                              */
+/*    This code may not be used in a commercial product         */
+/*    without prior written permission of the authors.          */
+/*                                                              */
+/*    SDL Code by Frederic Devernay	                        */
+/*    Mac OS X port by Darrell Walisser & Benoit Dardelet	*/
+/*    You may freely distribute this code.                      */ 
+/*                                                              */
+/****************************************************************/
+
 #include "sim65816.h"
 #include "iwm.h"
 #include "adb.h"
@@ -13,8 +25,8 @@ function_e func_f9 = FUNCTION_TOGGLE_SLOW_PADDLES;
 function_e func_f10 = FUNCTION_TOGGLE_VIDEOMODE;
 function_e func_f11 = FUNCTION_TOGGLE_FULLSCREEN;
 function_e func_f12 = FUNCTION_TOGGLE_LIMIT_SPEED;
-function_e func_button2 = FUNCTION_TOGGLE_LIMIT_SPEED;
-function_e func_button3 = FUNCTION_ENTER_DEBUGGER;
+function_e func_button2 = FUNCTION_ENTER_DEBUGGER;
+function_e func_button3 = FUNCTION_TOGGLE_LIMIT_SPEED;
 
 static void
 function_toggle_fast_disk_emul(int x, int y)
@@ -33,7 +45,7 @@ function_toggle_videomode(int x, int y)
 {
     videomode_e newmode;
 
-    printf("g_videomode was %d\n",get_videomode());
+    ki_printf("g_videomode was %d\n",get_videomode());
     switch(get_videomode()) {
     case KEGS_FULL:
         newmode = KEGS_640X480;
@@ -58,14 +70,14 @@ static void
 function_toggle_swap_paddles(int x, int y)
 {
     set_swap_paddles(!get_swap_paddles());
-    printf("Swap paddles is now: %d\n", get_swap_paddles());
+    ki_printf("Swap paddles is now: %d\n", get_swap_paddles());
 }
 
 static void
 function_toggle_invert_paddles(int x, int y)
 {
     set_invert_paddles(!get_invert_paddles());
-    printf("Invert paddles is now: %d\n", get_invert_paddles());
+    ki_printf("Invert paddles is now: %d\n", get_invert_paddles());
 }
 
 static void
@@ -73,10 +85,10 @@ function_toggle_slow_paddles(int x, int y)
 {
     set_slow_paddles(!get_slow_paddles());
     if (get_slow_paddles()) {
-        printf("Paddles slowed\n");
+        ki_printf("Paddles slowed\n");
     }
     else {
-        printf("Paddles at full speed\n");
+        ki_printf("Paddles at full speed\n");
     }
 }
 
@@ -84,21 +96,24 @@ static void
 function_toggle_limit_speed(int x, int y)
 {
     int limit_speed = get_limit_speed() + 1;
-    if(limit_speed > 2) {
+    if(limit_speed > SPEED_ENUMSIZE) {
         limit_speed = 0;
     }
     
-    printf("Toggling limit_speed to %d\n",
+    ki_printf("Toggling limit_speed to %d\n",
            limit_speed);
     switch(limit_speed) {
-    case 0:
-        printf("...as fast as possible!\n");
+    case SPEED_UNLIMITED:
+        ki_printf("...as fast as possible!\n");
         break;
-    case 1:
-        printf("...1.024MHz\n");
-					break;
-    case 2:
-        printf("...2.5MHz\n");
+    case SPEED_1MHZ:
+        ki_printf("... 1.024MHz (Slow) \n");
+        break;
+    case SPEED_GS:
+        ki_printf("... 2.8MHz (Normal) \n");
+        break;
+    case SPEED_ZIP:
+        ki_printf("... 8.0MHz (Zip Speed)\n");
         break;
     }
     set_limit_speed(limit_speed);

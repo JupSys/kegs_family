@@ -19,7 +19,7 @@
 #ifdef HAVE_VIDEO_WIN32
 
 //#define KEGS_DIRECTDRAW
-#define STRICT
+//#define STRICT
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
@@ -33,9 +33,11 @@
 #include <ddraw.h>
 #endif
 #include <conio.h>
-#include "resource.h"
+#include "../kegs_win32/resource.h"
 #include "iwm.h"
 #include "adb.h"
+#include "dis.h"
+#include "engine.h"
 
 static void win_refresh_lines(HBITMAP xim, int start_line, int end_line, int left_pix, int right_pix);
 static void win_redraw_border_sides_lines(int end_x, int width, int start_line, int end_line);
@@ -43,7 +45,7 @@ static void win_refresh_border_sides(void);
 static void win_refresh_border_special(void);
 static unsigned int __stdcall dev_video_init_ex(void *param); 
 static int win_keysym_to_a2code(int keysym, int is_up);
-static void win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
+static void win_refresh_image (RGBQUAD* palette,HDC hdc,HBITMAP hbm, int srcx, int srcy,
                                int destx,int desty, int width,int height);
 
 static int    g_x_shift_control_state = 0;
@@ -58,10 +60,11 @@ static int g_fullscreen=0;
                             )
 
 DWORD   dwchary;
-char    g_status_buf[MAX_STATUS_LINES][X_LINE_LENGTH + 1];
+// char    g_video_status_buf[MAX_STATUS_LINES][X_LINE_LENGTH + 1];
 
 // Windows specific stuff
-static HWND hwndMain;
+	 HWND hwndMain;
+
 static HWND hwndHidden;
 static HDC  hcdc;
 static HDC hdcRef;
@@ -71,7 +74,7 @@ static RGBQUAD *win_palette;
 static RGBQUAD dummy_color;
 static HBITMAP video_image_border_special;
 static HBITMAP video_image_border_sides;
-static int     win_pause=0;
+		int     win_pause=0;
 static int     win_stat_debug=0;
 static HMENU   win_menu=NULL;
 static HWND    win_status=NULL;
@@ -87,6 +90,8 @@ static LPDIRECTDRAWSURFACE primsurf=NULL;
 static LPDIRECTDRAWSURFACE backsurf=NULL; 
 static LPDIRECTDRAWCLIPPER lpClipper=NULL; 
 #endif
+
+#define VK_ENTER	0x3A		// Reusing undefined value!
 
 static const int a2_key_to_wsym[][3] = {
     { 0x35,    VK_ESCAPE,    VK_F1 },
@@ -179,10 +184,11 @@ static const int a2_key_to_wsym[][3] = {
     { 0x3c,    VK_RIGHT, 0 },
     { 0x52,    VK_NUMPAD0, 0 },
     { 0x41,    VK_DECIMAL, VK_SEPARATOR },
-//    { 0x4c,    VK_ENTER, 0 },
+    { 0x4c,    VK_ENTER, 0 },
     { -1, -1, -1 }
 };
 
+#ifdef KEGS_FULLINTERFACE
 //
 // read kegs config into disk config dialog
 // entry. The Entry control ID are specially
@@ -191,7 +197,7 @@ static const int a2_key_to_wsym[][3] = {
 int
 read_disk_entry(HWND hDlg)
 {
-    char    buf[1024], buf2[1024];
+    char    buf[1024], *buf2;
     FILE    *fconf;
     char    *ptr;
     int    line, slot, drive;
@@ -217,8 +223,12 @@ read_disk_entry(HWND hDlg)
            if (drive>=1 && drive<=2 && slot>=5 && slot<=7) {
                hwnd = GetDlgItem(hDlg,10000+slot*10+drive );
                if (hwnd) {
+				   /*
                    buf2[0]='\0';
                    sscanf(strstr(buf+4,"=")+1,"%s",buf2);
+				   */
+				   buf2 = buf+4;
+				   while(*buf2==' ' || *buf2=='=') buf2++;
                    SetWindowText(hwnd,buf2);
                }
            }
@@ -235,7 +245,7 @@ write_disk_entry(HWND hDlg)
     int    slot, drive;
     HWND hwnd;
 
-    printf ("Writing disk configuration to %s\n",g_kegs_conf_name);
+    ki_printf ("Writing disk configuration to %s\n",g_kegs_conf_name);
     fconf = fopen(g_kegs_conf_name, "wt");
     if(fconf == 0) {
         return 1;
@@ -257,6 +267,9 @@ write_disk_entry(HWND hDlg)
     fclose(fconf);
     return 0;
 }
+
+#endif // KEGS FULL INTERFACE
+
 
 void win_update_modifier_state(int state)
 {
@@ -301,24 +314,24 @@ void
 video_warp_pointer_win32(void)
 {
     if(g_warp_pointer) {
+		RECT rect;
         SetCapture(hwndMain);
         ShowCursor(FALSE);
         GetWindowRect(hwndMain,&rect);
         ClipCursor(&rect);
         win_warp_cursor(hwndMain);
-        printf("Mouse Pointer grabbed\n");
+        ki_printf("Mouse Pointer grabbed\n");
     } else {
 	    ClipCursor(NULL);
         ShowCursor(TRUE);
 	    ReleaseCapture();
-        printf("Mouse Pointer released\n");
+        ki_printf("Mouse Pointer released\n");
     }
 }
 
 int
 win_toggle_mouse_cursor(HWND hwnd)
 {
-    RECT rect;
     g_warp_pointer = !g_warp_pointer;
     video_warp_pointer_win32();
 	return g_warp_pointer;
@@ -327,9 +340,12 @@ win_toggle_mouse_cursor(HWND hwnd)
 void 
 handle_vk_keys(UINT vk)
 {
+#ifdef KEGS_FULLINTERFACE
     int    style;
+    RECT   wrect;
     int    adjx,adjy;
-    RECT   wrect,rect;
+	RECT   rect;
+#endif
 
     // Check the state for caps lock,shift and control
     // This checking must be done in the main window and not in the hidden
@@ -343,7 +359,7 @@ handle_vk_keys(UINT vk)
     // Toggle fast disk
     if (vk == VK_F7) {
         g_fast_disk_emul = !g_fast_disk_emul;
-        printf("g_fast_disk_emul is now %d\n", g_fast_disk_emul);
+        ki_printf("g_fast_disk_emul is now %d\n", g_fast_disk_emul);
     }
 
     // Handle mouse pointer display toggling
@@ -351,6 +367,7 @@ handle_vk_keys(UINT vk)
         win_toggle_mouse_cursor(hwndMain);
     }
 
+#ifdef KEGS_FULLINTERFACE
     // Set full screen 
     if (vk == VK_F11) {
         g_fullscreen = !g_fullscreen;
@@ -415,6 +432,7 @@ handle_vk_keys(UINT vk)
 	        }      
         }
     }
+#endif
 }
 
 int
@@ -457,15 +475,22 @@ handle_keysym(UINT vk,BOOL fdown, int cRepeat,UINT flags)
     } else {
         if (vk == VK_MENU) {
             vk=0x5b;
-        } else if (vk == VK_RETURN) {
+        } 
+		else
+		/*
+		if (vk == VK_RETURN) {
             vk=VK_HOME;
         }
+		else
+		*/
+		if (vk == VK_RETURN) 
+            vk=VK_ENTER;
     }
 
 
     a2code = win_keysym_to_a2code(vk, !fdown);
     if (fdown) {
-        //printf ("Keysym=0x%x a2code=0x%x cRepeat=0x%x flag=0x%x\n",
+        //ki_printf ("Keysym=0x%x a2code=0x%x cRepeat=0x%x flag=0x%x\n",
         //        vk,a2code,cRepeat,flags);
     }
     if(a2code >= 0) {
@@ -505,8 +530,6 @@ video_update_color_win32(int col_num, int a2_color)
 {
     byte r,g,b;
     int palette;
-    int full;
-
 
     if(col_num >= 256 || col_num < 0) {
         halt_printf("update_color_array called: col: %03x\n", col_num);
@@ -516,12 +539,14 @@ video_update_color_win32(int col_num, int a2_color)
     r = ((a2_color >> 8) & 0xf)<<4;
     g = ((a2_color >> 4) & 0xf)<<4;
     b = ((a2_color) & 0xf)<<4;
-    a2v_palette[col_num].rgbBlue       = b;
-    a2v_palette[col_num].rgbGreen      = g;
-    a2v_palette[col_num].rgbRed        = r;
-    a2v_palette[col_num].rgbReserved   = 0;
+	if (!g_installed_full_superhires_colormap)
+	{
+		a2v_palette[col_num].rgbBlue       = b;
+		a2v_palette[col_num].rgbGreen      = g;
+		a2v_palette[col_num].rgbRed        = r;
+		a2v_palette[col_num].rgbReserved   = 0;
+	}
 
-    full = g_installed_full_superhires_colormap;
     palette = col_num >> 4;
 
     shires_palette[col_num].rgbBlue       = b;
@@ -543,7 +568,8 @@ video_update_physical_colormap_win32(void)
 
     full = g_installed_full_superhires_colormap;
 
-    if(!full) {
+    if(!full)
+	{
         palette = g_a2vid_palette << 4;
         for(i = 0; i < 16; i++) {
             value=lores_colors[i];
@@ -564,6 +590,7 @@ video_update_physical_colormap_win32(void)
     } else {
         win_palette=(RGBQUAD *)&a2v_palette;
     }
+	
 
     a2_screen_buffer_changed = -1;
     g_full_refresh_needed = -1;
@@ -577,7 +604,7 @@ void
 video_shutdown_win32(void)
 {
     win_pause=1;
-    printf ("Close Window.\n");
+    ki_printf ("Close Window.\n");
 
     // Wait for display thread to finish and stall
     // so we can free resources
@@ -613,7 +640,11 @@ video_shutdown_win32(void)
     DeleteDC(hcdc);
     hcdc=NULL;
 
-    WSACleanup();
+#ifdef KEGS_FULLINTERFACE
+		hwndMain = NULL;
+#endif
+
+//    WSACleanup();
 }
 
 void win_centroid (int *centerx, int *centery) {
@@ -639,15 +670,18 @@ void win_centroid (int *centerx, int *centery) {
 }
 
 static void
-win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
+win_refresh_image (RGBQUAD* palette,HDC hdc,HBITMAP hbm, int srcx, int srcy,
                    int destx,int desty, int width,int height) {
     HBITMAP hbmOld;
     HBITMAP holdbm=NULL;
+ #if defined(KEGS_DIRECTDRAW)
     HDC hdcBack;
-    POINT p;
     RECT  rcRectSrc,rect;
-    int   centerx,centery;
     int hr;
+#endif
+	    POINT p;
+
+	int   centerx,centery;
 
     if (hwndMain == NULL)
         return;
@@ -661,7 +695,7 @@ win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
     p.x = 0; p.y = 0;
     ClientToScreen(hwndMain, &p);
     hbmOld = SelectObject(hcdc,hbm);
-    SetDIBColorTable(hcdc,0,256,(RGBQUAD *)win_palette);
+    SetDIBColorTable(hcdc,0,256,palette);
 
     if (!g_fullscreen) {
         centery+=(win_toolHeight.bottom-win_toolHeight.top);
@@ -673,8 +707,8 @@ win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
  
     #else 
     if ((hr=IDirectDrawSurface_GetDC(backsurf,&hdcBack)) != DD_OK) {
-        printf ("Error blitting surface (back_surf) %x\n",hr);
-        exit(0);
+        ki_printf ("Error blitting surface (back_surf) %x\n",hr);
+        my_exit(0);
         return;
     }
 
@@ -689,15 +723,15 @@ win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
             destx+width+centerx,desty+height+centery);
     hr=IDirectDrawSurface_Restore(primsurf);
     if (hr != DD_OK) {
-        printf ("Error restoring surface (prim_surf) %x\n",hr);
-        exit(0);
+        ki_printf ("Error restoring surface (prim_surf) %x\n",hr);
+        my_exit(0);
     }
 
     hr=IDirectDrawSurface_Blt(primsurf, 
                               &rect,backsurf,&rcRectSrc,DDBLT_WAIT, NULL);
     if (hr != DD_OK) {
-        printf ("Error blitting surface (prim_surf) %x\n",hr);
-        exit(0);
+        ki_printf ("Error blitting surface (prim_surf) %x\n",hr);
+        my_exit(0);
     }
 
     #endif 
@@ -728,10 +762,14 @@ void A2W_OnKeyChar(HWND hwnd, UINT vk, BOOL fDown, int cRepeat, UINT flags) {
 }
 
 void A2W_OnDestroy(HWND hwnd) {
+	/*
     ReleaseDC(hwndMain,hdcRef);
     hdcRef=NULL;
     hwndMain=NULL;
     PostQuitMessage(0);
+	*/
+	set_halt(HALT_WANTTOQUIT);
+
 }
 
 BOOL A2W_OnEraseBkgnd(HWND hwnd, HDC hdc)  {
@@ -804,6 +842,8 @@ BOOL A2W_OnEraseBkgnd(HWND hwnd, HDC hdc)  {
     video_redraw_status_lines_win32();
     return TRUE;
 }
+
+#ifdef KEGS_FULLINTERFACE
 
 // Message handler for about box.
 LRESULT CALLBACK A2W_Dlg_About_Dialog(HWND hDlg, UINT message, WPARAM wParam, 
@@ -924,6 +964,8 @@ LRESULT CALLBACK A2W_Dlg_Disk(HWND hDlg, UINT message, WPARAM wParam,
     return FALSE;
 }
 
+extern int want2restart;
+
 void A2W_OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify) {
    switch (id) {
    case ID_HELP_ABOUT:
@@ -995,8 +1037,17 @@ void A2W_OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify) {
    case ID_FILE_FULLSCREEN:
 	  handle_vk_keys(VK_F11);
 	  break;
+  case ID_DEBUG:
+	   set_halt(HALT_WANTTOBRK);
+	   break;
+	case ID_REBOOT:
+	   set_halt(HALT_WANTTOQUIT);
+	   want2restart=1;
+	   break;
    }
 }
+
+#endif
 
 void A2W_OnMouseMove(HWND hwnd, int x, int y, UINT keyFlags) {
     int motion=0;
@@ -1036,20 +1087,23 @@ void A2W_OnLButtonUp(HWND hwnd, int x, int y, UINT keyFlags) {
 
 void A2W_OnRButtonDown(HWND hwnd, BOOL fDClick, int x, int y, UINT keyFlags) {
     g_limit_speed++;
-    if(g_limit_speed > 2) {
+    if(g_limit_speed > SPEED_ENUMSIZE) {
         g_limit_speed = 0;
     }
 
-    printf("Toggling g_limit_speed to %d\n",g_limit_speed);
+    ki_printf("Toggling g_limit_speed to %d\n",g_limit_speed);
     switch(g_limit_speed) {
-    case 0:
-        printf("...as fast as possible!\n");
+    case SPEED_UNLIMITED:
+        ki_printf("...as fast as possible!\n");
         break;
-    case 1:
-        printf("...1.024MHz\n");
+    case SPEED_1MHZ:
+        ki_printf("... 1.024MHz\n");
         break;
-    case 2:
-        printf("...2.5MHz\n");
+    case SPEED_GS:
+        ki_printf("... 2.8MHz\n");
+        break;
+	case SPEED_ZIP:
+		ki_printf("... 8.0MHz (Zip)\n");
         break;
     }
 }
@@ -1058,10 +1112,10 @@ LRESULT CALLBACK A2WndProcHidden(HWND hwnd,UINT uMsg,WPARAM wParam,
                                  LPARAM lParam) {
     /*
     if (uMsg == WM_KEYDOWN) {
-        printf ("Down:%x %x\n",wParam,lParam);
+        ki_printf ("Down:%x %x\n",wParam,lParam);
     }
     if (uMsg == WM_KEYUP) {
-        printf ("UP:%x %x\n",wParam,lParam);
+        ki_printf ("UP:%x %x\n",wParam,lParam);
     }
 	*/
     
@@ -1083,7 +1137,7 @@ LRESULT CALLBACK A2WndProc(HWND hwnd,UINT uMsg,WPARAM wParam,
     switch (uMsg) 
     {  
         case WM_KEYDOWN:
-           handle_vk_keys(wParam);
+           handle_vk_keys((UINT)wParam);
         case WM_MOUSEMOVE:
         case WM_KEYUP:
         case WM_SYSKEYUP:
@@ -1098,8 +1152,10 @@ LRESULT CALLBACK A2WndProc(HWND hwnd,UINT uMsg,WPARAM wParam,
         HANDLE_MSG(hwnd,WM_CREATE,A2W_OnCreate); 
         HANDLE_MSG(hwnd,WM_DESTROY,A2W_OnDestroy);
         HANDLE_MSG(hwnd,WM_ERASEBKGND,A2W_OnEraseBkgnd);
+#ifdef KEGS_FULLINTERFACE
         HANDLE_MSG(hwnd,WM_RBUTTONDOWN,A2W_OnRButtonDown);
         HANDLE_MSG(hwnd,WM_COMMAND,A2W_OnCommand);
+#endif
     } 
     return DefWindowProc(hwnd, uMsg, wParam, lParam); 
 }
@@ -1113,14 +1169,14 @@ BOOL initDirectDraw()
     ddrval = DirectDrawCreate( NULL, &lpDD, NULL );
     if (FAILED(ddrval))
     {
-        printf ("Error creating direct draw\n");
+        ki_printf ("Error creating direct draw\n");
         return(FALSE);
     }
    
     ddrval = IDirectDraw_SetCooperativeLevel(lpDD,hwndMain,DDSCL_NORMAL);
     if (FAILED(ddrval))
     {
-        printf ("Error setting cooperative level\n");
+        ki_printf ("Error setting cooperative level\n");
         IDirectDraw_Release(lpDD);
         return(FALSE);
     }
@@ -1132,7 +1188,7 @@ BOOL initDirectDraw()
     ddrval = IDirectDraw_CreateSurface(lpDD,&ddsd, &primsurf, NULL );
     if (FAILED(ddrval))
     {
-        printf ("Error creating primary surface = %ld\n",ddrval);
+        ki_printf ("Error creating primary surface = %ld\n",ddrval);
         IDirectDraw_Release(lpDD);
         return(FALSE);
     }
@@ -1140,7 +1196,7 @@ BOOL initDirectDraw()
     ddrval = IDirectDraw_CreateClipper(lpDD,0, &lpClipper, NULL );
     if (FAILED(ddrval))
     {
-        printf ("Error creating direct draw clipper = %ld\n",ddrval);
+        ki_printf ("Error creating direct draw clipper = %ld\n",ddrval);
         IDirectDrawSurface_Release(primsurf);
         IDirectDraw_Release(lpDD);
         return(FALSE);
@@ -1151,7 +1207,7 @@ BOOL initDirectDraw()
     ddrval = IDirectDrawClipper_SetHWnd(lpClipper, 0, hwndMain );
     if (FAILED(ddrval))
     {
-        printf ("Error attaching direct draw clipper\n");
+        ki_printf ("Error attaching direct draw clipper\n");
         IDirectDrawClipper_Release(lpClipper);
         IDirectDrawSurface_Release(primsurf);
         IDirectDraw_Release(lpDD);
@@ -1162,7 +1218,7 @@ BOOL initDirectDraw()
     ddrval = IDirectDrawSurface_SetClipper(primsurf,lpClipper );
     if (FAILED(ddrval))
     {
-        printf ("Error setting direct draw clipper\n");
+        ki_printf ("Error setting direct draw clipper\n");
         IDirectDrawClipper_Release(lpClipper);
         IDirectDrawSurface_Release(primsurf);
         IDirectDraw_Release(lpDD);
@@ -1194,9 +1250,13 @@ BOOL initDirectDraw()
 int
 video_init_win32(void)
 {
-    unsigned int tid;
-    int waitVar=0;
+   
     WNDCLASS wc; 
+
+
+#ifdef KEGS_FULLINTERFACE
+	unsigned int tid;
+	int waitVar=0;
 
     _beginthreadex(NULL,0,dev_video_init_ex,(void *)&waitVar,0,&tid);
 
@@ -1204,6 +1264,12 @@ video_init_win32(void)
     while (!waitVar) {
         Sleep(1);
     }
+#else
+	dev_video_init_ex(NULL);
+#endif
+
+	win_pause=0;
+	g_x_shift_control_state = 0;
 
     // Create a hidden window
     wc.style = 0; 
@@ -1217,8 +1283,8 @@ video_init_win32(void)
     wc.lpszMenuName =  NULL;
     wc.lpszClassName = "Kegs32 Hidden Window"; 
     if (!RegisterClass(&wc)) {
-        printf ("Register window failed\n");
-        return 0; 
+        ki_printf ("Register window failed\n");
+       // return 0; 
     }
     hwndHidden = CreateWindow(
         "Kegs32 Hidden Window", 
@@ -1227,6 +1293,27 @@ video_init_win32(void)
         CW_USEDEFAULT, CW_USEDEFAULT, 
         CW_USEDEFAULT, CW_USEDEFAULT, NULL,NULL,GetModuleHandle(NULL),NULL); 
    
+	// OG : set the screen depth to 16 in order to use the full color map
+	g_screen_depth=16;
+
+	// initialize the default palette
+	{
+		int palette,i,r,g,b,value;
+
+	    palette = g_a2vid_palette << 4;
+        for(i = 0; i < 16; i++) {
+            value=lores_colors[i];
+
+            b = (lores_colors[i%16]    & 0xf) << 4;
+            g = (lores_colors[i%16]>>4 & 0xf) << 4;
+            r = (lores_colors[i%16]>>8 & 0xf) << 4;
+
+            a2v_palette[palette+i].rgbBlue       = b;
+            a2v_palette[palette+i].rgbGreen      = g;
+            a2v_palette[palette+i].rgbRed        = r;
+            a2v_palette[palette+i].rgbReserved   = 0;
+        }
+	}
     return 1;
 }
 
@@ -1235,14 +1322,16 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     int    keycode;
     int    tmp_array[0x80];
     int *waitVar=(int *)param;
+#ifdef KEGS_FULLINTERFACE
     MSG msg;
+#endif
     HACCEL hAccel;
 
     WNDCLASS wc; 
     LPBITMAPINFOHEADER pDib;
     TEXTMETRIC tm;  
-    WORD wVersionRequested;
-    WSADATA wsaData;
+//    WORD wVersionRequested;
+   // WSADATA wsaData;
     int iStatusWidths[] = {60, 100,200,300, -1};
 
     // Create key-codes
@@ -1256,11 +1345,11 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
             g_num_a2_keycodes = i;
             break;
         } else if(keycode > 0x7f) {
-            printf("a2_key_to_wsym[%d] = %02x!\n", i, keycode);
-                exit(2);
+            ki_printf("a2_key_to_wsym[%d] = %02x!\n", i, keycode);
+                my_exit(2);
         } else {
             if(tmp_array[keycode]) {
-                printf("a2_key_to_x[%d] = %02x used by %d\n",
+                ki_printf("a2_key_to_x[%d] = %02x used by %d\n",
                     i, keycode, tmp_array[keycode] - 1);
             }
             tmp_array[keycode] = i + 1;
@@ -1270,13 +1359,16 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     // Initialize Common Controls;
     InitCommonControls();
 
+	/* why ???
     // Initialize Winsock
+
     wVersionRequested = MAKEWORD(1, 1);
 
     if (WSAStartup(wVersionRequested, &wsaData)) {
-        printf ("Unable to initialize winsock\n");
-        exit(0);
+        ki_printf ("Unable to initialize winsock\n");
+        my_exit(0);
     }
+	*/
 
     // Create a window
     wc.style = 0; 
@@ -1291,31 +1383,37 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     wc.lpszMenuName =  MAKEINTRESOURCE(IDC_KEGS32);
     wc.lpszClassName = "Kegs32"; 
 
-    printf ("Registering Window\n");
+    ki_printf ("Registering Window\n");
     if (!RegisterClass(&wc)) {
-        printf ("Register window failed\n");
-        return 0; 
+        ki_printf ("Register window failed\n");
+       // return 0; 
     } 
  
     // Create the main window. 
+
+#ifdef KEGS_FULLINTERFACE
+	{
  
-    printf ("Creating Window\n");
-    hwndMain = CreateWindow(
-        "Kegs32", 
-        "Kegs32 - GS Emulator", 
-        WS_OVERLAPPEDWINDOW&(~(WS_MAXIMIZEBOX | WS_SIZEBOX)), 
-        //WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 
-        CW_USEDEFAULT, CW_USEDEFAULT, NULL,NULL,GetModuleHandle(NULL),NULL); 
-      
+		ki_printf ("Creating Window\n");
+		hwndMain = CreateWindow(
+			"Kegs32", 
+			"Kegs32 - GS Emulator", 
+			WS_OVERLAPPEDWINDOW&(~(WS_MAXIMIZEBOX | WS_SIZEBOX)), 
+			//WS_OVERLAPPEDWINDOW,
+			CW_USEDEFAULT, CW_USEDEFAULT, 
+			CW_USEDEFAULT, CW_USEDEFAULT, NULL,NULL,GetModuleHandle(NULL),NULL); 
+	}
+#endif
+	      
     // If the main window cannot be created, terminate 
     // the application. 
  
     if (!hwndMain) {
-        printf ("Window create failed\n");
+        ki_printf ("Window create failed\n");
         return 0;
     }
 
+#ifdef KEGS_FULLINTERFACE
     // Loading Accelerators
     hAccel=LoadAccelerators(GetModuleHandle(NULL),MAKEINTRESOURCE(IDR_ACCEL));
 
@@ -1323,25 +1421,44 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     win_toolbar = CreateWindowEx(0, TOOLBARCLASSNAME, NULL,
                   WS_CHILD | WS_VISIBLE | TBSTYLE_TOOLTIPS, 0, 0, 0, 0,
                   hwndMain, (HMENU)IDR_TOOLBAR, GetModuleHandle(NULL), NULL);
-    SendMessage(win_toolbar,TB_BUTTONSTRUCTSIZE,(WPARAM)sizeof(TBBUTTON),0);
+
+	SendMessage(win_toolbar,TB_BUTTONSTRUCTSIZE,(WPARAM)sizeof(TBBUTTON),0);
   
-    {
+	{
         TBADDBITMAP tbab;
-        TBBUTTON tbb[1];
+        TBBUTTON tbb[9];
+        HWND hwndToolTip;
+        int i,j;
+        int idCmd[]={ID_FILE_DISK,-1,
+                     ID_SPEED_1MHZ,ID_SPEED_2MHZ,ID_SPEED_FMHZ,-1,ID_DEBUG,ID_CONSOLE,ID_REBOOT};
+
+        ZeroMemory(tbb, sizeof(tbb));
+
+        for (i=0,j=0;i<sizeof(tbb)/sizeof(TBBUTTON);i++) {
+            if (idCmd[i] <0) {
+                tbb[i].fsStyle = TBSTYLE_SEP;
+            } else {
+                tbb[i].iBitmap = j;
+                tbb[i].idCommand = idCmd[i];
+                tbb[i].fsState = TBSTATE_ENABLED;
+                tbb[i].fsStyle = TBSTYLE_BUTTON;
+                j++;
+            }
+        }
 
         tbab.hInst = GetModuleHandle(NULL);
-        tbab.nID = IDR_TOOLBAR;
-        SendMessage(win_toolbar, TB_ADDBITMAP, 0, (LPARAM)&tbab);
-    
-        ZeroMemory(tbb, sizeof(tbb));
-        tbb[0].iBitmap = 0;
-        tbb[0].fsState = TBSTATE_ENABLED;
-        tbb[0].fsStyle = TBSTYLE_BUTTON;
-        tbb[0].idCommand = ID_FILE_DISK;
-
-        SendMessage(win_toolbar, TB_ADDBUTTONS, 1, (LPARAM)tbb);
+        tbab.nID = IDR_TOOLBAR; //IDC_KEGS32;
+        SendMessage(win_toolbar, TB_ADDBITMAP,j, (LPARAM)&tbab);
+        SendMessage(win_toolbar, TB_ADDBUTTONS,i, (LPARAM)&tbb);
 		GetWindowRect(win_toolbar,&win_toolHeight);
+
+        // Activate the tooltip
+        hwndToolTip = (HWND) SendMessage(win_toolbar,TB_GETTOOLTIPS,0L,0L);
+        if (hwndToolTip) {
+            SendMessage(hwndToolTip,TTM_ACTIVATE,TRUE,0L);
+        }
     }
+    
   
     // Create Status
     win_status  = CreateWindowEx(0, STATUSCLASSNAME, NULL,
@@ -1352,11 +1469,14 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
 
     SendMessage(win_toolbar,TB_AUTOSIZE,0,0);
     SendMessage(win_status,WM_SIZE,0,0);
+#else
+	hAccel=NULL;
+#endif
  
     #if defined(KEGS_DIRECTDRAW) 
     if (!initDirectDraw()) {
-        printf ("Unable to initialize Direct Draw\n");
-        exit(0);
+        ki_printf ("Unable to initialize Direct Draw\n");
+        my_exit(0);
     }
     #endif
 
@@ -1405,14 +1525,24 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
 
     ShowWindow(hwndMain, SW_SHOWDEFAULT); 
     UpdateWindow(hwndMain); 
+
+#ifdef KEGS_FULLINTERFACE
     *waitVar=1;
 
-    while (GetMessage(&msg,hwndMain,0,0)>0) {
+	while ( 
+			(GetMessage(&msg,hwndMain,0,0)>0) 
+		&&  ( 
+				!(halt_sim & (HALT_WANTTOQUIT /*| HALT_WANTTOBRK */) )
+			) 
+		  )
+	{
         if (!(TranslateAccelerator(hwndMain,hAccel,&msg)))
             TranslateMessage(&msg); 
         DispatchMessage(&msg); 
     }
-    my_exit(0);
+
+    set_halt(HALT_WANTTOQUIT);	
+#endif
     return 0;
 }
 
@@ -1464,17 +1594,17 @@ video_redraw_status_lines_win32(void)
     }
     if (win_stat_debug) {
         for(line = 0; line < MAX_STATUS_LINES; line++) {
-            buf = &(g_status_buf[line][0]);
+            buf = &(g_video_status_buf[line][0]);
             TextOut(hdcRef, 0+centerx, X_A2_WINDOW_HEIGHT+
-                    height*line+centery,buf, strlen(buf));
+                    height*line+centery,buf, (int)strlen(buf));
         }
     }
 	
     if (win_status !=NULL && !g_fullscreen) {
-        SendMessage(win_status, SB_SETTEXT,0,(LPARAM)"KEGS 0.63");
+        SendMessage(win_status, SB_SETTEXT,0,(LPARAM)"KEGS 0.64");
         sprintf(buffer,"Vol:%d",g_doc_vol);
         SendMessage(win_status, SB_SETTEXT,1,(LPARAM)buffer);
-        buf=strstr(g_status_buf[0],"sim MHz:");
+        buf=strstr(g_video_status_buf[0],"sim MHz:");
         
         if (buf) {
             memset(buffer,0,255);
@@ -1484,7 +1614,7 @@ video_redraw_status_lines_win32(void)
             SendMessage(win_status, SB_SETTEXT,2,(LPARAM) "sim MHz:???");
         }
 		
-        buf=strstr(g_status_buf[0],"Eff MHz:");
+        buf=strstr(g_video_status_buf[0],"Eff MHz:");
         if (buf) {
             memset(buffer,0,255);
             strncpy(buffer,buf,strchr(buf+8,',')-buf);           
@@ -1493,10 +1623,10 @@ video_redraw_status_lines_win32(void)
             SendMessage(win_status, SB_SETTEXT,3,(LPARAM) "Eff MHz:???");
         }
         
-        buf=strstr(g_status_buf[5],"fast");
+        buf=strstr(g_video_status_buf[5],"fast");
         if (buf) {
             memset(buffer,0,255);
-            strncpy(buffer,g_status_buf[5],buf-&(g_status_buf[5][0]));
+            strncpy(buffer,g_video_status_buf[5],buf-&(g_video_status_buf[5][0]));
             SendMessage(win_status, SB_SETTEXT,4,(LPARAM) buffer);
         } else {
            
@@ -1605,7 +1735,7 @@ win_refresh_lines(HBITMAP xim, int start_line, int end_line, int left_pix,
     if(left_pix >= right_pix || left_pix < 0 || right_pix <= 0) {
         halt_printf("win_refresh_lines: lines %d to %d, pix %d to %d\n",
             start_line, end_line, left_pix, right_pix);
-        printf("a2_screen_buf_ch:%08x, g_full_refr:%08x\n",
+        ki_printf("a2_screen_buf_ch:%08x, g_full_refr:%08x\n",
             a2_screen_buffer_changed, g_full_refresh_needed);
         show_a2_line_stuff();
     }
@@ -1614,7 +1744,7 @@ win_refresh_lines(HBITMAP xim, int start_line, int end_line, int left_pix,
 
     if(xim == video_image_border_special) {
         /* fix up y pos in src */
-        printf("win_refresh_lines called, video_image_border_special!!\n");
+        ki_printf("win_refresh_lines called, video_image_border_special!!\n");
         srcy = 0;
     }
 
@@ -1625,12 +1755,12 @@ win_refresh_lines(HBITMAP xim, int start_line, int end_line, int left_pix,
         return;
     }
     if (g_cur_a2_stat & 0xa0) {
-        win_refresh_image(hdcRef,xim,left_pix,srcy,BASE_MARGIN_LEFT+left_pix,
+        win_refresh_image(win_palette,hdcRef,xim,left_pix,srcy,BASE_MARGIN_LEFT+left_pix,
                           BASE_MARGIN_TOP+16*start_line,
                           right_pix-left_pix,16*(end_line-start_line));
     } else {
-        win_refresh_image(hdcRef,xim,left_pix,srcy,BASE_MARGIN_LEFT+left_pix+
-                          BORDER_WIDTH,
+        win_refresh_image(a2v_palette,hdcRef,xim,left_pix,srcy,BASE_MARGIN_LEFT+left_pix
+                        /*  +BORDER_WIDTH*/,
                           BASE_MARGIN_TOP+16*start_line,
                           right_pix-left_pix,16*(end_line-start_line));
     }
@@ -1647,7 +1777,7 @@ x_redraw_border_sides_lines(int end_x, int width, int start_line,
     }
 
 #if 0
-    printf("redraw_border_sides lines:%d-%d from %d to %d\n",
+    ki_printf("redraw_border_sides lines:%d-%d from %d to %d\n",
         start_line, end_line, end_x - width, end_x);
 #endif
     xim = video_image_border_sides;
@@ -1656,7 +1786,7 @@ x_redraw_border_sides_lines(int end_x, int width, int start_line,
     if (hwndMain == NULL) {
         return;
     }
-    win_refresh_image (hdcRef,xim,0,16*start_line,end_x-width,
+    win_refresh_image (a2v_palette,hdcRef,xim,0,16*start_line,end_x-width,
                        BASE_MARGIN_TOP+16*start_line,width,
                        16*(end_line-start_line));
 }
@@ -1671,7 +1801,7 @@ win_refresh_border_sides()
     int    i;
 
 #if 0
-    printf("refresh border sides!\n");
+    ki_printf("refresh border sides!\n");
 #endif
 
     /* can be "jagged" */
@@ -1729,9 +1859,9 @@ win_refresh_border_special()
     if (hwndMain == NULL) {
         return;
     }
-    win_refresh_image (hdcRef,xim,0,0,0,BASE_MARGIN_TOP+A2_WINDOW_HEIGHT,
+    win_refresh_image (a2v_palette,hdcRef,xim,0,0,0,BASE_MARGIN_TOP+A2_WINDOW_HEIGHT,
                        width,BASE_MARGIN_BOTTOM);
-    win_refresh_image (hdcRef,xim,0,BASE_MARGIN_BOTTOM,0,0,
+    win_refresh_image (a2v_palette,hdcRef,xim,0,BASE_MARGIN_BOTTOM,0,0,
                        width,BASE_MARGIN_TOP);
 }
 

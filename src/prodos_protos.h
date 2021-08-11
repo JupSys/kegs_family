@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_prodos_protos_h[] = "@(#)$Header: prodos_protos.h,v 1.3 98/05/23 01:00:50 kentd Exp $";
+const char rcsid_prodos_protos_h[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/prodos_protos.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 /* to_pro.c */
 void flush_disk(ProDisk *disk);

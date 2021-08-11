@@ -14,7 +14,7 @@
 	.data
 	.export rcsid_engine_s_s,data
 rcsid_engine_s_s
-	.stringz "@(#)$Header: engine_s.s,v 1.150 2000/07/07 00:38:38 kentd Exp $"
+	.stringz "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/engine_s.s,v 1.3 2005/09/23 12:37:09 fredyd Exp $"
 
 	.code
 

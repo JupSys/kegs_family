@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$Header: size_tab.h,v 1.11 97/03/31 22:57:16 kentd Exp $"
+	.stringz "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/size_tab.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $"
 #else
 
 	.word	inst00_SYM+1	/* brk */

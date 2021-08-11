@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$Header: iwm.h,v 1.7 99/02/15 20:38:54 kentd Exp $";
+const char rcsid_iwm_h[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/iwm.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 #endif
 
 #ifndef KEGS_IWM_H
@@ -20,6 +20,13 @@ const char rcsid_iwm_h[] = "@(#)$Header: iwm.h,v 1.7 99/02/15 20:38:54 kentd Exp
 
 #define MAX_TRACKS	(2*80)
 #define MAX_C7_DISKS	32
+
+#define NIB_LEN_525		0x1900		/* 51072 bits per track */
+#define NIBS_FROM_ADDR_TO_DATA	20
+
+#define DSK_TYPE_PRODOS		0
+#define DSK_TYPE_DOS33		1
+#define DSK_TYPE_NIB		2
 
 typedef struct _Disk Disk;
 
@@ -132,6 +139,7 @@ void iwm_init(void);
 void iwm_reset(void);
 void draw_iwm_status(int line, char *buf);
 void iwm_vbl_update(void);
+void iwm_shut();
 
 int get_fast_disk_emul(void);
 int set_fast_disk_emul(int);

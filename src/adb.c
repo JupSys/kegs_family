@@ -11,9 +11,11 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.38 99/10/11 01:30:41 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/adb.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
+/* adb_mode bit 4 (keyboard buffering) not done either? */
+/* char set and kbd layout don't work in ROM01 C-OA-ESC control panel */
 
 #include "sim65816.h"
 #include "adb.h"
@@ -244,9 +246,9 @@ static int g_mouse_overflow_valid = 0;
 static int	g_adb_mouse_valid_data = 0;
 static int	g_adb_mouse_coord = 0;
 
-static int	g_adb_data_int_sent = 0;
-static int	g_adb_mouse_int_sent = 0;
-static int	g_adb_kbd_srq_sent = 0;
+ int	g_adb_data_int_sent = 0;	// OG Make these interrupt available for reboot
+ int	g_adb_mouse_int_sent = 0;
+ int	g_adb_kbd_srq_sent = 0;
 
 
 #define MAX_KBD_BUF		8
@@ -274,6 +276,7 @@ static word32	g_virtual_key_up[4];
 #define SHIFT_DOWN	( (g_c025_val & 0x01) )
 #define CTRL_DOWN	( (g_c025_val & 0x02) )
 #define CAPS_LOCK_DOWN	( (g_c025_val & 0x04) )
+#define KEYPAD_DOWN	( (g_c025_val & 0x10) )	
 #define OPTION_DOWN	( (g_c025_val & 0x40) )
 #define CMD_DOWN	( (g_c025_val & 0x80) )
 
@@ -285,7 +288,7 @@ static int g_kbd_reg0_data[MAX_ADB_KBD_REG3];
 static int g_kbd_reg3_16bit = 0x602;			/* also set in adb_reset()! */
 
 
-static int	g_adb_init = 0;
+//static int	g_adb_init = 0;
 
 void
 adb_init()
@@ -294,10 +297,12 @@ adb_init()
 	int	asc1, asc2, asc3, asc4;
 	int	keycode;
 
+	/*
 	if(g_adb_init) {
 		halt_printf("g_adb_init = %d!\n", g_adb_init);
 	}
 	g_adb_init = 1;
+	*/
 
 	for(i = 0; i < 0x80; i++) {
 		a2_key_to_ascii[i][0] = -1;
@@ -314,7 +319,7 @@ adb_init()
 		asc3 = a2_key_to_ascii_raw[i][3];
 
 		if(keycode < 0 || keycode >= 0x80) {
-			printf("ADB keycode out of range: %d: %d\n",
+			ki_printf("ADB keycode out of range: %d: %d\n",
 				i, keycode);
 			my_exit(1);
 		}
@@ -401,22 +406,22 @@ show_adb_log(void)
 	int	i;
 
 	pos = g_adb_log_pos;
-	printf("ADB log pos: %d\n", pos);
+	ki_printf("ADB log pos: %d\n", pos);
 	for(i = 0; i < LEN_ADB_LOG; i++) {
 		pos--;
 		if(pos < 0) {
 			pos = LEN_ADB_LOG - 1;
 		}
-		printf("%d:%d:  addr:%04x = %02x, st:%d\n", i, pos,
+		ki_printf("%d:%d:  addr:%04x = %02x, st:%d\n", i, pos,
 			g_adb_log[pos].addr, g_adb_log[pos].val,
 			g_adb_log[pos].state);
 	}
-	printf("kbd: dev: %x, ctl: %x; mouse: dev: %x, ctl: %x\n",
+	ki_printf("kbd: dev: %x, ctl: %x; mouse: dev: %x, ctl: %x\n",
 		g_kbd_dev_addr, g_kbd_ctl_addr,
 		g_mouse_dev_addr, g_mouse_ctl_addr);
-	printf("adb_data_int_sent: %d, adb_kbd_srq_sent: %d, mouse_int: %d\n",
+	ki_printf("adb_data_int_sent: %d, adb_kbd_srq_sent: %d, mouse_int: %d\n",
 		g_adb_data_int_sent, g_adb_kbd_srq_sent, g_adb_mouse_int_sent);
-	printf("g_adb_state: %d, g_adb_interrupt_byte: %02x\n",
+	ki_printf("g_adb_state: %d, g_adb_interrupt_byte: %02x\n",
 		g_adb_state, g_adb_interrupt_byte);
 }
 
@@ -441,7 +446,7 @@ adb_add_kbd_srq()
 			add_irq();
 		}
 	} else {
-		printf("Got keycode but no kbd SRQ!\n");
+		ki_printf("Got keycode but no kbd SRQ!\n");
 	}
 }
 
@@ -473,7 +478,7 @@ adb_add_mouse_int()
 {
 	if(g_c027_val & ADB_C027_MOUSE_INT) {
 		if(!g_adb_mouse_int_sent) {
-			/* printf("Mouse int sent\n"); */
+			/* ki_printf("Mouse int sent\n"); */
 			g_adb_mouse_int_sent = 1;
 			add_irq();
 		}
@@ -495,7 +500,7 @@ adb_clear_mouse_int()
 	if(g_adb_mouse_int_sent) {
 		remove_irq();
 		g_adb_mouse_int_sent = 0;
-		/* printf("Mouse int clear, button: %d\n", a2_mouse_button); */
+		/* ki_printf("Mouse int clear, button: %d\n", a2_mouse_button); */
 	}
 }
 
@@ -651,20 +656,23 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 	new_mouse = val0 >> 4;
 	new_kbd = val0  & 0xf;
 	if(new_mouse != g_mouse_ctl_addr) {
-		printf("ADB config: mouse from %x to %x!\n",
+		ki_printf("ADB config: mouse from %x to %x!\n",
 			g_mouse_ctl_addr, new_mouse);
 		adb_error();
 		g_mouse_ctl_addr = new_mouse;
 	}
 	if(new_kbd != g_kbd_ctl_addr) {
-		printf("ADB config: kbd from %x to %x!\n",
+		ki_printf("ADB config: kbd from %x to %x!\n",
 			g_kbd_ctl_addr, new_kbd);
 		adb_error();
 		g_kbd_ctl_addr = new_kbd;
 	}
 
-	printf("ADB config: Display Language is %s\n", adb_languages[val1>>4]);
-	printf("ADB config: Keyboard Layout is %s\n", adb_languages[val1&0xf]);
+	ki_printf("ADB config: Display Language is %s\n", adb_languages[val1>>4]);
+	g_adb_char_set = val1>>4;
+	ki_printf("ADB config: Keyboard Layout is %s\n", adb_languages[val1&0xf]);
+	g_adb_layout_lang = val1&0xf;
+	g_adb_repeat_info = val2;
 	tmp1 = val2 >> 4;
 	if(tmp1 == 4) {
 		g_adb_repeat_delay = 0;
@@ -717,8 +725,9 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 void
 adb_set_new_mode(word32 val)
 {
+  adb_printf("ADB set modes : %02x\n",val);
 	if(val & 0x03) {
-		printf("Disabling keyboard/mouse:%02x!\n", val);
+		ki_printf("Disabling keyboard/mouse:%02x!\n", val);
 	}
 
 	if(val & 0xa2) {
@@ -847,12 +856,12 @@ adb_write_c026(int val)
 			g_adb_cmd_len = 2;
 			break;
 		case 0x0a:	/* Read modes byte */
-			printf("Performing read_modes cmd!\n");
-			/* set_halt(1); */
+			ki_printf("Performing read_modes cmd!\n");
+			/* set_halt(HALT_WANTTOQUIT); */
 			adb_send_1byte(g_adb_mode);
 			break;
 		case 0x0b:	/* Read config bytes */
-			printf("Performing read_configs cmd!\n");
+			ki_printf("Performing read_configs cmd!\n");
 			tmp = (g_mouse_ctl_addr << 20) +
 				(g_kbd_ctl_addr << 16) +
 				(g_adb_char_set << 12) +
@@ -878,16 +887,16 @@ adb_write_c026(int val)
 			adb_send_bytes(2,	/* just 2 bytes */
 				0x08000000,	/* number of ch sets=0x8 */
 				0, 0);
-			/* set_halt(1); */
+			/* set_halt(HALT_WANTTOQUIT); */
 			break;
 		case 0x0f:	/* Read avail kbd layouts */
 			adb_printf("Performing read avail kbd layouts cmd!\n");
 			adb_send_bytes(0x2,	/* number of kbd layouts=0xa */
 				0x0a000000, 0, 0);
-			/* set_halt(1); */
+			/* set_halt(HALT_WANTTOQUIT); */
 			break;
 		case 0x10:	/* Reset */
-			printf("ADB reset, cmd 0x10\n");
+			ki_printf("ADB reset, cmd 0x10\n");
 			do_reset();
 			break;
 		case 0x11:	/* Send ADB keycodes */
@@ -900,7 +909,7 @@ adb_write_c026(int val)
 				g_adb_state = ADB_IN_CMD;
 				g_adb_cmd_len = 2;
 			} else {
-				printf("ADB cmd 12, but not ROM 3!\n");
+				ki_printf("ADB cmd 12, but not ROM 3!\n");
 				adb_error();
 			}
 			break;
@@ -909,7 +918,7 @@ adb_write_c026(int val)
 				g_adb_state = ADB_IN_CMD;
 				g_adb_cmd_len = 2;
 			} else {
-				printf("ADB cmd 13, but not ROM 3!\n");
+				ki_printf("ADB cmd 13, but not ROM 3!\n");
 				adb_error();
 			}
 			break;
@@ -935,7 +944,7 @@ adb_write_c026(int val)
 			if(dev == g_kbd_dev_addr) {
 				adb_kbd_talk_reg0();
 			} else {
-				printf("Unknown talk dev %x reg 0!\n", dev);
+				ki_printf("Unknown talk dev %x reg 0!\n", dev);
 				/* send no data, on SRQ, system polls devs */
 				/*  so we don't want to send anything */
 				adb_error();
@@ -950,14 +959,17 @@ adb_write_c026(int val)
 			if(dev == g_kbd_dev_addr) {
 				adb_response_packet(2, g_kbd_reg3_16bit);
 			} else {
-				printf("Performing talk dev %x reg 3!!\n", dev);
+				ki_printf("Performing talk dev %x reg 3!!\n", dev);
 				adb_error();
 			}
 			break;
 		default:
-			printf("ADB ucontroller cmd %02x unknown!\n", val);
+			ki_printf("ADB ucontroller cmd %02x unknown!\n", val);
+			/*
+			// OG : bad code in ACS Demo 2 : wrote to C026 instead of C036!
 			adb_error();
 			halt_on_all_c027 = 1;
+			*/
 			break;
 		}
 		break;
@@ -974,7 +986,7 @@ adb_write_c026(int val)
 
 		break;
 	default:
-		printf("adb_state: %02x is unknown!  Setting it to ADB_IDLE\n",
+		ki_printf("adb_state: %02x is unknown!  Setting it to ADB_IDLE\n",
 			g_adb_state);
 		g_adb_state = ADB_IDLE;
 		adb_error();
@@ -1072,20 +1084,20 @@ do_adb_cmd()
 				/* change keyboard addr? */
 				new_kbd = g_adb_cmd_data[0] & 0xf;
 				if(new_kbd != dev) {
-					printf("Moving kbd to dev %x!\n",
+					ki_printf("Moving kbd to dev %x!\n",
 								new_kbd);
 					adb_error();
 				}
 				g_kbd_dev_addr = new_kbd;
 			} else if(g_adb_cmd_data[1] != 1) {
 				/* see what new device handler id is */
-				printf("KBD listen to dev %x reg 3: 1:%02x\n",
+				ki_printf("KBD listen to dev %x reg 3: 1:%02x\n",
 					dev, g_adb_cmd_data[1]);
 				adb_error();
 			}
 			if(g_adb_cmd_data[0] != g_kbd_dev_addr) {
 				/* see if app is trying to change addr */
-				printf("KBD listen to dev %x reg 3: 0:%02x!\n",
+				ki_printf("KBD listen to dev %x reg 3: 0:%02x!\n",
 					dev, g_adb_cmd_data[0]);
 				adb_error();
 			}
@@ -1094,25 +1106,25 @@ do_adb_cmd()
 		} else if(dev == g_mouse_dev_addr) {
 			if(g_adb_cmd_data[0] != dev) {
 				/* see if app is trying to change mouse addr */
-				printf("MOUS listen to dev %x reg3: 0:%02x!\n",
+				ki_printf("MOUS listen to dev %x reg3: 0:%02x!\n",
 					dev, g_adb_cmd_data[0]);
 				adb_error();
 			}
 			if(g_adb_cmd_data[1] != 1 && g_adb_cmd_data[1] != 2) {
 				/* see what new device handler id is */
-				printf("MOUS listen to dev %x reg 3: 1:%02x\n",
+				ki_printf("MOUS listen to dev %x reg 3: 1:%02x\n",
 					dev, g_adb_cmd_data[1]);
 				adb_error();
 			}
 		} else {
-			printf("Listen cmd to dev %x reg3????\n", dev);
-			printf("data0: %02x, data1: %02x ????\n",
+			ki_printf("Listen cmd to dev %x reg3????\n", dev);
+			ki_printf("data0: %02x, data1: %02x ????\n",
 				g_adb_cmd_data[0], g_adb_cmd_data[1]);
 			adb_error();
 		}
 		break;
 	default:
-		printf("Doing adb_cmd %02x: UNKNOWN!\n", g_adb_cmd);
+		ki_printf("Doing adb_cmd %02x: UNKNOWN!\n", g_adb_cmd);
 		break;
 	}
 }
@@ -1211,7 +1223,7 @@ read_adb_ram(word32 addr)
 				val = 0;
 			}
 		} else {
-			printf("adb ram addr out of range: %04x!\n", addr);
+			ki_printf("adb ram addr out of range: %04x!\n", addr);
 			val = 0;
 		}
 	} else {
@@ -1225,7 +1237,7 @@ read_adb_ram(word32 addr)
 		if((addr == 0xc) && (g_rom_version >= 3)) {
 			// read special key state byte for Out of This World
 			val = g_c025_val & 0xc7;
-			printf("val is %02x\n", val);
+			ki_printf("val is %02x\n", val);
 		}
 	}
 
@@ -1240,7 +1252,7 @@ write_adb_ram(word32 addr, int val)
 	adb_printf("Writing adb_ram addr: %02x: %02x\n", addr, val);
 
 	if(addr >= 0x100) {
-		printf("write adb_ram addr: %02x: %02x!\n", addr, val);
+		ki_printf("write adb_ram addr: %02x: %02x!\n", addr, val);
 		adb_error();
 	} else {
 		adb_memory[addr] = val;
@@ -1253,7 +1265,7 @@ update_mouse(int x, int y, int button_state, int button_valid)
 	if(x < 0 && y < 0) {
 		return 0;
 	}
-    /*printf("update_mouse(%d,%d,%d,%d)\n",x,y,button_state,button_valid);*/
+    /*ki_printf("update_mouse(%d,%d,%d,%d)\n",x,y,button_state,button_valid);*/
 
 	if((x == X_A2_WINDOW_WIDTH/2) && (y == X_A2_WINDOW_HEIGHT/2) &&
 							g_warp_pointer) {
@@ -1282,7 +1294,7 @@ update_mouse(int x, int y, int button_state, int button_valid)
             if(g_mouse_cur_y >= X_A2_WINDOW_HEIGHT)
             g_mouse_cur_y = X_A2_WINDOW_HEIGHT - 1;
         }
-        /*printf("delta = %d,%d g_mouse_xur=%d,%d\n",x - X_A2_WINDOW_WIDTH/2,y - X_A2_WINDOW_HEIGHT/2,g_mouse_cur_x,g_mouse_cur_y);*/
+        /*ki_printf("delta = %d,%d g_mouse_xur=%d,%d\n",x - X_A2_WINDOW_WIDTH/2,y - X_A2_WINDOW_HEIGHT/2,g_mouse_cur_x,g_mouse_cur_y);*/
     }
     else {
         g_mouse_delta_x += x - g_mouse_cur_x;
@@ -1421,7 +1433,7 @@ adb_key_event(int a2code, int is_up)
 		/* ESC pressed, see if ctrl & cmd key down */
 		if(CTRL_DOWN && CMD_DOWN) {
 			/* Desk mgr int */
-			printf("Desk mgr int!\n");
+			ki_printf("Desk mgr int!\n");
 
 			g_adb_interrupt_byte |= 0x20;
 			adb_add_data_int();
@@ -1457,7 +1469,7 @@ adb_key_event(int a2code, int is_up)
 
 	special = (ascii >> 8) & 0xff;
 	if(ascii < 0) {
-		printf("ascii1: %d, a2code: %02x, pos: %d\n", ascii,a2code,pos);
+		ki_printf("ascii1: %d, a2code: %02x, pos: %d\n", ascii,a2code,pos);
 		ascii = 0;
 		special = 0;
 	}
@@ -1514,7 +1526,7 @@ adb_read_c000()
 		/* got one */
 		if((g_kbd_read_no_update++ > 5) && (g_kbd_chars_buffered > 1)) {
 			/* read 5 times, keys pending, let's move it along */
-			printf("Read %02x 3 times, tossing\n", g_kbd_buf[0]);
+			ki_printf("Read %02x 3 times, tossing\n", g_kbd_buf[0]);
 			adb_access_c010();
 		}
 	} else if(g_key_down && g_vbl_count >= g_adb_repeat_vbl) {
@@ -1604,7 +1616,7 @@ adb_physical_key_update(int a2code, int is_up)
 	/* Only process reset requests here */
 	if(is_up == 0 && a2code == A2KEY_RESET && CTRL_DOWN) {
 		/* Reset pressed! */
-		printf("Reset pressed since CTRL_DOWN: %d\n", CTRL_DOWN);
+		ki_printf("Reset pressed since CTRL_DOWN: %d\n", CTRL_DOWN);
 		do_reset();
 		return;
 	}

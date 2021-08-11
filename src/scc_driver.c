@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_driver_h[] = "@(#)$Header: scc_driver.h,v 1.4 99/05/03 22:02:38 kentd Exp $";
+const char rcsid_scc_driver_h[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/scc_driver.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "sim65816.h"
 #include "scc.h"
@@ -34,18 +34,18 @@ scc_socket_init(int port)
 	while(1) {
 		sockfd = socket(AF_INET, SOCK_STREAM, 0);
 		if(sockfd < 0) {
-			printf("socket ret: %d, errno: %d\n", sockfd, errno);
-			exit(3);
+			ki_printf("socket ret: %d, errno: %d\n", sockfd, errno);
+			my_exit(3);
 		}
-		/* printf("socket ret: %d\n", sockfd); */
+		/* ki_printf("socket ret: %d\n", sockfd); */
 
 		on = 1;
 		ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
 					(char *)&on, sizeof(on));
 		if(ret < 0) {
-			printf("setsockopt REUSEADDR ret: %d, err:%d\n",
+			ki_printf("setsockopt REUSEADDR ret: %d, err:%d\n",
 				ret, errno);
-			exit(3);
+			my_exit(3);
 		}
 
 		memset(&sa_in, 0, sizeof(sa_in));
@@ -56,20 +56,20 @@ scc_socket_init(int port)
 		ret = bind(sockfd, (struct sockaddr *)&sa_in, sizeof(sa_in));
 
 		if(ret < 0) {
-			printf("bind ret: %d, errno: %d\n", ret, errno);
+			ki_printf("bind ret: %d, errno: %d\n", ret, errno);
 			inc++;
 			close(sockfd);
-			printf("Trying next port: %d\n", 6501 + port + inc);
+			ki_printf("Trying next port: %d\n", 6501 + port + inc);
 			if(inc >= 10) {
-				printf("Too many retries, quitting\n");
-				exit(3);
+				ki_printf("Too many retries, quitting\n");
+				my_exit(3);
 			}
 		} else {
 			break;
 		}
 	}
 
-	printf("SCC port %d is at unix port %d\n", port, 6501 + port + inc);
+	ki_printf("SCC port %d is at unix port %d\n", port, 6501 + port + inc);
 
 	ret = listen(sockfd, 1);
 
@@ -80,8 +80,8 @@ scc_socket_init(int port)
 	ret = ioctl(sockfd, FIONBIO, (char *)&on);
 #endif
 	if(ret == -1) {
-		printf("ioctl ret: %d, errno: %d\n", ret,errno);
-		exit(3);
+		ki_printf("ioctl ret: %d, errno: %d\n", ret,errno);
+		my_exit(3);
 	}
 
 	return sockfd;

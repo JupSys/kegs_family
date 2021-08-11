@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.78 2000/09/24 00:54:32 kentd Exp $";
+const char rcsid_dis_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/dis.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -72,8 +72,8 @@ get_num()
 	while(1) {
 		if(mode == 0 && got_num != 0) {
 /*
-			printf("In getnum, mode =0, setting a1,a3 = a2\n");
-			printf("a2: %x\n", a2);
+			ki_printf("In getnum, mode =0, setting a1,a3 = a2\n");
+			ki_printf("a2: %x\n", a2);
 */
 			a3 = a2;
 			a3bank = a2bank;
@@ -103,49 +103,49 @@ get_num()
 static void
 debugger_help()
 {
-    puts("KEGS Debugger help");
-    puts("General command syntax: [bank]/[address][command]");
-    puts("e.g. 'e1/0010B' to set a breakpoint at the interrupt jump point.");
-    puts("As with the IIgs monitor, you can omit the bank number after having set it:");
-    puts("'e1/0010B' followed by '14B' will set breakpoints at e1/0010 and e1/0014");
-    puts("");
-    puts("g                             Go");
-    puts("[bank]/[address]g             Go from [bank]/[address]");
-    puts("[bank]/[address]g             Go from [bank]/[address]");
-    puts("s                             Step one instruction");
-    puts("[bank]/[address]s             Step one instruction at [bank]/[address]");
-    puts("[bank]/[address]B             Set breakpoint at [bank]/[address].");
-    puts("B                             Show all breakpoints.");
-    puts("[bank]/[address]D             Delete breakpoint at [bank]/[address].");
-    puts("[bank]/[address1].[address2]  View memory.");
-    puts("[bank]/[address]L             Disassemble memory.");
+    ki_printfnl("KEGS Debugger help");
+    ki_printfnl("General command syntax: [bank]/[address][command]");
+    ki_printfnl("e.g. 'e1/0010B' to set a breakpoint at the interrupt jump point.");
+    ki_printfnl("As with the IIgs monitor, you can omit the bank number after having set it:");
+    ki_printfnl("'e1/0010B' followed by '14B' will set breakpoints at e1/0010 and e1/0014");
+    ki_printfnl("");
+    ki_printfnl("g                             Go");
+    ki_printfnl("[bank]/[address]g             Go from [bank]/[address]");
+    ki_printfnl("[bank]/[address]g             Go from [bank]/[address]");
+    ki_printfnl("s                             Step one instruction");
+    ki_printfnl("[bank]/[address]s             Step one instruction at [bank]/[address]");
+    ki_printfnl("[bank]/[address]B             Set breakpoint at [bank]/[address].");
+    ki_printfnl("B                             Show all breakpoints.");
+    ki_printfnl("[bank]/[address]D             Delete breakpoint at [bank]/[address].");
+    ki_printfnl("[bank]/[address1].[address2]  View memory.");
+    ki_printfnl("[bank]/[address]L             Disassemble memory.");
 
-    puts("P                             Dump the trace to 'pc_log_out'.");
-    puts("Z                             Dump SCC state.");
-    puts("I                             Dump IWM state.");
-    puts("[drive].[track]I              Dump IWM state.");
-    puts("E                             Dump Ensoniq state.");
-    puts("[osc]E                        Dump oscillator [osc] state.");
-    puts("R                             Dump dtime array and events.");
-    puts("T                             Show toolbox log.");
-    puts("[bank]/[address]T             Dump tools using ptr at [bank]/[address] to");
-    puts("                              'tool_set_info'.");
-    puts("[mode]V                       XOR verbose mode with [mode]. 1=DISK, 2=IRQ,");
-    puts("                              4=CLK, 8=SHADOW, 10=IWM, 20=DOC, 40=ADB,");
-    puts("                              80=SCC, 100=TEST, 200=VIDEO.");
-    puts("[mode]H                       XOR halt_on with [mode]. 1=SCAN_INT, 2=IRQ,");
-    puts("                              4=SHADOW_REG, 8=C70D_WRITES.");
-    puts("r                             Reset.");
-    puts("[0/1]=m                       ???");
-    puts("[0/1]=x                       ???");
-    puts("[t]=z                         ????");
-    puts("S                             show_bankptrs_bank0rdwr & smartport_error");
-    puts("P                             show_pmhz");
-    puts("A                             show_a2_line_stuff show_adb_log");
-    puts("C-e                           Dump registers.");
-    puts("[bank]/[address1].[address2]us[filename]  Save memory area to [filename].");
-    puts("[bank]/[address1].[address2]ul[filename]  Load memory area from [filename].");
-    puts("q                             Exit Debugger.");
+    ki_printfnl("P                             Dump the trace to 'pc_log_out'.");
+    ki_printfnl("Z                             Dump SCC state.");
+    ki_printfnl("I                             Dump IWM state.");
+    ki_printfnl("[drive].[track]I              Dump IWM state.");
+    ki_printfnl("E                             Dump Ensoniq state.");
+    ki_printfnl("[osc]E                        Dump oscillator [osc] state.");
+    ki_printfnl("R                             Dump dtime array and events.");
+    ki_printfnl("T                             Show toolbox log.");
+    ki_printfnl("[bank]/[address]T             Dump tools using ptr at [bank]/[address] to");
+    ki_printfnl("                              'tool_set_info'.");
+    ki_printfnl("[mode]V                       XOR verbose mode with [mode]. 1=DISK, 2=IRQ,");
+    ki_printfnl("                              4=CLK, 8=SHADOW, 10=IWM, 20=DOC, 40=ADB,");
+    ki_printfnl("                              80=SCC, 100=TEST, 200=VIDEO.");
+    ki_printfnl("[mode]H                       XOR halt_on with [mode]. 1=SCAN_INT, 2=IRQ,");
+    ki_printfnl("                              4=SHADOW_REG, 8=C70D_WRITES.");
+    ki_printfnl("r                             Reset.");
+    ki_printfnl("[0/1]=m                       ???");
+    ki_printfnl("[0/1]=x                       ???");
+    ki_printfnl("[t]=z                         ????");
+    ki_printfnl("S                             show_bankptrs_bank0rdwr & smartport_error");
+    ki_printfnl("P                             show_pmhz");
+    ki_printfnl("A                             show_a2_line_stuff show_adb_log");
+    ki_printfnl("C-e                           Dump registers.");
+    ki_printfnl("[bank]/[address1].[address2]us[filename]  Save memory area to [filename].");
+    ki_printfnl("[bank]/[address1].[address2]ul[filename]  Load memory area from [filename].");
+    ki_printfnl("q                             Exit Debugger.");
 }
 
 void
@@ -169,8 +169,11 @@ do_debug_intfc()
 
 	video_auto_repeat_on(0);
 
-	while(!done) {
-		printf("> "); fflush(stdout);
+	// show the debug window
+	ki_showConsole ();
+    
+	while(!done && (!(halt_sim&HALT_WANTTOQUIT)) ) {
+		ki_printf("> "); fflush(stdout);
 		if(read_line(linebuf,LINE_SIZE-1) <= 0) {
 			done = 1;
 			continue;
@@ -178,15 +181,15 @@ do_debug_intfc()
 		line_ptr = linebuf;
 
 /*
-		printf("input line: :%s:\n", linebuf);
-		printf("mode: %d\n", mode);
+		ki_printf("input line: :%s:\n", linebuf);
+		ki_printf("mode: %d\n", mode);
 */
 		mode = 0;
 
 		while(*line_ptr != 0) {
 			ret_val = get_num();
 /*
-			printf("ret_val: %x, got_num= %d\n", ret_val,
+			ki_printf("ret_val: %x, got_num= %d\n", ret_val,
 				got_num);
 */
 			old_mode = mode;
@@ -223,15 +226,15 @@ do_debug_intfc()
 				}
 				break;
 			case 'V':
-				printf("g_irq_pending: %d\n", g_irq_pending);
-				printf("Setting Verbose ^= %04x\n", a1);
+				ki_printf("g_irq_pending: %d\n", g_irq_pending);
+				ki_printf("Setting Verbose ^= %04x\n", a1);
 				Verbose ^= a1;
-				printf("Verbose is now: %04x\n", Verbose);
+				ki_printf("Verbose is now: %04x\n", Verbose);
 				break;
 			case 'H':
-				printf("Setting Halt_on ^= %04x\n", a1);
+				ki_printf("Setting Halt_on ^= %04x\n", a1);
 				Halt_on ^= a1;
-				printf("Halt_on is now: %04x\n", Halt_on);
+				ki_printf("Halt_on is now: %04x\n", Halt_on);
 				break;
 			case 'r':
 				do_reset();
@@ -264,10 +267,10 @@ do_debug_intfc()
 			case 'z':
 				if(old_mode == '=') {
 					stop_run_at = a1;
-					printf("Calling add_event for t:%08x\n",
+					ki_printf("Calling add_event for t:%08x\n",
 						a1);
 					add_event_stop((double)a1);
-					printf("set stop_run_at = %x\n", a1);
+					ki_printf("set stop_run_at = %x\n", a1);
 				}
 				break;
 			case 'l': case 'L':
@@ -306,7 +309,7 @@ do_debug_intfc()
 				break;
 			case 'B':
 				if(got_num) {
-					printf("got_num: %d, a2bank: %x, a2: %x\n", got_num, a2bank, a2);
+					ki_printf("got_num: %d, a2bank: %x, a2: %x\n", got_num, a2bank, a2);
 					set_bp((a2bank << 16) + a2);
 				} else {
 					show_bp();
@@ -314,34 +317,37 @@ do_debug_intfc()
 				break;
 			case 'D':
 				if(got_num) {
-					printf("got_num: %d, a2bank: %x, a2: %x\n", got_num, a2bank, a2);
+					ki_printf("got_num: %d, a2bank: %x, a2: %x\n", got_num, a2bank, a2);
 					delete_bp((a2bank << 16) + a2);
 				}
 				break;
 			case 'g':
 			case 'G':
-				printf("Going..\n");
+                ki_hideConsole ();
+                ki_printf("Going..\n");
 				g_stepping = 0;
 				if(got_num) {
 					engine.kpc = (a2bank<<16) + (a2&0xffff);
 				}
 				do_go();
 				list_kpc = engine.kpc;
+                ki_showConsole ();
 				break;
 			case 'q':
 			case 'Q':
-				printf("Exiting debugger\n");
+				ki_printf("Exiting debugger\n");
+				set_halt(HALT_WANTTOQUIT);
 				return;
 				break;
 			case 'u':
-				printf("Unix commands\n");
+				ki_printf("Unix commands\n");
 				do_debug_unix();
 				break;
 			case ':': case '.':
 			case '+': case '-':
 			case '=': case ',':
 				mode = ret_val;
-				printf("Setting mode = %x\n", mode);
+				ki_printf("Setting mode = %x\n", mode);
 				break;
 			case ' ': case '\t':
 				if(!got_num) {
@@ -374,21 +380,25 @@ do_debug_intfc()
 				break;
 			case 'X':
 				stop_on_c03x = !stop_on_c03x;
-				printf("stop_on_c03x set to %d\n",stop_on_c03x);
+				ki_printf("stop_on_c03x set to %d\n",stop_on_c03x);
 				break;
 			case 'h':
 			case '?':
 			    debugger_help();
 			    break;
 			default:
-				printf("\nUnrecognized command: %s\n",linebuf);
+				ki_printf("\nUnrecognized command: %s\n",linebuf);
 				*line_ptr = 0;
 				break;
 			}
 		}
 
 	}
-	printf("Console closed.\n");
+    
+	// close the debug window
+	ki_hideConsole ();
+            
+	ki_printf("Console closed.\n");
 }
 
 word32
@@ -433,7 +443,7 @@ show_toolset_tables(word32 a2bank, word32 addr)
 	toolfile = fopen("tool_set_info", "wt");
 	if(toolfile == 0) {
 		fprintf(stderr, "fopen of tool_set_info failed: %d\n", errno);
-		exit(2);
+		my_exit(2);
 	}
 
 	num_tools = dis_get_memory_ptr(addr);
@@ -462,10 +472,10 @@ set_bp(word32 addr)
 {
 	int	count;
 
-	printf("About to set BP at %06x\n", addr);
+	ki_printf("About to set BP at %06x\n", addr);
 	count = g_num_breakpoints;
 	if(count >= MAX_BREAK_POINTS) {
-		printf("Too many (0x%02x) breakpoints set!\n", count);
+		ki_printf("Too many (0x%02x) breakpoints set!\n", count);
 		return;
 	}
 
@@ -479,9 +489,9 @@ show_bp()
 {
 	int i;
 
-	printf("Showing breakpoints set\n");
+	ki_printf("Showing breakpoints set\n");
 	for(i = 0; i < g_num_breakpoints; i++) {
-		printf("bp:%02x: %06x\n", i, g_breakpts[i]);
+		ki_printf("bp:%02x: %06x\n", i, g_breakpts[i]);
 	}
 }
 
@@ -492,7 +502,7 @@ delete_bp(word32 addr)
 	int	hit;
 	int	i;
 
-	printf("About to delete BP at %06x\n", addr);
+	ki_printf("About to delete BP at %06x\n", addr);
 	count = g_num_breakpoints;
 
 	hit = -1;
@@ -504,9 +514,9 @@ delete_bp(word32 addr)
 	}
 
 	if(hit < 0) {
-		printf("Breakpoint not found!\n");
+		ki_printf("Breakpoint not found!\n");
 	} else {
-		printf("Deleting brkpoint #0x%02x\n", hit);
+		ki_printf("Deleting brkpoint #0x%02x\n", hit);
 		for(i = hit+1; i < count; i++) {
 			g_breakpts[i-1] = g_breakpts[i];
 		}
@@ -550,13 +560,13 @@ do_blank()
 		xam_mem(16);
 		break;
 	case '+':
-		printf("%x\n", a1 + a2);
+		ki_printf("%x\n", a1 + a2);
 		break;
 	case '-':
-		printf("%x\n", a1 - a2);
+		ki_printf("%x\n", a1 - a2);
 		break;
 	default:
-		printf("Unknown mode at space: %d\n", old_mode);
+		ki_printf("Unknown mode at space: %d\n", old_mode);
 		break;
 	}
 }
@@ -614,13 +624,13 @@ show_hex_mem(int startbank, word32 start, int endbank, word32 end, int count)
 
 	offset = 0;
 	ascii[0] = 0;
-	printf("Showing hex mem: bank: %x, start: %x, end: %x\n",
+	ki_printf("Showing hex mem: bank: %x, start: %x, end: %x\n",
 		startbank, start, end);
 	for(i = start; i <= end; i++) {
 		if( (i==start) || (count == 16) ) {
-			printf("%04x:",i);
+			ki_printf("%04x:",i);
 		}
-		printf(" %02x", get_memory_c((startbank <<16) + i, 0));
+		ki_printf(" %02x", get_memory_c((startbank <<16) + i, 0));
 		val = get_memory_c((startbank << 16) + i, 0) & 0x7f;
 		if(val < 32 || val >= 0x7f) {
 			val = '.';
@@ -629,14 +639,14 @@ show_hex_mem(int startbank, word32 start, int endbank, word32 end, int count)
 		ascii[offset] = 0;
 		count--;
 		if(count <= 0) {
-			printf("   %s\n", ascii);
+			ki_printf("   %s\n", ascii);
 			offset = 0;
 			ascii[0] = 0;
 			count = 16;
 		}
 	}
 	if(offset > 0) {
-		printf("   %s\n", ascii);
+		ki_printf("   %s\n", ascii);
 	}
 }
 
@@ -652,9 +662,10 @@ read_line(char *buf, int len)
 	ret = 0;
 	buf[0] = 0;
 	while(space_left > 0) {
-		ret = read(0,buf,1);
+        ret = ki_read(0,buf,1);
+	
 		if(ret <= 0) {
-			printf("read <= 0\n");
+			ki_printf("read <= 0\n");
 			return(len-space_left);
 		}
 		space_left -= ret;
@@ -676,7 +687,7 @@ do_debug_list()
 	if(got_num) {
 		list_kpc = (a2bank << 16) + (a2 & 0xffff);
 	}
-	printf("%d=m %d=x %d=LCBANK\n", (engine.psr >> 5)&1,
+	ki_printf("%d=m %d=x %d=LCBANK\n", (engine.psr >> 5)&1,
 		(engine.psr >> 4) & 1, (statereg & 0x4) >> 2);
 	
 	size_mem_imm = 2;
@@ -694,7 +705,8 @@ do_debug_list()
 	}
 }
 
-const char *g_kegs_rom_names[] = { "ROM", "ROM.01", "ROM.03", 0 };
+const char *g_kegs_rom_names[] = 
+    { "ROM", "ROM.01", "ROM.03","ROM.kegs","ROM01.kegs","ROM03.kegs", 0 };
 
 const char *g_kegs_c1rom_names[] = { 0 };
 const char *g_kegs_c2rom_names[] = { 0 };
@@ -711,9 +723,55 @@ const char **g_kegs_rom_card_list[8] = {
 	g_kegs_c4rom_names,	g_kegs_c5rom_names,
 	g_kegs_c6rom_names,	g_kegs_c7rom_names };
 
+byte g_rom_c600_rom01_diffs[256] = {
+	0x00, 0x00, 0x00, 0x00, 0xc6, 0x00, 0xe2, 0x00,
+	0xd0, 0x50, 0x0f, 0x77, 0x5b, 0xb9, 0xc3, 0xb1,
+	0xb1, 0xf8, 0xcb, 0x4e, 0xb8, 0x60, 0xc7, 0x2e,
+	0xfc, 0xe0, 0xbf, 0x1f, 0x66, 0x37, 0x4a, 0x70,
+	0x55, 0x2c, 0x3c, 0xfc, 0xc2, 0xa5, 0x08, 0x29,
+	0xac, 0x21, 0xcc, 0x09, 0x55, 0x03, 0x17, 0x35,
+	0x4e, 0xe2, 0x0c, 0xe9, 0x3f, 0x9d, 0xc2, 0x06,
+	0x18, 0x88, 0x0d, 0x58, 0x57, 0x6d, 0x83, 0x8c,
+	0x22, 0xd3, 0x4f, 0x0a, 0xe5, 0xb7, 0x9f, 0x7d,
+	0x2c, 0x3e, 0xae, 0x7f, 0x24, 0x78, 0xfd, 0xd0,
+	0xb5, 0xd6, 0xe5, 0x26, 0x85, 0x3d, 0x8d, 0xc9,
+	0x79, 0x0c, 0x75, 0xec, 0x98, 0xcc, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x77, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x7b, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x39, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x39, 0x00, 0x35, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x4a, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00,
+	0x6c, 0x44, 0xce, 0x4c, 0x01, 0x08, 0x00, 0x00
+};
+
+
+#ifdef DISABLE_CONFFILE
+	extern  unsigned char gsrom01[];
+#endif
+
 void
 load_roms()
 {
+#if DISABLE_CONFFILE
+	g_rom_version = 1;
+	g_mem_size_base = 256*1024;
+	memcpy(&g_rom_fc_ff_ptr[2*65536],gsrom01,2*65536);
+	memset(&g_rom_cards_ptr[0], 0, 256*16);
+#else
 	char	name_buf[256];
 	struct stat stat_buf;
 	const char **names_ptr;
@@ -727,7 +785,7 @@ load_roms()
 							&g_kegs_rom_names[0]);
 	fd = open(name_buf, O_RDONLY | O_BINARY);
 	if(fd < 0) {
-		printf("Open ROM file %s failed:%d, errno:%d\n", name_buf, fd,
+		ki_printf("Open ROM file %s failed:%d, errno:%d\n", name_buf, fd,
 				errno);
 		my_exit(-3);
 	}
@@ -753,27 +811,45 @@ load_roms()
 		my_exit(4);
 	}
 
-	printf("Read: %d bytes of ROM\n", ret);
+	ki_printf("Read: %d bytes of ROM\n", ret);
 	if(ret != len) {
-		printf("errno: %d\n", errno);
+		ki_printf("errno: %d\n", errno);
 		my_exit(-3);
 	}
 	close(fd);
 
 	memset(&g_rom_cards_ptr[0], 0, 256*16);
 
+	/* initialize c600 rom to be diffs from the real ROM, to build-in */
+	/*  Apple II compatibility without distributing ROMs */
+	for(i = 0; i < 256; i++) {
+		g_rom_cards_ptr[0x600 + i] = g_rom_fc_ff_ptr[0x3c600 + i] ^
+				g_rom_c600_rom01_diffs[i];
+	}
+	if(g_rom_version >= 3) {
+		/* some patches */
+		g_rom_cards_ptr[0x61b] ^= 0x40;
+		g_rom_cards_ptr[0x61c] ^= 0x33;
+		g_rom_cards_ptr[0x632] ^= 0xc0;
+		g_rom_cards_ptr[0x633] ^= 0x33;
+	}
+
 	for(i = 1; i < 8; i++) {
 		names_ptr = g_kegs_rom_card_list[i];
 		if(names_ptr == 0) {
 			continue;
 		}
+		if(*names_ptr == 0) {
+			continue;
+		}
+
 		setup_kegs_file(&name_buf[0], (int)sizeof(name_buf), 1,
 								names_ptr);
 
 		if(name_buf[0] != 0) {
 			fd = open(name_buf, O_RDONLY | O_BINARY);
 			if(fd < 0) {
-				printf("Open card ROM file %s failed: %d "
+				ki_printf("Open card ROM file %s failed: %d "
 					"err:%d\n", name_buf, fd, errno);
 				my_exit(-3);
 			}
@@ -782,19 +858,19 @@ load_roms()
 			ret = read(fd, &g_rom_cards_ptr[i*0x100], len);
 
 			if(ret != len) {
-				printf("errno: %d, expected %d, got %d\n",
+				ki_printf("errno: %d, expected %d, got %d\n",
 					errno, len, ret);
 				my_exit(-3);
 			}
 			close(fd);
 		}
 	}
-
+#endif
 	if(g_rom_version == 1) {
 		/* make some patches to ROM 01 */
 #if 0
 		/* 1: Patch ROM selftest to not do speed test */
-		printf("Patching out speed test failures from ROM 01\n");
+		ki_printf("Patching out speed test failures from ROM 01\n");
 		g_rom_fc_ff_ptr[0x3785a] = 0x18;
 #endif
 
@@ -812,7 +888,7 @@ load_roms()
 #endif
 	} else if(g_rom_version == 3) {
 		/* patch ROM 03 */
-		printf("Patching ROM 03 smartport bug\n");
+		ki_printf("Patching ROM 03 smartport bug\n");
 		/* 1: Patch Smartport code to fix a stupid bug */
 		/*   that causes it to write the IWM status reg into c036, */
 		/*   which is the system speed reg...it's "safe" since */
@@ -861,15 +937,15 @@ do_debug_unix()
 	load = 0; save = 0;
 	switch(*line_ptr++) {
 	case 'l': case 'L':
-		printf("Loading..");
+		ki_printf("Loading..");
 		load = 1;
 		break;
 	case 's': case 'S':
-		printf("Saving...");
+		ki_printf("Saving...");
 		save = 1;
 		break;
 	default:
-		printf("Unknown unix command: %c\n", *(line_ptr-1));
+		ki_printf("Unknown unix command: %c\n", *(line_ptr-1));
 		*line_ptr = 0;
 		return;
 	}
@@ -886,15 +962,15 @@ do_debug_unix()
 	localbuf[i] = 0;
 	
 
-	printf("About to open: %s,len: %d\n", localbuf, (int)strlen(localbuf));
+	ki_printf("About to open: %s,len: %d\n", localbuf, (int)strlen(localbuf));
 	if(load) {
 		fd = open(localbuf,O_RDONLY | O_BINARY);
 	} else {
 		fd = open(localbuf,O_WRONLY | O_CREAT | O_BINARY, 0x1b6);
 	}
 	if(fd < 0) {
-		printf("Open %s failed: %d\n", localbuf, fd);
-		printf("errno: %d\n", errno);
+		ki_printf("Open %s failed: %d\n", localbuf, fd);
+		ki_printf("errno: %d\n", errno);
 		return;
 	}
 	if(load) {
@@ -920,10 +996,10 @@ do_debug_unix()
 			ret = write(fd,&g_memory_ptr[(a1bank << 16) + a1],len);
 		}
 	}
-	printf("Read/write: addr %06x for %04x bytes, ret: %x bytes\n",
+	ki_printf("Read/write: addr %06x for %04x bytes, ret: %x bytes\n",
 		(a1bank << 16) + a1, len, ret);
 	if(ret < 0) {
-		printf("errno: %d\n", errno);
+		ki_printf("errno: %d\n", errno);
 	}
 	a1 = a1 + ret;
 }
@@ -1003,56 +1079,56 @@ do_dis(FILE *outfile, word32 kpc, int accsize, int xsize,
 	switch(type) {
 	case ABS:
 		if(args != 2) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%04x",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSX:
 		if(args != 2) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%04x,X",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSY:
 		if(args != 2) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%04x,Y",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSLONG:
 		if(args != 3) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%06x",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSIND:
 		if(args != 2) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%04x)",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ABSXIND:
 		if(args != 2) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%04x,X)",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case IMPLY:
 		if(args != 0) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s",out);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case ACCUM:
 		if(args != 0) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s",out);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
@@ -1063,90 +1139,90 @@ do_dis(FILE *outfile, word32 kpc, int accsize, int xsize,
 		} else if(args == 2) {
 			sprintf(buffer,"%s\t#$%04x",out,val);
 		} else {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case JUST8:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOC:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCX:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x,X",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCY:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x,Y",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case LONG:
 		if(args != 3) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%06x",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case LONGX:
 		if(args != 3) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%06x,X",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCIND:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%02x)",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCINDY:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%02x),Y",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCXIND:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%02x,X)",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCBRAK:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t[$%02x]",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DLOCBRAKY:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t[$%02x],y",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DISP8:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		signed_val = (signed char)val;
 		sprintf(buffer,"%s\t$%04x",out,
@@ -1155,21 +1231,21 @@ do_dis(FILE *outfile, word32 kpc, int accsize, int xsize,
 		break;
 	case DISP8S:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x,S",out,(word32)(byte)(val));
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DISP8SINDY:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t($%02x,S),Y",out,(word32)(byte)(val));
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	case DISP16:
 		if(args != 2) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%04x", out,
 				(word32)(kpc+(signed)(word16)(val)) & 0xffff);
@@ -1177,7 +1253,7 @@ do_dis(FILE *outfile, word32 kpc, int accsize, int xsize,
 		break;
 	case MVPMVN:
 		if(args != 2) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t$%02x,$%02x",out,val&0xff,val>>8);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
@@ -1185,13 +1261,13 @@ do_dis(FILE *outfile, word32 kpc, int accsize, int xsize,
 	case SEPVAL:
 	case REPVAL:
 		if(args != 1) {
-			printf("arg # mismatch for opcode %x\n", opcode);
+			ki_printf("arg # mismatch for opcode %x\n", opcode);
 		}
 		sprintf(buffer,"%s\t#$%02x",out,val);
 		show_line(outfile, oldkpc,instr,args+1,buffer);
 		break;
 	default:
-		printf("argument type: %d unexpected\n", type);
+		ki_printf("argument type: %d unexpected\n", type);
 		break;
 	}
 
@@ -1228,14 +1304,15 @@ halt_printf(const char *fmt, ...)
 	vprintf(fmt, args);
 	va_end(args);
 
-	set_halt(1);
+	set_halt(HALT_WANTTOQUIT);
 }
 
 int
 enter_debugger(int val)
 {
     assert(val == 1);
-    halt_printf("Entering Debugger\n");
+    ki_printf("Entering Debugger\n");
+    set_halt(HALT_WANTTOBRK)
     video_auto_repeat_on(0);
     fflush(stdout);
     return 1;

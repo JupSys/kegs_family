@@ -11,10 +11,11 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-static const char rcsid[] = "@(#)$Header: xdriver.c,v 1.159 2000/10/03 12:15:35 kentd Exp $";
+static const char rcsid[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/video_driver.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "video.h"
 #include "videodriver.h"
+#include "ki.h"
 
 int g_fullscreen = 0;
 int g_video_fast;
@@ -76,10 +77,10 @@ video_init_device(int devtype)
         }
         break;
     default:
-        printf("video_init_device: unknown device type %d\n", devtype);
+        ki_printf("video_init_device: unknown device type %d\n", devtype);
         break;
     }
-    printf("failed initializing video device type %d\n",devtype);
+    ki_printf("failed initializing video device type %d\n",devtype);
     return 0;
 }
 

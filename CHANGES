@@ -1,12 +1,69 @@
-Changes in KEGS v0.63 since v0.62 (08/15/02) <frederic.devernay@m4x.org>
-- Added F6 function, which defaults to "enter debugger" (for 1-button mouse)
-- F12 now defaults to "switch speed limit" (for 1-button mouse)
+Changes in KEGS v0.64 since v0.63 (12/10/02) <frederic.devernay@m4x.org>, <benzebut@mac.com>, <o@goguel.com>
+- handle gzip-compressed image files, which are uncompressed to a temp file.
+  Changes to the image are not written back to the original compressed file.
+- Integrated some patches from KEGS 0.91
+- generate rom.c from ROM.01 to avoid ROM file distribution
+- ACTIVEX INTERFACE <o@goguel.com> (not included in KEGS-SDL)
+ Added ki.h for additionnal API 
+ To be redefined by the host :
+	.ki_printf instead of printf for console redirection
+	.ki_alert for messagebox display
+	.ki_hideConsole/ki_showConsole/ki_read for console interaction
+ To communicate with the host
+	.ki_main instead of main for app encapsulation
+	.get_halt/sel_halt
+	.get_speed/set_speed
+- COSMETIC
+ Move WIN32 stuff (kegs32.rc, Kegs32.ico, Resource.h, Toobar.bmp, *.dsp, *.dsw ) out of the SRC directory
+ Change exit to my_exit for fatalerror exit ( use set_halt(HALT_WANTTOQUIT) for non fatal )
+ ROM.C and FONT.C files added to the project
+ Modify memalloc_alligned to keep track of the original pointer and free memory when leaving
+ Removed most of the warnings
+ Added DISABLE_CONFFILE define
+	.remove the need of any external files ( ROM, KEGS_CONF, BRAM.DATA, FONT, ... )
+	.add manual disk selection : functions mountDisk() getLocalIMG and setLocalIMG must be then redefined )
+	.prevent the BRAM.DATA file to be saved
+	.enable the choice of the boot slot ( function getBootSlot() to be redefined )
+	. Start removing memory leaks : not yet finished :-(
+- Add Transwarp/ZipGS support (disable/enable/setspeed) 
+- Mac OSX: 
+	More patches done without disturbing others releases.
+	An internal Degugger window is active.
+	SDL calls and profiles are now corrects.
+	visible files renamed with the .kegs extension : Bram.kegs, ROM.kegs, Disk.kegs & Config.kegs.
+- Lots of Ensoniq/memory calls fixed for FTA's demo & games by The Gog's.
+	. Fix Ensoniq issue (swap/one-shot ) : Fixed the Delta loading voice problem
+	. Fix MVN issue
+	. Added patch (disk_eject) for Task Force
+	. Add patch (write to C026) for ACS Demo 2 
+	. Add sound patch ( TaskForce, OOTW, ... ) when writing to DOC registers 0xE2-0xFF
+-  Debug/Enhancements 
+	. Use the g_installed_full_superhires_colormap feature for accurate color mapping (use an extra palette for border color) : 
+	> fixed Poms'50 and Space Harrier Intros 
+	> WIN32 Only, not yet implemented in SDL (dunno how to do multiple palettes)
+	. Fix do_reset() function by stopping all the remainings interrupt (still a random  sound issue )
+	. Added slow_disk emul for better 525 emulation (run Flobynoid)
+	. Fix dialog problem when 2MG disk name includes spaces [WIN32 only]
+	. WIN32 : Added VK_ENTER for KeyPAd/ENTER (Allow music change in Nucleus)
+	. Added two events HALT_WANTTOQUIT and HALT_WANTTOBRK to control the emulator behaviour
+	HALT_WANTTOBRK	: to go to the console
+	HALT_WANTTOQUIT : to clean quit the emulator ( and allow it to restart ! )
+- configmenu.c and configmenu.h are used instead of the file config.c and config.h  <frederic.devernay@m4x.org>
+
+
+Changes in KEGS v0.63 since v0.63 (08/15/02) <frederic.devernay@m4x.org>
 - Command-line help ('kegs -\?' or 'kegs -h')
 - Debugger help ('?')
 - make_size script should work with any perl installation
-- Config files can be found in the resources folder on MacOS X
-  (KEGS.app/Contents/Resources)
-- Control-backspace resets KEGS (for MacOS users who don't have a Pause key)
+- Added F6 function, which defaults to "enter debugger" (for 1-button mouse)
+
+Changes in KEGS v0.63 since v0.62 (08/09/02) <benzebut@mac.com>
+- Mac OSX: Config files can be found in the resources folder
+  (KEGS.app/Contents/Resources).
+- Mac OSX: Control-backspace resets KEGS (don't have a Pause key).
+- Mac OSX: F12 now defaults to "switch speed limit" (for 1-button mouse)
+- Changed 2.5 Mhz as default speed.
+- Some code optimization by Gilles Tschopp : a clean memory tester and Berny virtual floppy compatibility.
 
 Changes in KEGS v0.62 since v0.61 (06/22/02) <frederic.devernay@m4x.org>
 - Slow paddles mode (<inwards@inwards.com>)

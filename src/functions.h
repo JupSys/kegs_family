@@ -1,3 +1,14 @@
+/****************************************************************/
+/*    	Apple IIgs emulator                                     */
+/*                                                              */
+/*    This code may not be used in a commercial product         */
+/*    without prior written permission of the authors.          */
+/*                                                              */
+/*    SDL Code by Frederic Devernay	                        */
+/*    You may freely distribute this code.                      */ 
+/*                                                              */
+/****************************************************************/
+
 typedef enum {
     FUNCTION_NONE,
     FUNCTION_TOGGLE_FAST_DISK_EMUL,

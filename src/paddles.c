@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_paddles_c[] = "@(#)$Header: paddles.c,v 1.3 99/05/31 17:21:44 kentd Exp $";
+const char rcsid_paddles_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/paddles.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "sim65816.h"
 #include "joystick.h"

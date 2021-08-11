@@ -1,3 +1,15 @@
+/****************************************************************/
+/*    	Apple IIgs emulator                                     */
+/*                                                              */
+/*    This code may not be used in a commercial product         */
+/*    without prior written permission of the authors.          */
+/*                                                              */
+/*    SDL Code by Frederic Devernay	                        */
+/*    Mac OS X port by Darrell Walisser & Benoit Dardelet	*/
+/*    You may freely distribute this code.                      */ 
+/*                                                              */
+/****************************************************************/
+
 #include <assert.h>
 #include "sim65816.h"
 #include "video.h"
@@ -6,12 +18,16 @@
 #include "dis.h"
 #include "adb.h"
 #include "functions.h"
+#include "engine.h" 
 
 /* these ones are for callbacks variables */
 #include "iwm.h"
 #include "paddles.h"
 
 #ifdef HAVE_VIDEO_SDL
+rect_table* sdl_alloc_dirty_rects();
+void sdl_reset_dirty_rects(rect_table *table);
+void sdl_add_dirty_rect(rect_table *table, SDL_Rect rect);
 
 static void sdl_refresh_lines(SDL_Surface *xim, int start_line, int end_line, int left_pix, int right_pix);
 static void sdl_redraw_border_sides_lines(int end_x, int width, int start_line, int end_line);
@@ -34,6 +50,7 @@ static int g_window_width;
 static int g_window_height;
 static int g_num_a2_keycodes;
 static SDL_Color graymap[256]; 
+static int g_sdl_need_refresh = 0;
 
 static const int a2key_to_sdlksym[][3] = {
 	{ A2KEY_ESCAPE,	SDLK_ESCAPE,	0 },
@@ -201,11 +218,11 @@ video_warp_pointer_sdl(void)
 	if (g_fullscreen) {	/* update screen to remove cursor shadow */
 	    SDL_UpdateRect(screen,0,0,0,0);
 	}
-        printf("Mouse Pointer grabbed\n");
+        ki_printf("Mouse Pointer grabbed\n");
     } else {
         SDL_ShowCursor(SDL_ENABLE);
         SDL_WM_GrabInput(SDL_GRAB_OFF);
-        printf("Mouse Pointer released\n");
+        ki_printf("Mouse Pointer released\n");
     }
 }
 
@@ -238,7 +255,7 @@ sdl_handle_keysym(const SDL_KeyboardEvent *key)
     if((keysym.sym == SDLK_TAB) && !is_up &&
        ((keysym.mod & KMOD_LCTRL) || (keysym.mod & KMOD_RCTRL)) &&
        ((keysym.mod & KMOD_LALT) || (keysym.mod & KMOD_RALT))) {
-        printf("Configuration menu!\n");
+        ki_printf("Configuration menu!\n");
         configuration_menu_sdl();
         /*adb_init();*/
         adb_physical_key_update(A2KEY_TAB, 1);
@@ -276,7 +293,7 @@ sdl_handle_keysym(const SDL_KeyboardEvent *key)
     /* ctrl-delete = Mac OS X reset ˆ la Bernie ! */
     else if((keysym.sym == SDLK_BACKSPACE) && !is_up &&
 	    ((keysym.mod & KMOD_LCTRL) || (keysym.mod & KMOD_RCTRL))) {
-	printf("Reset pressed !! \n");
+	ki_printf("Reset pressed !! \n");
 	keysym.sym = SDLK_PAUSE;
     }
     process_keysym(keysym.sym, is_up);
@@ -291,14 +308,14 @@ process_keysym(SDLKey sym, int is_up)
       
     if (a2code >= 0) {
         adb_physical_key_update(a2code, is_up);
-        /*printf("keysym %x -> a2code %x\n",keysym.sym,a2code);*/
+        /*ki_printf("keysym %x -> a2code %x\n",keysym.sym,a2code);*/
 	} 
     else {
 	if((sym >= SDLK_F6) && (sym <= SDLK_F12)) {
-	    /* just get out quietly */
+	    /* just get out quietly all FKeys */
 	    return;
 	}
-	printf("Keysym: %04x unknown\n",
+	ki_printf("Keysym: %04x unknown\n",
                sym);
     }
 }
@@ -328,8 +345,8 @@ sdl_init_keycodes()
 #if 0
     for(keycode=0; keycode<SDLK_LAST; keycode++)
         if(sdlksym_to_a2key[keycode] != -1)
-            printf("%x->%x ",keycode,sdlksym_to_a2key[keycode]);
-    printf("\n");
+            ki_printf("%x->%x ",keycode,sdlksym_to_a2key[keycode]);
+    ki_printf("\n");
 #endif
 
     g_num_a2_keycodes = keycode;
@@ -378,6 +395,7 @@ video_update_physical_colormap_sdl()
     Uint8 r,g,b;
     int value;
     SDL_Color *sdl_palette;
+    static SDL_Color *prev_palette = NULL;
 
     full = g_installed_full_superhires_colormap;
 
@@ -403,16 +421,114 @@ video_update_physical_colormap_sdl()
         sdl_palette=&(a2v_palette[0]);
     }
 
+	if (!(screen->flags & SDL_HWSURFACE)) {
+	
+	#if 0
+	/* The old way... might be faster for some machines*/
+	 {
+		SDL_Rect r;
+		r.x = 0;
+		r.y = 0;
+		r.w = screen->w;
+		r.h = screen->h;
+		sdl_add_dirty_rect(gRectTable, r);
+		g_sdl_need_refresh = 1;
+	}
+	
+	#else
+		/* For software surfaces, or when the screen isn't 8bit,
+		   SDL forces a SDL_UpdateRects() after changing the palette.
+		   This is bad for Mac OS X (and perhaps others) because a
+		   *full* redraw is required. This code finds what pixels
+		   are affected and only updates the scanlines with those pixels.
+		   This assumes you have changed SDL_setphyspal() so that it does
+		   not call SDL_UpdateRects() otherwise this is pretty useless but
+		   shouldn't harm anything. - Darrell
+		   
+		   This method seems much faster than redrawing the entire window on
+		   most machines. */
+		Uint8 colors[256];
+		Uint8 ncolors;
+		
+		/* count how many colors changed */
+		Uint32 *src, *dst;
+		int i;
+		src = (Uint32*) sdl_palette;
+		dst = (Uint32*) prev_palette;
+		ncolors = 0;
+		
+		/* the first time we create the previous palette we must
+		   refresh everything */
+		if (prev_palette == NULL) {
+			prev_palette = (SDL_Color*) malloc(sizeof(*prev_palette) * 256);
+			assert (prev_palette != NULL);
+			memcpy(prev_palette, sdl_palette, sizeof(*prev_palette) * 256);
+			SDL_SetPalette(screen, SDL_PHYSPAL, sdl_palette, 0, 256);
+			g_full_refresh_needed = -1;
+			return;
+		}
+		
+		for (i = 0; i < 256; i++) {
+			if (((*src++ & 0xFFFFFF00) ^ (*dst++ & 0xFFFFFF00)) != 0) {
+				colors[ncolors++] = i;
+			}
+		}
+		
+		if (ncolors > 0) {
+			
+			Uint8 *pixels;
+			int x, y, w, h, pitch;
+			int k;
+						
+			if (screen->format->BitsPerPixel != 8) {
+				ki_printf ("whoops, not 8 bit!\n");
+				return;
+			}
+			pixels = screen->pixels;
+			pitch = screen->pitch;
+			w = screen->w;
+			h = screen->h;
+			y = 0;
+			NEXTLINE:
+			for (; y < h; y++) {
+				for (x = 0; x < w; x++) {
+					for (k = 0; k < ncolors; k++) {
+						if (*(pixels + x + (y * pitch)) == colors[k]) {
+							/* refresh next 4 scanlines after hit */
+							SDL_Rect r;
+							r.x = 0;
+							r.y = y;
+							r.w = w;
+							r.h = 4;
+							sdl_add_dirty_rect (gRectTable, r);
+							y += 4;
+							goto NEXTLINE;
+						}
+					}	
+				}
+			}
+			/* copy in colors that changed for next time */
+			for (i = 0; i < ncolors; i++) {
+				prev_palette[colors[i]] = sdl_palette[colors[i]];
+			}			
+		}
+	#endif
+	}
+	
+
     SDL_SetPalette(screen, SDL_PHYSPAL, sdl_palette, 0, 256);
 
     /* since SDL emulates the hardware palette, we don't, and shouldn't */
     /* force a full video refresh */
-    /*a2_screen_buffer_changed = -1;*/
-    /*g_full_refresh_needed = -1;*/
+    /* a2_screen_buffer_changed = -1; */
+    /* g_full_refresh_needed = -1; */
+
     /* The palette changed though, so these need to be updated */
-    g_border_sides_refresh_needed = 1;
-    g_border_special_refresh_needed = 1;
-    g_status_refresh_needed = 1;
+    g_border_sides_refresh_needed = -1;
+    g_border_special_refresh_needed = -1;
+    g_status_refresh_needed = -1;
+    
+    g_sdl_need_refresh = 1;
 }
 
 int
@@ -426,7 +542,7 @@ video_init_sdl()
     vidflags = SDL_HWPALETTE | SDL_HWSURFACE;
     if(g_fullscreen) {
         vidflags |= SDL_FULLSCREEN;
-        printf("fullscreen!\n");
+        ki_printf("fullscreen!\n");
     }
     switch(g_videomode) {
     case KEGS_640X480:
@@ -462,7 +578,8 @@ video_init_sdl()
 #endif
     
     /* Set the titlebar */
-    SDL_WM_SetCaption("KEGS 0.63", "kegs");
+    SDL_WM_SetCaption("KEGS-SDL 0.64", "kegs");
+
     /* Grab input if necessary */
     video_warp_pointer_sdl();
 
@@ -471,7 +588,7 @@ video_init_sdl()
         graymap[i].r = graymap[i].g = graymap[i].b = i;
     SDL_SetPalette(screen, SDL_LOGPAL, graymap, 0, 256);
 
-    printf("Calling get_sdlsurface!\n");
+    ki_printf("Calling get_sdlsurface!\n");
     
     video_image_text[0] = get_sdlsurface(&video_data_text[0], 0);
     video_image_text[1] = get_sdlsurface(&video_data_text[1], 0);
@@ -483,6 +600,15 @@ video_init_sdl()
     video_image_status_lines = get_sdlsurface(&video_data_status_lines, 3);
 
     sdl_init_keycodes();
+    
+    /* init dirty rects */
+	if (gRectTable == NULL) {
+		gRectTable = sdl_alloc_dirty_rects();
+	}
+	else {
+		sdl_reset_dirty_rects(gRectTable);
+	}
+        
     return 1;
 }
 
@@ -517,8 +643,8 @@ get_sdlsurface(byte **data_ptr, int extended_info)
 	vid_printf("ptr: %p\n", ptr);
 
 	if(ptr == 0) {
-		printf("malloc for data failed\n");
-		exit(2);
+		ki_printf("malloc for data failed\n");
+		my_exit(2);
 	}
 
 	*data_ptr = ptr;
@@ -557,6 +683,50 @@ video_shutdown_sdl()
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
+rect_table *gRectTable = NULL;
+
+rect_table* sdl_alloc_dirty_rects() {
+
+	rect_table *table;
+	table = (rect_table*) malloc(sizeof(*table));
+	assert(table != NULL);
+    table->size = 160;
+	table->count = 0;
+	table->rects = (SDL_Rect*) malloc(sizeof(*(table->rects)) * table->size);
+	assert(table->rects != NULL);
+	
+	return table;
+}
+
+void sdl_reset_dirty_rects(rect_table *table) {
+	table->count = 0;
+}
+
+void sdl_add_dirty_rect(rect_table *table, SDL_Rect rect) {
+
+	if (table->count == table->size) {
+	    table->size += 10;
+		table->rects = realloc(table->rects, 
+							   sizeof(*(table->rects)) * table->size);
+		assert(table->rects != NULL);
+		/*ki_printf ("reallocate dirty rect table: %d\n", table->size);
+		*/
+	}
+	
+	table->rects[table->count] = rect;
+	table->count++;
+}
+
+void sdl_update_dirty_rects(rect_table *table, SDL_Surface *screen) {
+
+	if (table->count > 0) {
+	  if ((screen->flags & SDL_HWSURFACE) != SDL_HWSURFACE) {
+		SDL_UpdateRects(screen, table->count, table->rects);
+	  }
+	  sdl_reset_dirty_rects(table);
+	}
+}
+
 void
 video_refresh_image_sdl()
 {
@@ -569,7 +739,7 @@ video_refresh_image_sdl()
     int    left, right;
     SDL_Surface *last_xim, *cur_xim;
 
-    if(a2_screen_buffer_changed == 0) {
+   if(a2_screen_buffer_changed == 0 && !g_sdl_need_refresh) {
         return;
     }
 
@@ -583,6 +753,8 @@ video_refresh_image_sdl()
         g_border_special_refresh_needed = 0;
         sdl_refresh_border_special();
     }
+
+    if (a2_screen_buffer_changed || g_full_refresh_needed) {
 
     start = -1;
     mask = 1;
@@ -637,9 +809,10 @@ video_refresh_image_sdl()
     }
 
     a2_screen_buffer_changed = 0;
-
     g_full_refresh_needed = 0;
-
+}
+    sdl_update_dirty_rects(gRectTable,screen);
+    g_sdl_need_refresh = 0;
     /* And redraw border rectangle? */
 
     GET_ITIMER(end_time);
@@ -655,7 +828,7 @@ sdl_refresh_image (SDL_Surface *hbm, int srcx, int srcy,
     int result;
 
     if (width==0 || height == 0) {
-        printf("width==0 || height == 0\n");
+        ki_printf("width==0 || height == 0\n");
         return;
     }
 
@@ -671,9 +844,10 @@ sdl_refresh_image (SDL_Surface *hbm, int srcx, int srcy,
     srcrect.h = dstrect.h = height;
 
     result = SDL_BlitSurface(hbm, &srcrect, screen, &dstrect);
-    SDL_UpdateRect(screen, dstrect.x, dstrect.y, dstrect.w, dstrect.h);
+    sdl_add_dirty_rect(gRectTable, dstrect);
+
     if(result!=0) {
-        printf("sdl_refresh_image(%p,%d,%d,%d,%d,%d,%d)->%d\n",
+        ki_printf("sdl_refresh_image(%p,%d,%d,%d,%d,%d,%d)->%d\n",
                hbm, srcx, srcy, destx, desty, width, height, result);
     }
 }
@@ -687,7 +861,7 @@ sdl_refresh_lines(SDL_Surface *xim, int start_line, int end_line, int left_pix,
     if(left_pix >= right_pix || left_pix < 0 || right_pix <= 0) {
         halt_printf("sdl_refresh_lines: lines %d to %d, pix %d to %d\n",
             start_line, end_line, left_pix, right_pix);
-        printf("a2_screen_buf_ch:%08x, g_full_refr:%08x\n",
+        ki_printf("a2_screen_buf_ch:%08x, g_full_refr:%08x\n",
             a2_screen_buffer_changed, g_full_refresh_needed);
         show_a2_line_stuff();
     }
@@ -696,7 +870,7 @@ sdl_refresh_lines(SDL_Surface *xim, int start_line, int end_line, int left_pix,
 
     if(xim == video_image_border_special) {
         /* fix up y pos in src */
-        printf("sdl_refresh_lines called, video_image_border_special!!\n");
+        ki_printf("sdl_refresh_lines called, video_image_border_special!!\n");
         srcy = 0;
     }
 
@@ -727,7 +901,7 @@ sdl_redraw_border_sides_lines(int end_x, int width, int start_line,
     }
 
 #if 0
-    printf("redraw_border_sides lines:%d-%d from %d to %d\n",
+    ki_printf("redraw_border_sides lines:%d-%d from %d to %d\n",
         start_line, end_line, end_x - width, end_x);
 #endif
     xim = video_image_border_sides;
@@ -748,7 +922,7 @@ sdl_refresh_border_sides()
     int    i;
 
 #if 0
-    printf("refresh border sides!\n");
+    ki_printf("refresh border sides!\n");
 #endif
 
     /* can be "jagged" */
@@ -825,10 +999,10 @@ video_check_input_events_sdl()
 
     /* Check for events */
     while(SDL_PollEvent(&event)){  /* Loop until there are no events left on the queue */
-        //printf("got event %d\n",event.type);
+        //ki_printf("got event %d\n",event.type);
         switch(event.type){  /* Process the appropiate event type */
         case SDL_QUIT:
-            my_exit(0);
+            set_halt(HALT_WANTTOQUIT);
             break;
         case SDL_ACTIVEEVENT:
 			if(event.active.state == SDL_APPINPUTFOCUS) {
@@ -874,7 +1048,7 @@ video_check_input_events_sdl()
 			motion = update_mouse(event.motion.x, event.motion.y, 0, 0);
             break;
         default: /* Report an unhandled event */
-            printf("I don't know what this event %d is!\n",event.type);
+            ki_printf("I don't know what this event %d is!\n",event.type);
             break;
         }
     }
@@ -885,7 +1059,7 @@ video_check_input_events_sdl()
 	}
 
 	if(refresh_needed) {
-		printf("Full refresh needed\n");
+		ki_printf("Full refresh needed\n");
 		a2_screen_buffer_changed = -1;
 		g_full_refresh_needed = -1;
 
@@ -940,7 +1114,9 @@ sdl_draw_string(SDL_Surface *surf, Sint16 x, Sint16 y, const unsigned char *stri
     dstrect.y = y;
     SDL_BlitSurface(linesurf, &srcrect, surf, &dstrect);
     SDL_FreeSurface(linesurf);
-    SDL_UpdateRect(surf, dstrect.x, dstrect.y, dstrect.w, dstrect.h);
+    sdl_add_dirty_rect(gRectTable, dstrect);
+    
+    /*SDL_UpdateRect(surf, dstrect.x, dstrect.y, dstrect.w, dstrect.h);*/
 }
 
 void
@@ -964,6 +1140,9 @@ video_redraw_status_lines_sdl()
 		buf = &(g_video_status_buf[line][0]);
         sdl_draw_string(screen, x, y, buf, X_LINE_LENGTH, 1, 1, 0xef, 0xe0);
 	}
+        
+        /*sdl_update_dirty_rects(gRectTable, screen);*/
+	 g_sdl_need_refresh = 1;
 }
 
 void
@@ -988,3 +1167,4 @@ void video_auto_repeat_on_sdl(int must) {}
 void video_auto_repeat_off_sdl(int must) {}
 void video_warp_pointer_sdl(void) {}
 #endif /* !HAVE_VIDEO_SDL */
+

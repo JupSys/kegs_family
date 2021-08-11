@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.89 2000/09/24 00:56:31 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/sound.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "sim65816.h"
 #define INCLUDE_RCSID_C
@@ -144,7 +144,7 @@ show_doc_log(void)
 
 	docfile = fopen("doc_log_out", "wt");
 	if(docfile == 0) {
-		printf("fopen failed, errno: %d\n", errno);
+		ki_printf("fopen failed, errno: %d\n", errno);
 		return;
 	}
 	pos = g_doc_log_pos;
@@ -220,16 +220,21 @@ sound_init(int devtype)
         }
 
     audio_rate = sound_init_device(devtype);
-    printf("sound_init: audio_rate = %ld\n",audio_rate);
+    ki_printf("sound_init: audio_rate = %ld\n",audio_rate);
     if(audio_rate) {
         set_audio_rate(audio_rate);
     }
     else {
-        printf("sound_init: couldn't initialize driver %d\n", devtype);
-        printf("sound_init: disabling audio\n");
+        ki_printf("sound_init: couldn't initialize driver %d\n", devtype);
+        ki_printf("sound_init: disabling audio\n");
         sound_shutdown();
         set_audio_rate(g_preferred_rate);
     }
+
+	// OG
+	g_num_osc_interrupting = 0;
+	doc_reg_e0 = 0xff;
+
 }
 
 
@@ -253,7 +258,7 @@ sound_reset(double dcycs)
 	dsamps = dcycs * g_dsamps_per_dcyc;
 	for(i = 0; i < 32; i++) {
 		doc_write_ctl_reg(i, g_doc_regs[i].ctl | 1, dsamps);
-		doc_reg_e0 = 0xff;
+	//	doc_reg_e0 = 0xff;		OG : do not understand the utility ???
 		if(g_doc_regs[i].has_irq_pending) {
 			halt_printf("reset: has_irq[%02x] = %d\n", i,
 				g_doc_regs[i].has_irq_pending);
@@ -263,8 +268,14 @@ sound_reset(double dcycs)
 		halt_printf("reset: num_osc_int:%d\n", g_num_osc_interrupting);
 	}
 
-	g_doc_num_osc_en = 1;
-	UPDATE_G_DCYCS_PER_DOC_UPDATE(1);
+	// OG : add sound reset
+	g_last_sound_play_dsamp = g_cur_dcycs * g_dsamps_per_dcyc;;	//0.0;
+	g_num_c030_fsamps = 0;
+	
+	g_sound_shm_pos = 0;
+	g_queued_samps = 0;
+	g_queued_nonsamps = 0;
+
 }
 
 
@@ -325,7 +336,7 @@ open_sound_file()
 
 	fd = open(name, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0x1ff);
 	if(fd < 0) {
-		printf("open_sound_file open ret: %d, errno: %d\n", fd, errno);
+		ki_printf("open_sound_file open ret: %d, errno: %d\n", fd, errno);
 		exit(1);
 	}
 
@@ -377,7 +388,7 @@ check_for_range(word32 *addr, int num_samps, int offset)
 		max = MAX(max, right);
 	}
 
-	printf("check4 max: %d over %d\n", max, num_samps);
+	ki_printf("check4 max: %d over %d\n", max, num_samps);
 }
 
 void
@@ -403,7 +414,7 @@ send_sound_to_file(word32 *addr, int shm_pos, int num_samps)
 		if(g_doc_vol < 3) {
 			check_for_range(&(addr[shm_pos]), size, 0);
 		} else {
-			printf("Not checking %d bytes since vol: %d\n",
+			ki_printf("Not checking %d bytes since vol: %d\n",
 				4*size, g_doc_vol);
 		}
 		shm_pos = 0;
@@ -420,7 +431,7 @@ send_sound_to_file(word32 *addr, int shm_pos, int num_samps)
 	if(g_doc_vol < 3) {
 		check_for_range(&(addr[shm_pos]), num_samps, size);
 	} else {
-		printf("Not checking2 %d bytes since vol: %d\n",
+		ki_printf("Not checking2 %d bytes since vol: %d\n",
 			4*num_samps, g_doc_vol);
 	}
 
@@ -440,16 +451,16 @@ show_c030_samps(int *outptr, int num)
 {
 	int	i;
 
-	printf("c030_fsamps[]: %d\n", g_num_c030_fsamps);
+	ki_printf("c030_fsamps[]: %d\n", g_num_c030_fsamps);
 
 	for(i = 0; i < g_num_c030_fsamps+2; i++) {
-		printf("%3d: %5.3f\n", i, c030_fsamps[i]);
+		ki_printf("%3d: %5.3f\n", i, c030_fsamps[i]);
 	}
 
-	printf("Samples[] = %d\n", num);
+	ki_printf("Samples[] = %d\n", num);
 
 	for(i = 0; i < num+2; i++) {
-		printf("%4d: %d  %d\n", i, outptr[0], outptr[1]);
+		ki_printf("%4d: %d  %d\n", i, outptr[0], outptr[1]);
 		outptr += 2;
 	}
 }
@@ -532,7 +543,7 @@ sound_play(double dsamps)
 	DOC_LOG("sound_play", -1, dsamp_now, num_samps);
 
 	if(num_samps > MAX_SND_BUF) {
-		printf("num_samps: %d, too big!\n", num_samps);
+		ki_printf("num_samps: %d, too big!\n", num_samps);
 		g_sound_play_depth--;
 		return;
 	}
@@ -798,7 +809,7 @@ sound_play(double dsamps)
 	sndptr = g_sound_shm_addr;
 
 #if 0
-	printf("samps_left: %d, num_samps: %d\n", samps_left, num_samps);
+	ki_printf("samps_left: %d, num_samps: %d\n", samps_left, num_samps);
 #endif
 
 	if(sound_enabled()) {
@@ -949,7 +960,7 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 	/* handle osc stopping and maybe interrupting */
 
 	if(osc < 0 || osc > 31) {
-		printf("doc_handle_event: osc: %d!\n", osc);
+		ki_printf("doc_handle_event: osc: %d!\n", osc);
 		return;
 	}
 
@@ -1003,8 +1014,16 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 		/* swap mode (even if we're one_shot and partner is swap)! */
 		rptr->ctl |= 1;
 		if(!orptr->running && (orptr->ctl & 0x1)) {
-			orptr->ctl = orptr->ctl & (~1);
-			start_sound(other_osc, eff_dsamps, dsamps);
+
+			if ( (mode==1) && (!can_repeat))
+			{
+				// OG : stop sound if we are one shot [and cannot repeat]
+			}
+			else
+			{
+				orptr->ctl = orptr->ctl & (~1);
+				start_sound(other_osc, eff_dsamps, dsamps);
+			}
 		}
 		return;
 	} else {
@@ -1098,7 +1117,7 @@ remove_sound_irq(int osc, int must)
 			if(has_irq_pending) {
 				halt_printf("remove_sound_irq[%02x], but "
 					"[%02x]=%d!\n", osc,i,has_irq_pending);
-				printf("num_osc_int: %d, first: %02x\n",
+				ki_printf("num_osc_int: %d, first: %02x\n",
 					num_osc_interrupt, first);
 			}
 		}
@@ -1157,8 +1176,8 @@ start_sound(int osc, double eff_dsamps, double dsamps)
 	doc_printf("size: %04x\n", size);
 
 	if((mode == 2) && ((osc & 1) == 0)) {
-		printf("Sync mode osc %d starting!\n", osc);
-		/* set_halt(1); */
+		ki_printf("Sync mode osc %d starting!\n", osc);
+		/* set_halt(HALT_WANTTOQUIT); */
 
 		/* see if we should start our odd partner */
 		if((rptr[1].ctl & 7) == 5) {
@@ -1166,7 +1185,7 @@ start_sound(int osc, double eff_dsamps, double dsamps)
 			rptr[1].ctl &= (~1);
 			start_sound(osc + 1, eff_dsamps, dsamps);
 		} else {
-			printf("Osc %d starting sync, but osc %d ctl: %02x\n",
+			ki_printf("Osc %d starting sync, but osc %d ctl: %02x\n",
 				osc, osc+1, rptr[1].ctl);
 		}
 	}
@@ -1238,7 +1257,7 @@ wave_end_estimate(int osc, double eff_dsamps, double dsamps)
 		save_size = size;
 		save_val = ptr1[size];
 		ptr1[size] = 0;
-		size = strlen((char *)ptr1);
+		size = (int)strlen((char *)ptr1);
 		ptr1[save_size] = save_val;
 	}
 
@@ -1316,7 +1335,7 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 
 #if 0
 	if(osc == 0x10) {
-		printf("osc %d new_ctl: %02x, old: %02x\n", osc, val, old_val);
+		ki_printf("osc %d new_ctl: %02x, old: %02x\n", osc, val, old_val);
 	}
 #endif
 
@@ -1325,7 +1344,7 @@ doc_write_ctl_reg(int osc, int val, double dsamps)
 
 #if 0
 	if(old_halt) {
-		printf("doc_write_ctl to osc %d, val: %02x, old: %02x\n",
+		ki_printf("doc_write_ctl to osc %d, val: %02x, old: %02x\n",
 			osc, val, old_val);
 	}
 #endif
@@ -1433,7 +1452,9 @@ doc_read_c030(double dcycs)
 						g_last_sound_play_dsamp);
 	g_num_c030_fsamps = num + 1;
 
+	/*
 	doc_printf("read c030, num this vbl: %04x\n", num);
+	*/
 
 	return 0;
 }
@@ -1525,8 +1546,10 @@ doc_read_c03d(double dcycs)
 		}
 	}
 
+	/*
 	doc_printf("read c03d, doc_ptr: %04x, ret: %02x, saved: %02x\n",
 		doc_ptr, ret, doc_saved_val);
+		*/
 
 	DOC_LOG("read c03d", -1, dsamps, (doc_ptr << 16) +
 			(doc_saved_val << 8) + ret);
@@ -1574,8 +1597,6 @@ doc_write_c03d(int val, double dcycs)
 
 	dsamps = dcycs * g_dsamps_per_dcyc;
 	eff_dsamps = dsamps;
-	doc_printf("write c03d, doc_ptr: %04x, val: %02x\n",
-		doc_ptr, val);
 
 	DOC_LOG("write c03d", -1, dsamps, (doc_ptr << 16) + val);
 
@@ -1584,6 +1605,11 @@ doc_write_c03d(int val, double dcycs)
 		doc_ram[doc_ptr] = val;
 	} else {
 		/* DOC */
+
+		doc_printf("write c03d, doc_ptr: %04x, val: %02x\n",
+		doc_ptr, val);
+
+
 		osc = doc_ptr & 0x1f;
 		type = (doc_ptr >> 5) & 0x7;
 		
@@ -1641,7 +1667,7 @@ doc_write_c03d(int val, double dcycs)
 			break;
 		case 0x3:	/* data register */
 #if 0
-			printf("Writing %02x into doc_data_reg[%02x]!\n",
+			ki_printf("Writing %02x into doc_data_reg[%02x]!\n",
 				val, osc);
 #endif
 			break;
@@ -1659,7 +1685,7 @@ doc_write_c03d(int val, double dcycs)
 			break;
 		case 0x5:	/* control register */
 #if 0
-			printf("doc_write ctl osc %d, val: %02x\n", osc, val);
+			ki_printf("doc_write ctl osc %d, val: %02x\n", osc, val);
 #endif
 			if(rptr->ctl == val) {
 				break;
@@ -1713,15 +1739,16 @@ doc_write_c03d(int val, double dcycs)
 				}
 
 				break;
-			case 0x02:	/* 0xe2 */
-				/* this should be illegale, but Turkey Shoot */
-				/*  writes to e2, for no apparent reason */
-				doc_printf("Writing doc 0xe2 with %02x\n", val);
-				/* set_halt(1); */
+			/*
+			case 0x02:	// 0xe2 
+                        // this should be illegale, but Turkey Shoot  writes to e2, for no apparent reason 
+				ki_printf("Writing doc 0xe2 with %02x\n", val);
 				break;
+				*/
 			default:
-				halt_printf("Wr %02x into bad doc_reg[%04x]\n",
-					val, doc_ptr);
+                        // OG many programs (Turkey Shoot? TaskForce, OOTW,... ) seem to write in that aera : just ignore...
+				ki_printf("ENSONIQ : Wr %02x into bad doc_reg[%04x]\n",val, doc_ptr);
+				//set_halt(HALT_WANTTOBRK);
 			}
 			break;
 		default:
@@ -1741,12 +1768,14 @@ void
 doc_write_c03e(int val)
 {
 	doc_ptr = (doc_ptr & 0xff00) + val;
+	doc_printf("write c03e : new doc_ptr = %X\n",doc_ptr);
 }
 
 void
 doc_write_c03f(int val)
 {
 	doc_ptr = (doc_ptr & 0xff) + (val << 8);
+	doc_printf("write c03f : new doc_ptr = %X\n",doc_ptr);
 }
 
 void
@@ -1755,14 +1784,14 @@ doc_show_ensoniq_state(int osc)
 	Doc_reg	*rptr;
 	int	i;
 
-	printf("Ensoniq state\n");
-	printf("c03c doc_sound_ctl: %02x, doc_saved_val: %02x\n",
+	ki_printf("Ensoniq state\n");
+	ki_printf("c03c doc_sound_ctl: %02x, doc_saved_val: %02x\n",
 		doc_sound_ctl, doc_saved_val);
-	printf("doc_ptr: %04x,    num_osc_en: %02x, e0: %02x\n", doc_ptr,
+	ki_printf("doc_ptr: %04x,    num_osc_en: %02x, e0: %02x\n", doc_ptr,
 		g_doc_num_osc_en, doc_reg_e0);
 
 	for(i = 0; i < 32; i += 8) {
-		printf("irqp: %02x: %04x %04x %04x %04x %04x %04x %04x %04x\n",
+		ki_printf("irqp: %02x: %04x %04x %04x %04x %04x %04x %04x %04x\n",
 			i,
 			g_doc_regs[i].has_irq_pending,
 			g_doc_regs[i + 1].has_irq_pending,
@@ -1775,7 +1804,7 @@ doc_show_ensoniq_state(int osc)
 	}
 
 	for(i = 0; i < 32; i += 8) {
-		printf("freq: %02x: %04x %04x %04x %04x %04x %04x %04x %04x\n",
+		ki_printf("freq: %02x: %04x %04x %04x %04x %04x %04x %04x %04x\n",
 			i,
 			g_doc_regs[i].freq, g_doc_regs[i + 1].freq,
 			g_doc_regs[i + 2].freq, g_doc_regs[i + 3].freq,
@@ -1784,7 +1813,7 @@ doc_show_ensoniq_state(int osc)
 	}
 
 	for(i = 0; i < 32; i += 8) {
-		printf("vol: %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+		ki_printf("vol: %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 			i,
 			g_doc_regs[i].vol, g_doc_regs[i + 1].vol,
 			g_doc_regs[i + 2].vol, g_doc_regs[i + 3].vol,
@@ -1793,7 +1822,7 @@ doc_show_ensoniq_state(int osc)
 	}
 
 	for(i = 0; i < 32; i += 8) {
-		printf("wptr: %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+		ki_printf("wptr: %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 			i,
 			g_doc_regs[i].waveptr, g_doc_regs[i + 1].waveptr,
 			g_doc_regs[i + 2].waveptr, g_doc_regs[i + 3].waveptr,
@@ -1802,7 +1831,7 @@ doc_show_ensoniq_state(int osc)
 	}
 
 	for(i = 0; i < 32; i += 8) {
-		printf("ctl: %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+		ki_printf("ctl: %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 			i,
 			g_doc_regs[i].ctl, g_doc_regs[i + 1].ctl,
 			g_doc_regs[i + 2].ctl, g_doc_regs[i + 3].ctl,
@@ -1811,7 +1840,7 @@ doc_show_ensoniq_state(int osc)
 	}
 
 	for(i = 0; i < 32; i += 8) {
-		printf("wsize: %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+		ki_printf("wsize: %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 			i,
 			g_doc_regs[i].wavesize, g_doc_regs[i + 1].wavesize,
 			g_doc_regs[i + 2].wavesize, g_doc_regs[i + 3].wavesize,
@@ -1823,15 +1852,15 @@ doc_show_ensoniq_state(int osc)
 
 	for(i = 0; i < 32; i++) {
 		rptr = &(g_doc_regs[i]);
-		printf("%2d: ctl:%02x wp:%02x ws:%02x freq:%04x vol:%02x "
+		ki_printf("%2d: ctl:%02x wp:%02x ws:%02x freq:%04x vol:%02x "
 			"ev:%d run:%d irq:%d sz:%04x\n", i,
 			rptr->ctl, rptr->waveptr, rptr->wavesize, rptr->freq,
 			rptr->vol, rptr->event, rptr->running,
 			rptr->has_irq_pending, rptr->size_bytes);
-		printf("    acc:%08x inc:%08x st:%08x end:%08x m:%08x\n",
+		ki_printf("    acc:%08x inc:%08x st:%08x end:%08x m:%08x\n",
 			rptr->cur_acc, rptr->cur_inc, rptr->cur_start,
 			rptr->cur_end, rptr->cur_mask);
-		printf("    compl_ds:%f samps_left:%d ev:%f ev2:%f\n",
+		ki_printf("    compl_ds:%f samps_left:%d ev:%f ev2:%f\n",
 			rptr->complete_dsamp, rptr->samps_left,
 			rptr->dsamp_ev, rptr->dsamp_ev2);
 	}
@@ -1839,12 +1868,12 @@ doc_show_ensoniq_state(int osc)
 #if 0
 	for(osc = 0; osc < 32; osc++) {
 		fmax = 0.0;
-		printf("osc %d has %d samps\n", osc, g_fsamp_num[osc]);
+		ki_printf("osc %d has %d samps\n", osc, g_fsamp_num[osc]);
 		for(i = 0; i < g_fsamp_num[osc]; i++) {
-			printf("%4d: %f\n", i, g_fsamps[osc][i]);
+			ki_printf("%4d: %f\n", i, g_fsamps[osc][i]);
 			fmax = MAX(fmax, g_fsamps[osc][i]);
 		}
-		printf("osc %d, fmax: %f\n", osc, fmax);
+		ki_printf("osc %d, fmax: %f\n", osc, fmax);
 	}
 #endif
 }

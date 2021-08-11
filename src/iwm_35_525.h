@@ -1,6 +1,22 @@
 #ifdef INCLUDE_IWM_RCSID_C
-const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.8 99/09/06 20:49:43 kentd Exp $";
+const char rcsdif_iwm_35_525_h[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/iwm_35_525.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 #endif
+
+#ifndef DECODE44
+#define DECODE44
+void decode44(unsigned char a, unsigned char b)
+{
+	int v;
+	a<<=1;
+	a|=0x1;
+	v = a & b;
+	ki_printf("%X ",v);
+}
+#ifdef _DEBUG
+ extern word32 kpc;
+int lastdebug=0;
+#endif
+#endif	
 
 int
 IWM_READ_ROUT (Disk *dsk, int fast_disk_emul, double dcycs)
@@ -207,8 +223,9 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 	int	prev_bits;
 
 	if(dsk->fd < 0) {
+                /* The Gog's Patch for PHOTONIX
 		halt_printf("Tried to write to type: %d, drive: %d, fd: %d!\n",
-			IWM_DISK_525, dsk->drive, dsk->fd);
+			IWM_DISK_525, dsk->drive, dsk->fd);   */
 		return;
 	}
 
@@ -233,7 +250,7 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 		/* disable slow writes on 3.5" drives */
 		if(g_slow_525_emul_wr) {
 			set_halt(HALT_EVENT);
-			printf("HACK3: g_slow_525_emul_wr set to 0\n");
+			ki_printf("HACK3: g_slow_525_emul_wr set to 0\n");
 			g_slow_525_emul_wr = 0;
 		}
 	}
@@ -300,7 +317,7 @@ IWM_WRITE_ROUT (Disk *dsk, word32 val, int fast_disk_emul, double dcycs)
 			bits_read, val, prev_val, prev_bits);
 	}
 
-	sdiff = dcycs - dcycs_last_read;
+	sdiff = (int) ( dcycs - dcycs_last_read );
 	if(sdiff < (dcycs_this_nib) || (sdiff > (2*dcycs_this_nib)) ) {
 		dsk->dcycs_last_read = dcycs;
 	} else {

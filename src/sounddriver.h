@@ -58,7 +58,6 @@ extern int errno;
 #include <windows.h>
 #include <mmsystem.h>
 #include <process.h>
-#include <io.h>
 #define NUM_BUFFERS 10 
 
 #endif /* HAVE_SOUND_WIN32 */

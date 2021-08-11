@@ -24,5 +24,6 @@ void setup_pageinfo(void);
 int io_read(word32 loc, double *cyc_ptr);
 void io_write(word32 loc, int val, double *cyc_ptr);
 word32 get_lines_since_vbl(double dcycs);
+void moremem_shut();
 
 #endif /* KEGS_MOREMEM_H */

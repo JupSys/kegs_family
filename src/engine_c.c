@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.40 2000/09/24 01:32:18 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/engine_c.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "sim65816.h"
 #include "dis.h"
@@ -313,7 +313,8 @@ check_breakpoints(word32 addr)
 	count = g_num_breakpoints;
 	for(i = 0; i < count; i++) {
 		if(g_breakpts[i] == addr) {
-			halt_printf("Hit breakpoint at %06x\n", addr);
+			ki_printf("Hit breakpoint at %06x\n", addr);
+			set_halt(HALT_WANTTOBRK);	
 		}
 	}
 }
@@ -506,22 +507,31 @@ get_memory_c(word32 addr, int cycs)
 word32
 get_memory16_c(word32 addr, int cycs)
 {
+	/*
 	double	fcycs;
 
 	fcycs = 0;
 	return get_memory_c(addr, fcycs) +
 			(get_memory_c(addr+1, fcycs) << 8);
+			*/
+	cycs=0;
+	return get_memory_c(addr, cycs) +	(get_memory_c(addr+1, cycs) << 8);
+
 }
 
 word32
 get_memory24_c(word32 addr, int cycs)
 {
+	/*
 	double	fcycs;
 
 	fcycs = 0;
 	return get_memory_c(addr, fcycs) +
 			(get_memory_c(addr+1, fcycs) << 8) +
 			(get_memory_c(addr+2, fcycs) << 16);
+			*/
+	cycs = 0;
+	return get_memory_c(addr, cycs) +	(get_memory_c(addr+1, cycs) << 8) + (get_memory_c(addr+2, cycs) << 16);
 }
 
 void
@@ -666,22 +676,38 @@ fixed_memory_ptrs_init()
 	/* set g_slow_memory_ptr, g_rom_fc_ff_ptr, g_dummy_memory1_ptr, */
 	/*  and rom_cards_ptr */
 
-	g_slow_memory_ptr = memalloc_align(128*1024, 0);
-	g_dummy_memory1_ptr = memalloc_align(256, 1024);
-	g_rom_fc_ff_ptr = memalloc_align(256*1024, 1024);
-	g_rom_cards_ptr = memalloc_align(16*256, 1024);
+	if (g_slow_memory_ptr||g_dummy_memory1_ptr||g_rom_fc_ff_ptr||g_rom_cards_ptr)
+		ki_printf("memory leaks...\n");
+
+	g_slow_memory_ptr = memalloc_align(128*1024, 0, 0);
+	g_dummy_memory1_ptr = memalloc_align(256, 1024, 0);
+	g_rom_fc_ff_ptr = memalloc_align(256*1024, 1024, 0);
+	g_rom_cards_ptr = memalloc_align(16*256, 1024, 0);
 
 #if 0
-	printf("g_memory_ptr: %08x, dummy_mem: %08x, slow_mem_ptr: %08x\n",
+	ki_printf("g_memory_ptr: %08x, dummy_mem: %08x, slow_mem_ptr: %08x\n",
 		(word32)g_memory_ptr, (word32)g_dummy_memory1_ptr,
 		(word32)g_slow_memory_ptr);
-	printf("g_rom_fc_ff_ptr: %08x, g_rom_cards_ptr: %08x\n",
+	ki_printf("g_rom_fc_ff_ptr: %08x, g_rom_cards_ptr: %08x\n",
 		(word32)g_rom_fc_ff_ptr, (word32)g_rom_cards_ptr);
-	printf("page_info_rd = %08x, page_info_wr end = %08x\n",
+	ki_printf("page_info_rd = %08x, page_info_wr end = %08x\n",
 		(word32)&(page_info_rd_wr[0]),
 		(word32)&(page_info_rd_wr[PAGE_INFO_PAD_SIZE+0x1ffff].rd_wr));
 #endif
 }
+
+// OG
+void fixed_memory_ptrs_shut()
+{
+	/* set g_slow_memory_ptr, g_rom_fc_ff_ptr, g_dummy_memory1_ptr, */
+	/*  and rom_cards_ptr */
+
+	memfree_align(g_slow_memory_ptr); g_slow_memory_ptr=NULL;
+	memfree_align(g_dummy_memory1_ptr); g_dummy_memory1_ptr=NULL;
+	memfree_align(g_rom_fc_ff_ptr); g_rom_fc_ff_ptr=NULL;
+	memfree_align(g_rom_cards_ptr); g_rom_cards_ptr=NULL;
+}
+// ~OG
 
 void
 set_halt_act(int val)
@@ -746,9 +772,9 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 		}
 		break;
 	default:
-		printf("Unknown size: %d\n", size);
+		ki_printf("Unknown size: %d\n", size);
 		arg = 0;
-		exit(-2);
+		my_exit(-2);
 	}
 
 	return arg;
@@ -790,6 +816,10 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 		arg_ptr[3] = arg >> 16;					\
 	}
 
+#ifdef _DEBUG
+	word32	kpc;
+#endif
+
 int
 enter_engine(Engine_reg *engine_ptr)
 {
@@ -799,7 +829,9 @@ enter_engine(Engine_reg *engine_ptr)
 	byte	*stat;
 	word32	wstat;
 	word32	arg;
+#ifndef _DEBUG
 	register word32	kpc;
+#endif
 	register word32	acc;
 	register word32	xreg;
 	register word32	yreg;

@@ -1,3 +1,16 @@
+/****************************************************************/
+/*			Apple IIgs emulator			*/
+/*			Copyright 1996 Kent Dickey		*/
+/*								*/
+/*	This code may not be used in a commercial product	*/
+/*	without prior written permission of the author.		*/
+/*								*/
+/*	You may freely distribute this code.			*/ 
+/*								*/
+/*	You can contact the author at kentd@cup.hp.com.		*/
+/*	HP has nothing to do with this software.		*/
+/****************************************************************/
+
 #ifndef KEGS_DIS_H
 #define KEGS_DIS_H
 

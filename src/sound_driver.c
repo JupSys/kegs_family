@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sound_driver_c[] = "@(#)$Header: sound_driver.c,v 1.4 99/05/03 22:02:52 kentd Exp $";
+const char rcsid_sound_driver_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/sound_driver.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include <assert.h>
 
@@ -40,6 +40,7 @@ static void child_sound_init_linux(void);
 static long sound_init_device_win32();
 static void CheckWaveError(char *,int);
 static void child_sound_init_win32(void *);
+static void child_sound_shut_win32() ;
 static unsigned int __stdcall child_sound_loop_win32(void *);
 #endif
 #ifdef HAVE_SOUND_SDL
@@ -81,8 +82,10 @@ static int g_zeroes_seen;
 #endif
 
 int	g_preferred_rate = 48000;
-static int g_audio_devtype = SOUND_NONE;
-static int	g_audio_socket = -1;
+static int g_audio_devtype = SOUND_NATIVE;
+#if defined(HAVE_SOUND_LINUX) || defined(HAVE_SOUND_HPUX)
+static int g_audio_socket = -1;
+#endif
 static int	g_bytes_written = 0;
 
 #define ZERO_BUF_SIZE		2048
@@ -110,9 +113,9 @@ reliable_buf_write(word32 *shm_addr, int pos, int size)
 	if(size < 1 || pos < 0 || pos > SOUND_SHM_SAMP_SIZE ||
 				size > SOUND_SHM_SAMP_SIZE ||
 				(pos + size) > SOUND_SHM_SAMP_SIZE) {
-		printf("reliable_buf_write: pos: %04x, size: %04x\n",
+		ki_printf("reliable_buf_write: pos: %04x, size: %04x\n",
 			pos, size);
-		exit(1);
+		my_exit(1);
 	}
 #endif
 
@@ -124,8 +127,8 @@ reliable_buf_write(word32 *shm_addr, int pos, int size)
 		ret = write(g_audio_socket, ptr, size);
 
 		if(ret < 0) {
-			printf("audio write, errno: %d\n", errno);
-			exit(1);
+			ki_printf("audio write, errno: %d\n", errno);
+			my_exit(1);
 		}
 		size = size - ret;
 		ptr += ret;
@@ -215,17 +218,20 @@ child_sound_loop(int devtype, int read_fd, int write_fd, word32 *shm_addr)
 	tmp = g_audio_rate;
 	ret = write(write_fd, &tmp, 4);
 	if(ret != 4) {
-		printf("Unable to send back audio rate to parent\n");
-		exit(1);
+		ki_printf("Unable to send back audio rate to parent\n");
+		my_exit(1);
 	}
 
 #if defined(HAVE_SOUND_HPUX) || defined(HAVE_SOUND_LINUX)
     close(write_fd);
 #endif
 
+	/*
+	OG g_audio_devtype not intialized yet
 	if (g_audio_devtype == SOUND_NONE) {
 		return;
 	}
+	*/
 
 	zeroes_buffered = 0;
 	zeroes_seen = 0;
@@ -239,7 +245,7 @@ child_sound_loop(int devtype, int read_fd, int write_fd, word32 *shm_addr)
 		ret = read(read_fd, &tmp, 4);
 
 		if(ret <= 0) {
-			printf("child dying from ret: %d, errno: %d\n",
+			ki_printf("child dying from ret: %d, errno: %d\n",
 				ret, errno);
 			break;
 		}
@@ -251,7 +257,7 @@ child_sound_loop(int devtype, int read_fd, int write_fd, word32 *shm_addr)
             /* play sound here */
 
 			if(sound_paused) {
-				printf("Unpausing sound, zb: %d\n",
+				ki_printf("Unpausing sound, zb: %d\n",
 					zeroes_buffered);
 				sound_paused = 0;
 			}
@@ -295,13 +301,13 @@ child_sound_loop(int devtype, int read_fd, int write_fd, word32 *shm_addr)
 				reliable_zero_write(size);
 
 				if(zeroes_seen >= ZERO_PAUSE_NUM_SAMPS) {
-					printf("Pausing sound\n");
+					ki_printf("Pausing sound\n");
 					sound_paused = 1;
 				}
 			}
 		} else {
-			printf("tmp received bad: %08x\n", tmp);
-			exit(3);
+			ki_printf("tmp received bad: %08x\n", tmp);
+			my_exit(3);
 		}
 
 		pos = pos + size;
@@ -313,11 +319,11 @@ child_sound_loop(int devtype, int read_fd, int write_fd, word32 *shm_addr)
 		if(vbl >= 60) {
 			vbl = 0;
 #if 0
-			printf("sound bytes written: %06x\n", g_bytes_written);
-			printf("Sample samples[0]: %08x %08x %08x %08x\n",
+			ki_printf("sound bytes written: %06x\n", g_bytes_written);
+			ki_printf("Sample samples[0]: %08x %08x %08x %08x\n",
 				shm_addr[0], shm_addr[1],
 				shm_addr[2], shm_addr[3]);
-			printf("Sample samples[100]: %08x %08x %08x %08x\n",
+			ki_printf("Sample samples[100]: %08x %08x %08x %08x\n",
 				shm_addr[100], shm_addr[101],
 				shm_addr[102], shm_addr[103]);
 #endif
@@ -335,10 +341,12 @@ child_sound_loop(int devtype, int read_fd, int write_fd, word32 *shm_addr)
 		ACloseAudio(g_audio, &status_return);
         break;
 	}
-#endif
 	close(g_audio_socket);
+#endif
 
-	exit(0);
+#ifdef HAVE_SOUND_WIN32
+	child_sound_shut_win32();
+#endif
 }
 
 
@@ -355,57 +363,57 @@ child_sound_init_hpdev()
 
 	g_audio_socket = open("/dev/audio", O_WRONLY, 0);
 	if(g_audio_socket < 0) {
-		printf("open /dev/audio failed, ret: %d, errno:%d\n",
+		ki_printf("open /dev/audio failed, ret: %d, errno:%d\n",
 			g_audio_socket, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	ret = ioctl(g_audio_socket, AUDIO_DESCRIBE, &audio_descr);
 	if(ret < 0) {
-		printf("ioctl AUDIO_DESCRIBE failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl AUDIO_DESCRIBE failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	for(i = 0; i < audio_descr.nrates; i++) {
-		printf("Audio rate[%d] = %d\n", i,
+		ki_printf("Audio rate[%d] = %d\n", i,
 			audio_descr.sample_rate[i]);
 	}
 
 	ret = ioctl(g_audio_socket, AUDIO_SET_DATA_FORMAT,
 			AUDIO_FORMAT_LINEAR16BIT);
 	if(ret < 0) {
-		printf("ioctl AUDIO_SET_DATA_FORMAT failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl AUDIO_SET_DATA_FORMAT failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	ret = ioctl(g_audio_socket, AUDIO_SET_CHANNELS, NUM_CHANNELS);
 	if(ret < 0) {
-		printf("ioctl AUDIO_SET_CHANNELS failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl AUDIO_SET_CHANNELS failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	ret = ioctl(g_audio_socket, AUDIO_SET_TXBUFSIZE, 16*1024);
 	if(ret < 0) {
-		printf("ioctl AUDIO_SET_TXBUFSIZE failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl AUDIO_SET_TXBUFSIZE failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	ret = ioctl(g_audio_socket, AUDIO_SET_SAMPLE_RATE, g_audio_rate);
 	if(ret < 0) {
-		printf("ioctl AUDIO_SET_SAMPLE_RATE failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl AUDIO_SET_SAMPLE_RATE failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	ret = ioctl(g_audio_socket, AUDIO_GET_OUTPUT, &output_channel);
 	if(ret < 0) {
-		printf("ioctl AUDIO_GET_OUTPUT failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl AUDIO_GET_OUTPUT failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 
@@ -418,19 +426,19 @@ child_sound_init_hpdev()
 	}
 
 	if(speaker) {
-		printf("Sending sound to internal speaker\n");
+		ki_printf("Sending sound to internal speaker\n");
 		output_channel |= AUDIO_OUT_SPEAKER;
 	} else {
-		printf("Sending sound to external jack\n");
+		ki_printf("Sending sound to external jack\n");
 		output_channel &= (~AUDIO_OUT_SPEAKER);
 		output_channel |= AUDIO_OUT_HEADPHONE;
 	}
 
 	ret = ioctl(g_audio_socket, AUDIO_SET_OUTPUT, output_channel);
 	if(ret < 0) {
-		printf("ioctl AUDIO_SET_OUTPUT failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl AUDIO_SET_OUTPUT failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 }
 
@@ -453,8 +461,8 @@ child_sound_init_alib()
 	status_return = 0;
 	g_audio = AOpenAudio((char *)0, &status_return);
 	if(g_audio == (Audio *)0) {
-		printf("AopenAudio failed, ret: %ld\n", status_return);
-		exit(1);
+		ki_printf("AopenAudio failed, ret: %ld\n", status_return);
+		my_exit(1);
 	}
 
 	chan_mask = AOutputChannels(g_audio);
@@ -487,11 +495,11 @@ child_sound_init_alib()
 	}
 
 	if(speaker) {
-		printf("Sending sound to internal speaker\n");
+		ki_printf("Sending sound to internal speaker\n");
 		gain_entries[0].u.o.out_dst = AODTLeftIntSpeaker;
 		gain_entries[1].u.o.out_dst = AODTRightIntSpeaker;
 	} else {
-		printf("Sending sound to external jack\n");
+		ki_printf("Sending sound to external jack\n");
 		gain_entries[0].u.o.out_dst = AODTLeftJack;
 		gain_entries[1].u.o.out_dst = AODTRightJack;
 	}
@@ -511,8 +519,8 @@ child_sound_init_alib()
 
 	g_audio_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if(g_audio_socket < 0) {
-		printf("socket create, errno: %d\n", errno);
-		exit(1);
+		ki_printf("socket create, errno: %d\n", errno);
+		my_exit(1);
 	}
 
 	doc_printf("g_audio_socket: %d\n", g_audio_socket);
@@ -522,8 +530,8 @@ child_sound_init_alib()
 			sizeof(struct sockaddr_in) );
 
 	if(ret < 0) {
-		printf("connect failed, errno: %d\n", errno);
-		exit(1);
+		ki_printf("connect failed, errno: %d\n", errno);
+		my_exit(1);
 	}
 }
 #endif /* HAVE_SOUND_HPUX */
@@ -540,27 +548,27 @@ child_sound_init_linux()
 
 	g_audio_socket = open("/dev/dsp", O_WRONLY, 0);
 	if(g_audio_socket < 0) {
-		printf("open /dev/audio failed, ret: %d, errno:%d\n",
+		ki_printf("open /dev/audio failed, ret: %d, errno:%d\n",
 			g_audio_socket, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 #if 0
 	fragment = 0x00200009;
 	ret = ioctl(g_audio_socket, SNDCTL_DSP_SETFRAGMENT, &fragment);
 	if(ret < 0) {
-		printf("ioctl SETFRAGEMNT failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl SETFRAGEMNT failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 #endif
 
 	sample_size = 16;
 	ret = ioctl(g_audio_socket, SNDCTL_DSP_SAMPLESIZE, &sample_size);
 	if(ret < 0) {
-		printf("ioctl SNDCTL_DSP_SAMPLESIZE failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl SNDCTL_DSP_SAMPLESIZE failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 #ifdef KEGS_LITTLE_ENDIAN
@@ -570,37 +578,37 @@ child_sound_init_linux()
 #endif
 	ret = ioctl(g_audio_socket, SNDCTL_DSP_SETFMT, &fmt);
 	if(ret < 0) {
-		printf("ioctl SNDCTL_DSP_SETFMT failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl SNDCTL_DSP_SETFMT failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	stereo = 1;
 	ret = ioctl(g_audio_socket, SNDCTL_DSP_STEREO, &stereo);
 	if(ret < 0) {
-		printf("ioctl SNDCTL_DSP_STEREO failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl SNDCTL_DSP_STEREO failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	rate = g_audio_rate;
 	ret = ioctl(g_audio_socket, SNDCTL_DSP_SPEED, &rate);
 	if(ret < 0) {
-		printf("ioctl SNDCTL_DSP_SPEED failed, ret:%d, errno:%d\n",
+		ki_printf("ioctl SNDCTL_DSP_SPEED failed, ret:%d, errno:%d\n",
 			ret, errno);
-		exit(1);
+		my_exit(1);
 	}
 	if(ret > 0) {
 		rate = ret;	/* rate is returned value */
 	}
 	if(rate < 8000) {
-		printf("Audio rate of %d which is < 8000!\n", rate);
-		exit(1);
+		ki_printf("Audio rate of %d which is < 8000!\n", rate);
+		my_exit(1);
 	}
 	
 	g_audio_rate = rate;
 
-	printf("Sound initialized\n");
+	ki_printf("Sound initialized\n");
 }
 #endif /* HAVE_SOUND_LINUX */
 
@@ -611,13 +619,18 @@ static void CheckWaveError(char *s, int res) {
         return;
     }
     waveOutGetErrorText(res,message,sizeof(message));
-    printf ("%s: %s\n",s,message);
-    exit(1);
+    ki_printf ("%s: %s\n",s,message);
+    my_exit(1);
 }
 
 static unsigned int __stdcall child_sound_loop_win32(void *param) {
     SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_HIGHEST);
-    child_sound_loop(g_audio_devtype,g_pipe_fd[0],g_pipe_fd[1],param);
+	
+	soundActive=1;
+	ki_printf("win32 sound thread activated\n");
+	child_sound_loop(SOUND_NATIVE,g_pipe_fd[0],g_pipe_fd[1],param);
+	soundActive=0;	
+	ki_printf("win32 sound thread terminated\n");
 	return 0;
 }
 
@@ -633,12 +646,41 @@ static void CALLBACK handle_wav_snd(HWAVEOUT hwo, UINT uMsg, DWORD dwInstance,
     }
 }
 
+byte *waveBuffer=NULL;
+
+static void
+child_sound_shut_win32() 
+{
+	MMRESULT res;
+	int i;
+
+	for (i=0;i<NUM_BUFFERS;i++) 
+	{
+		while (1)
+		{
+			res = waveOutUnprepareHeader(WaveHandle,&WaveHeader[i],
+									sizeof(WAVEHDR));
+			if (res == MMSYSERR_NOERROR )
+				break;
+			else 
+			if (res != WAVERR_STILLPLAYING )
+				CheckWaveError("WaveOutUnPrepareHeader()",res);
+		}
+    }
+	waveOutClose(WaveHandle);
+
+	WaveHandle=NULL;
+	free(waveBuffer);
+	waveBuffer=NULL;
+}
+
+
 static void
 child_sound_init_win32(void *shmaddr) {
     int res,i;
     WAVEFORMATEX WaveFmt;
     WAVEOUTCAPS caps;
-    byte *tmp;
+
     int blen;
 
     memset(&WaveFmt, 0, sizeof(WAVEFORMATEX));
@@ -654,7 +696,7 @@ child_sound_init_win32(void *shmaddr) {
     res=waveOutOpen(&WaveHandle,WAVE_MAPPER,&WaveFmt,0,0,WAVE_FORMAT_QUERY);
 
 	if (res != MMSYSERR_NOERROR) {
-		printf ("Cannot open audio device\n");
+		ki_printf ("Cannot open audio device\n");
 		g_audio_devtype = SOUND_NONE;
 		return;
 	}
@@ -663,7 +705,7 @@ child_sound_init_win32(void *shmaddr) {
                     0,CALLBACK_FUNCTION | WAVE_ALLOWSYNC );
 
 	if (res != MMSYSERR_NOERROR) {
-		printf ("Cannot open audio device\n");
+		ki_printf ("Cannot open audio device\n");
 		g_audio_devtype = SOUND_NONE;
 		return;
 	}
@@ -671,16 +713,16 @@ child_sound_init_win32(void *shmaddr) {
     g_audio_rate= WaveFmt.nSamplesPerSec;
 
     blen=SOUND_SHM_SAMP_SIZE;
-	tmp=malloc(blen*NUM_BUFFERS);
-    if (tmp==NULL) {
-        printf ("Unable to allocate sound buffer\n");
-        exit(1);
+	waveBuffer=malloc(blen*NUM_BUFFERS);
+    if (waveBuffer==NULL) {
+        ki_printf ("Unable to allocate sound buffer\n");
+        my_exit(1);
     }
     for (i=0;i<NUM_BUFFERS;i++) {
         memset(&WaveHeader[i],0,sizeof(WAVEHDR)); 
 		/* dwUser contains the busy state */
         WaveHeader[i].dwUser=FALSE;
-        WaveHeader[i].lpData=tmp+i*blen;
+        WaveHeader[i].lpData=waveBuffer+i*blen;
         WaveHeader[i].dwBufferLength=blen;
         WaveHeader[i].dwFlags=0L;
         WaveHeader[i].dwLoops=0L;
@@ -691,11 +733,11 @@ child_sound_init_win32(void *shmaddr) {
 
     res = waveOutGetDevCaps((UINT)WaveHandle, &caps, sizeof(caps));
     CheckWaveError("WaveOutGetDevCaps()",res);
-    printf("Using %s\n", caps.szPname);
-    printf ("--Bits Per Sample = %d\n",WaveFmt.wBitsPerSample);
-    printf ("--Channel = %d\n",WaveFmt.nChannels);
-    printf ("--Sampling Rate = %ld\n",WaveFmt.nSamplesPerSec);
-    printf ("--Average Bytes Per Second = %ld\n",WaveFmt.nAvgBytesPerSec);
+    ki_printf("Using %s\n", caps.szPname);
+    ki_printf ("--Bits Per Sample = %d\n",WaveFmt.wBitsPerSample);
+    ki_printf ("--Channel = %d\n",WaveFmt.nChannels);
+    ki_printf ("--Sampling Rate = %ld\n",WaveFmt.nSamplesPerSec);
+    ki_printf ("--Average Bytes Per Second = %ld\n",WaveFmt.nAvgBytesPerSec);
     
 }
 #endif /* HAVE_SOUND_WIN32 */
@@ -718,7 +760,7 @@ sound_init_device(int devtype)
         return sound_init_device_alib();
         break;
     default:
-        printf("sound_init_device: unknown device type %d\n", devtype);
+        ki_printf("sound_init_device: unknown device type %d\n", devtype);
         break;
     }
     return 0;
@@ -758,21 +800,21 @@ sound_init_device_fork(int devtype)
 	shmid = shmget(IPC_PRIVATE, SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE,
 							IPC_CREAT | 0777);
 	if(shmid < 0) {
-		printf("sound_init: shmget ret: %d, errno: %d\n", shmid,
+		ki_printf("sound_init: shmget ret: %d, errno: %d\n", shmid,
 			errno);
 		return 0;
 	}
 
 	g_sound_shm_addr = shmat(shmid, 0, 0);
 	if((int)PTR2WORD(g_sound_shm_addr) == -1) {
-		printf("sound_init: shmat ret: %p, errno: %d\n", g_sound_shm_addr,
+		ki_printf("sound_init: shmat ret: %p, errno: %d\n", g_sound_shm_addr,
 			errno);
 		return 0;
 	}
 
 	ret = shmctl(shmid, IPC_RMID, 0);
 	if(ret < 0) {
-		printf("sound_init: shmctl ret: %d, errno: %d\n", ret, errno);
+		ki_printf("sound_init: shmctl ret: %d, errno: %d\n", ret, errno);
 		return 0;
 	}
 
@@ -780,12 +822,12 @@ sound_init_device_fork(int devtype)
 	/*  pipe[0] = read side, pipe[1] = write end */
 	ret = pipe(&g_pipe_fd[0]);
 	if(ret < 0) {
-		printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
+		ki_printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
 		return 0;;
 	}
 	ret = pipe(&g_pipe2_fd[0]);
 	if(ret < 0) {
-		printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
+		ki_printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
 		return 0;
 	}
 
@@ -805,10 +847,10 @@ sound_init_device_fork(int devtype)
 		close(g_pipe_fd[1]);		/*make sure write pipe closed*/
 		close(g_pipe2_fd[0]);		/*make sure read pipe closed*/
 		child_sound_loop(devtype, g_pipe_fd[0], g_pipe2_fd[1], g_sound_shm_addr);
-		exit(0);
+		my_exit(0);
 	case -1:
 		/* error */
-		printf("sound_init: fork ret: -1, errno: %d\n", errno);
+		ki_printf("sound_init: fork ret: -1, errno: %d\n", errno);
 		return 0;
 	default:
 		/* parent */
@@ -828,14 +870,14 @@ sound_init_device_win32()
 	int	tid;
     long rate;
     
-    printf ("Sound shared memory size=%d\n", 
+    ki_printf ("Sound shared memory size=%d\n", 
             SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
     
 	g_sound_shm_addr = malloc(SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
     memset(g_sound_shm_addr,0,SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
     
     if (_pipe(g_pipe_fd,0,_O_BINARY) <0) {
-        printf ("Unable to create sound pipes\n");
+        ki_printf ("Unable to create sound pipes\n");
         return 0;
     }
     _beginthreadex(NULL,0,child_sound_loop_win32,g_sound_shm_addr,0,(void *)&tid);
@@ -854,8 +896,8 @@ parent_sound_get_sample_rate(int read_fd)
 
 	ret = read(read_fd, &tmp, 4);
 	if(ret != 4) {
-		printf("parent dying, could not get sample rate from child\n");
-		exit(1);
+		ki_printf("parent dying, could not get sample rate from child\n");
+		my_exit(1);
     }
     if ((g_audio_devtype == SOUND_NATIVE) || (g_audio_devtype == SOUND_ALIB)) {
         close(read_fd);
@@ -912,7 +954,7 @@ sound_init_device_sdl()
         goto snd_error;
     g_playbuf_buffered = 0;
 
-    printf ("Sound shared memory size=%d\n", 
+    ki_printf ("Sound shared memory size=%d\n", 
             SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
     
 	g_sound_shm_addr = malloc(SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
@@ -958,9 +1000,14 @@ sound_shutdown()
         sound_shutdown_alib();
         break;
     default:
-        printf("sound_shutdown: unknown device type %d\n", g_audio_devtype);
+        ki_printf("sound_shutdown: unknown device type %d\n", g_audio_devtype);
         break;
     }
+	if (g_sound_shm_addr)
+	{
+		free(g_sound_shm_addr);
+		g_sound_shm_addr=NULL;
+	}
     g_audio_devtype = SOUND_NONE;
 }
 
@@ -968,9 +1015,22 @@ static void
 sound_shutdown_native()
 {
 #ifdef HAVE_SOUND_NATIVE
-    if(g_pipe_fd[1] != 0) {
+    
+	if(g_pipe_fd[1] != -1) 
+	{
         close(g_pipe_fd[1]);
+		g_pipe_fd[1]=-1;
     }
+	if(g_pipe_fd[0] != -1) 
+	{
+        close(g_pipe_fd[0]);
+		g_pipe_fd[0]=-1;
+    }
+
+	ki_printf("wait for sound termination...\n");
+	while(soundActive) Sleep(10);
+
+	
 #endif
 }
 
@@ -1012,7 +1072,7 @@ sound_write(int real_samps, int size)
         sound_write_native(real_samps, size);
         break;
     default:
-        printf("sound_write: unknown device type %d\n", g_audio_devtype);
+        ki_printf("sound_write: unknown device type %d\n", g_audio_devtype);
         break;
     }
 }
@@ -1050,7 +1110,7 @@ sound_write_sdl(int real_samps, int size)
         SDL_LockAudio();
         while(size > 0) {
             if(g_playbuf_buffered >= snd_buf) {
-                printf("sound_write_sdl failed @%d, %d buffered, %d samples skipped\n",snd_write,g_playbuf_buffered, size);
+                ki_printf("sound_write_sdl failed @%d, %d buffered, %d samples skipped\n",snd_write,g_playbuf_buffered, size);
                 shm_read += size;
                 shm_read %= SOUND_SHM_SAMP_SIZE;
                 size = 0;
@@ -1071,12 +1131,12 @@ sound_write_sdl(int real_samps, int size)
         SDL_UnlockAudio();
     }
     if(g_sound_paused && (g_playbuf_buffered > 0)) {
-        printf("Unpausing sound, %d buffered\n",g_playbuf_buffered);
+        ki_printf("Unpausing sound, %d buffered\n",g_playbuf_buffered);
         g_sound_paused = 0;
         SDL_PauseAudio(0);
     }
     if(!g_sound_paused && (g_playbuf_buffered <= 0)) {
-        printf("Pausing sound\n");
+        ki_printf("Pausing sound\n");
         g_sound_paused = 1;
         SDL_PauseAudio(1);
     }
@@ -1090,7 +1150,7 @@ static void _snd_callback(void* userdata, Uint8 *stream, int len)
     int i;
     /* Slurp off the play buffer */
     assert((snd_buf+snd_write - snd_read)%snd_buf == g_playbuf_buffered%snd_buf);
-    /*printf("slurp %d, %d buffered\n",len, g_playbuf_buffered);*/
+    /*ki_printf("slurp %d, %d buffered\n",len, g_playbuf_buffered);*/
     for(i = 0; i < len; ++i) {
         if(g_playbuf_buffered <= 0) {
             stream[i] = 0;
@@ -1103,12 +1163,12 @@ static void _snd_callback(void* userdata, Uint8 *stream, int len)
     }
 #if 0
     if (g_playbuf_buffered <= 0) {
-        printf("snd_callback: buffer empty, Pausing sound\n");
+        ki_printf("snd_callback: buffer empty, Pausing sound\n");
         g_sound_paused = 1;
         SDL_PauseAudio(1);
     }
 #endif
-    //printf("end slurp %d, %d buffered\n",len, g_playbuf_buffered);
+    //ki_printf("end slurp %d, %d buffered\n",len, g_playbuf_buffered);
 }
 #endif
 
@@ -1157,21 +1217,21 @@ set_audio_devtype(int val)
 
     sound_shutdown();
     audio_rate = sound_init_device(val);
-    printf("sound_init: audio_rate = %ld\n",audio_rate);
+    ki_printf("sound_init: audio_rate = %ld\n",audio_rate);
     if(audio_rate) {
         set_audio_rate(audio_rate);
     }
     else {
-        printf("sound_init: couldn't initialize driver %d\n", val);
+        ki_printf("sound_init: couldn't initialize driver %d\n", val);
         sound_shutdown();
         audio_rate = sound_init_device(oldval);
-        printf("sound_init: audio_rate = %ld\n",audio_rate);
+        ki_printf("sound_init: audio_rate = %ld\n",audio_rate);
         if(audio_rate) {
             set_audio_rate(audio_rate);
         }
         else {
-            printf("sound_init: couldn't initialize driver %d\n", oldval);
-            printf("sound_init: disabling audio\n");
+            ki_printf("sound_init: couldn't initialize driver %d\n", oldval);
+            ki_printf("sound_init: disabling audio\n");
             sound_shutdown();
             set_audio_rate(g_preferred_rate);
         }

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.29 99/10/31 21:06:38 kentd Exp $";
+const char rcsid_scc_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/scc.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "sim65816.h"
 
@@ -264,30 +264,30 @@ show_scc_state()
 	int	i, j;
 
 	for(i = 0; i < 2; i++) {
-		printf("SCC port: %d\n", i);
+		ki_printf("SCC port: %d\n", i);
 		for(j = 0; j < 16; j += 4) {
-			printf("Reg %2d-%2d: %02x %02x %02x %02x\n", j, j+3,
+			ki_printf("Reg %2d-%2d: %02x %02x %02x %02x\n", j, j+3,
 				scc_stat[i].reg[j], scc_stat[i].reg[j+1],
 				scc_stat[i].reg[j+2], scc_stat[i].reg[j+3]);
 		}
-		printf("in_rdptr: %04x, in_wr:%04x, out_rd:%04x, out_wr:%04x\n",
+		ki_printf("in_rdptr: %04x, in_wr:%04x, out_rd:%04x, out_wr:%04x\n",
 			scc_stat[i].in_rdptr, scc_stat[i].in_wrptr,
 			scc_stat[i].out_rdptr, scc_stat[i].out_wrptr);
-		printf("rx_queue_depth: %d, queue: %02x, %02x, %02x, %02x\n",
+		ki_printf("rx_queue_depth: %d, queue: %02x, %02x, %02x, %02x\n",
 			scc_stat[i].rx_queue_depth, scc_stat[i].rx_queue[0],
 			scc_stat[i].rx_queue[1], scc_stat[i].rx_queue[2],
 			scc_stat[i].rx_queue[3]);
-		printf("int_pendings: rx:%d, tx:%d, zc:%d\n",
+		ki_printf("int_pendings: rx:%d, tx:%d, zc:%d\n",
 			scc_stat[i].int_pending_rx, scc_stat[i].int_pending_tx,
 			scc_stat[i].int_pending_zerocnt);
-		printf("want_ints: rx:%d, tx:%d, zc:%d\n",
+		ki_printf("want_ints: rx:%d, tx:%d, zc:%d\n",
 			scc_stat[i].wantint_rx, scc_stat[i].wantint_tx,
 			scc_stat[i].wantint_zerocnt);
-		printf("ev_pendings: rx:%d, tx:%d, br:%d\n",
+		ki_printf("ev_pendings: rx:%d, tx:%d, br:%d\n",
 			scc_stat[i].rx_event_pending,
 			scc_stat[i].tx_event_pending,
 			scc_stat[i].br_event_pending);
-		printf("br_dcycs: %f, tx_dcycs: %f, rx_dcycs: %f\n",
+		ki_printf("br_dcycs: %f, tx_dcycs: %f, rx_dcycs: %f\n",
 			scc_stat[i].br_dcycs, scc_stat[i].tx_dcycs,
 			scc_stat[i].rx_dcycs);
 	}
@@ -332,14 +332,14 @@ show_scc_log(void)
 
 	pos = g_scc_log_pos;
 	dcycs = g_cur_dcycs;
-	printf("SCC log pos: %d, cur dcycs:%f\n", pos, dcycs);
+	ki_printf("SCC log pos: %d, cur dcycs:%f\n", pos, dcycs);
 	for(i = 0; i < LEN_SCC_LOG; i++) {
 		pos--;
 		if(pos < 0) {
 			pos = LEN_SCC_LOG - 1;
 		}
 		regnum = g_scc_log[pos].regnum;
-		printf("%d:%d: port:%d wr:%d reg: %d val:%02x at t:%f\n",
+		ki_printf("%d:%d: port:%d wr:%d reg: %d val:%02x at t:%f\n",
 			i, pos, (regnum >> 4) & 0xf, (regnum >> 8),
 			(regnum & 0xf),
 			g_scc_log[pos].val,
@@ -581,7 +581,7 @@ scc_write_reg(int port, word32 val, double dcycs)
 			}
 		}
 		if((val & 0x35) != 0x00) {
-			printf("Write c03%x to wr9 of %02x!\n", 8+port, val);
+			ki_printf("Write c03%x to wr9 of %02x!\n", 8+port, val);
 			halt_printf("val & 0x35: %02x\n", (val & 0x35));
 		}
 		old_val = scc_stat[0].reg[9];
@@ -640,8 +640,8 @@ scc_write_reg(int port, word32 val, double dcycs)
 				val);
 		}
 		if((scc_stat[0].reg[9] & 0x8) && (val != 0)) {
-			printf("Write wr15:%02x and master int en = 1!\n",val);
-			/* set_halt(1); */
+			ki_printf("Write wr15:%02x and master int en = 1!\n",val);
+			/* set_halt(HALT_WANTTOQUIT); */
 		}
 		scc_ptr->reg[regnum] = val;
 		scc_maybe_br_event(port, dcycs);

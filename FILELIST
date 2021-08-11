@@ -22,8 +22,8 @@ src/adb.h
 src/clock.c
 src/clock.h
 src/compile_time.c
-src/config.c
-src/config.h
+src/configmenu.c
+src/configmenu.h
 src/config_sdl.c
 src/defc.h
 src/defcomm.h
@@ -34,9 +34,12 @@ src/dis.h
 src/disas.h
 src/engine_s.s
 src/engine.h
+src/font.c
 src/functions.c
 src/functions.h
 src/instable.h
+src/ki.c
+src/ki.h
 src/scc.c
 src/scc.h
 src/scc_driver.c
@@ -45,6 +48,7 @@ src/iwm.h
 src/iwm_35_525.h
 src/joystick.h
 src/joystick_driver.c
+src/makerom.c
 src/moremem.c
 src/moremem.h
 src/op_routs.h
@@ -86,5 +90,10 @@ INTERNALS.overview
 INTERNALS.iwm
 xgs2raw
 kegs_conf
-FILELIST
 TODO
+FILELIST
+U.K..KCHR
+Dvorak.KCHR
+French.KCHR
+German.KCHR
+U.S.A..KCHR

@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-static const char rcsid[] = "@(#)$Header: xdriver.c,v 1.159 2000/10/03 12:15:35 kentd Exp $";
+static const char rcsid[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/video_driver_x11.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "videodriver.h"
 
@@ -370,10 +370,10 @@ show_xcolor_array()
 	int i;
 
 	for(i = 0; i < 256; i++) {
-		printf("%02x: %08x\n", i, g_palette_8to1624[i]);
+		ki_printf("%02x: %08x\n", i, g_palette_8to1624[i]);
 			
 #if 0
-		printf("%02x: %04x %04x %04x, %02x %x\n",
+		ki_printf("%02x: %04x %04x %04x, %02x %x\n",
 			i, xcolor_array[i].red, xcolor_array[i].green,
 			xcolor_array[i].blue, (word32)xcolor_array[i].pixel,
 			xcolor_array[i].flags);
@@ -389,7 +389,7 @@ my_error_handler(Display *dp, XErrorEvent *ev)
 {
 	char msg[1024];
 	XGetErrorText(dp, ev->error_code, msg, 1000);
-	printf("X Error code %s\n", msg);
+	ki_printf("X Error code %s\n", msg);
 	fflush(stdout);
 
 	return 0;
@@ -400,7 +400,7 @@ void
 video_shutdown_x11()
 {
 
-	printf("xdriver_end\n");
+	ki_printf("xdriver_end\n");
 #ifdef HAVE_VIDEO_X11
 	if(display) {
 		video_auto_repeat_on_x11(1);
@@ -417,7 +417,7 @@ show_colormap(char *str, Colormap cmap, int index1, int index2, int index3)
 	int	i;
 	int	pix;
 
-	printf("Show colormap: %08x = %s, cmap cells: %d,%d,%d\n",
+	ki_printf("Show colormap: %08x = %s, cmap cells: %d,%d,%d\n",
 			(int)cmap, str, index1, index2, index3);
 	for(i = 0; i < index1 + index2 + index3; i++) {
 		pix = i;
@@ -432,7 +432,7 @@ show_colormap(char *str, Colormap cmap, int index1, int index2, int index3)
 		}
 		xcol.pixel = pix;
 		XQueryColor(display, cmap, &xcol);
-		printf("Cell %03x: pix: %03x, R:%04x, G:%04x, B:%04x\n",
+		ki_printf("Cell %03x: pix: %03x, R:%04x, G:%04x, B:%04x\n",
 			i, (int)xcol.pixel, xcol.red, xcol.green, xcol.blue);
 	}
 }
@@ -473,7 +473,7 @@ video_init_x11()
 	int	i;
 	int	keycode;
 
-	printf("Preparing X Windows graphics system\n");
+	ki_printf("Preparing X Windows graphics system\n");
 
 	g_num_a2_keycodes = 0;
 	for(i = 0; i <= 0x7f; i++) {
@@ -485,11 +485,11 @@ video_init_x11()
 			g_num_a2_keycodes = i;
 			break;
 		} else if(keycode > 0x7f) {
-			printf("a2_key_to_xsym[%d] = %02x!\n", i, keycode);
+			ki_printf("a2_key_to_xsym[%d] = %02x!\n", i, keycode);
 				exit(2);
 		} else {
 			if(tmp_array[keycode]) {
-				printf("a2_key_to_x[%d] = %02x used by %d\n",
+				ki_printf("a2_key_to_x[%d] = %02x used by %d\n",
 					i, keycode, tmp_array[keycode] - 1);
 			}
 			tmp_array[keycode] = i + 1;
@@ -497,7 +497,7 @@ video_init_x11()
 	}
 
 #if 0
-	printf("Setting _Xdebug = 1, makes X synchronous\n");
+	ki_printf("Setting _Xdebug = 1, makes X synchronous\n");
 	_Xdebug = 1;
 #endif
 
@@ -534,7 +534,7 @@ video_init_x11()
 
 	g_default_colormap = XDefaultColormap(display, screen_num);
 	if(!g_default_colormap) {
-		printf("g_default_colormap == 0!\n");
+		ki_printf("g_default_colormap == 0!\n");
 		exit(4);
 	}
 
@@ -550,7 +550,7 @@ video_init_x11()
 			(word32)g_a2_colormap, (word32)g_default_colormap);
 
 	if(g_needs_cmap && g_a2_colormap == g_default_colormap) {
-		printf("A2_colormap = default colormap!\n");
+		ki_printf("A2_colormap = default colormap!\n");
 		exit(4);
 	}
 
@@ -600,11 +600,11 @@ video_init_x11()
 	if(g_video_fast) {
 		ret = XShmQueryExtension(display);
 		if(ret == 0) {
-			printf("XShmQueryExt ret: %d\n", ret);
-			printf("not using shared memory\n");
+			ki_printf("XShmQueryExt ret: %d\n", ret);
+			ki_printf("not using shared memory\n");
 			g_video_fast = 0;
 		} else {
-			printf("Will use shared memory for X\n");
+			ki_printf("Will use shared memory for X\n");
 		}
 	}
 
@@ -653,10 +653,10 @@ video_init_x11()
 		if(g_screen_redraw_skip_amt < 0) {
 			g_screen_redraw_skip_amt = 7;
 		}
-		printf("Not using shared memory, setting skip_amt = %d\n",
+		ki_printf("Not using shared memory, setting skip_amt = %d\n",
 			g_screen_redraw_skip_amt);
 
-		printf("Calling get_ximage!\n");
+		ki_printf("Calling get_ximage!\n");
 
 		video_image_text[0] = get_ximage(display, &video_data_text[0], vis, 0);
 		video_image_text[1] = get_ximage(display, &video_data_text[1], vis, 0);
@@ -800,17 +800,17 @@ x_try_find_visual(Display *display, int depth, int screen_num,
 	visual_chosen = -1;
 	needs_cmap = 0;
 	for(i = 0; i < visualsMatched; i++) {
-		printf("Visual %d\n", i);
-		printf("	id: %08x, screen: %d, depth: %d, class: %d\n",
+		ki_printf("Visual %d\n", i);
+		ki_printf("	id: %08x, screen: %d, depth: %d, class: %d\n",
 			(word32)visualList[i].visualid,
 			visualList[i].screen,
 			visualList[i].depth,
 			visualList[i].class);
-		printf("	red: %08lx, green: %08lx, blue: %08lx\n",
+		ki_printf("	red: %08lx, green: %08lx, blue: %08lx\n",
 			visualList[i].red_mask,
 			visualList[i].green_mask,
 			visualList[i].blue_mask);
-		printf("	cmap size: %d, bits_per_rgb: %d\n",
+		ki_printf("	cmap size: %d, bits_per_rgb: %d\n",
 			visualList[i].colormap_size,
 			visualList[i].bits_per_rgb);
 		match8 = (visualList[i].class == PseudoColor);
@@ -830,12 +830,12 @@ x_try_find_visual(Display *display, int depth, int screen_num,
 	}
 
 	if(visual_chosen < 0) {
-		printf("Couldn't find any good visuals at depth %d!\n",
+		ki_printf("Couldn't find any good visuals at depth %d!\n",
 			depth);
 		return (Visual *)0;
 	}
 
-	printf("Chose visual: %d, max_colors: %d\n", visual_chosen,
+	ki_printf("Chose visual: %d, max_colors: %d\n", visual_chosen,
 		Max_color_size);
 
 	v_chosen = &(visualList[visual_chosen]);
@@ -937,7 +937,7 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 	if(extended_info & 0x10) {
 		/* check mdepth! */
 		if(xim->bits_per_pixel != g_screen_mdepth) {
-			printf("shm_ximage bits_per_pix: %d != %d\n",
+			ki_printf("shm_ximage bits_per_pix: %d != %d\n",
 					xim->bits_per_pixel, g_screen_mdepth);
 		}
 	}
@@ -987,7 +987,7 @@ get_shm(XImage **xim_in, Display *display, byte **databuf, Visual *visual,
 		XDestroyImage(xim);
 		/* We could release the shared mem segment, but by doing the */
 		/* RMID, it will go away when we die now, so just leave it */
-		printf("Not using shared memory\n");
+		ki_printf("Not using shared memory\n");
 		return 0;
 	}
 
@@ -1033,7 +1033,7 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 	vid_printf("ptr: %p\n", ptr);
 
 	if(ptr == 0) {
-		printf("malloc for data failed, mdepth: %d\n", mdepth);
+		ki_printf("malloc for data failed, mdepth: %d\n", mdepth);
 		exit(2);
 	}
 
@@ -1044,7 +1044,7 @@ get_ximage(Display *display, byte **data_ptr, Visual *vis, int extended_info)
 	if(extended_info & 0x10) {
 		/* check mdepth! */
 		if(xim->bits_per_pixel != g_screen_mdepth) {
-			printf("shm_ximage bits_per_pix: %d != %d\n",
+			ki_printf("shm_ximage bits_per_pix: %d != %d\n",
 					xim->bits_per_pixel, g_screen_mdepth);
 		}
 	}
@@ -1197,7 +1197,7 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 	if(left_pix >= right_pix || left_pix < 0 || right_pix <= 0) {
 		halt_printf("x_refresh_lines: lines %d to %d, pix %d to %d\n",
 			start_line, end_line, left_pix, right_pix);
-		printf("a2_screen_buf_ch:%08x, g_full_refr:%08x\n",
+		ki_printf("a2_screen_buf_ch:%08x, g_full_refr:%08x\n",
 			a2_screen_buffer_changed, g_full_refresh_needed);
 		show_a2_line_stuff();
 #ifdef HPUX
@@ -1209,7 +1209,7 @@ x_refresh_lines(XImage *xim, int start_line, int end_line, int left_pix,
 
 	if(xim == ximage_border_special) {
 		/* fix up y pos in src */
-		printf("x_refresh_lines called, ximage_border_special!!\n");
+		ki_printf("x_refresh_lines called, ximage_border_special!!\n");
 		srcy = 0;
 	}
 
@@ -1255,7 +1255,7 @@ x_redraw_border_sides_lines(int end_x, int width, int start_line,
 	}
 
 #if 0
-	printf("redraw_border_sides lines:%d-%d from %d to %d\n",
+	ki_printf("redraw_border_sides lines:%d-%d from %d to %d\n",
 		start_line, end_line, end_x - width, end_x);
 #endif
 	xim = ximage_border_sides;
@@ -1302,7 +1302,7 @@ x_refresh_border_sides()
 	int	i;
 
 #if 0
-	printf("refresh border sides!\n");
+	ki_printf("refresh border sides!\n");
 #endif
 
 	/* can be "jagged" */
@@ -1515,10 +1515,10 @@ video_check_input_events_x11()
 		case EnterNotify:
 		case LeaveNotify:
 			/* These events are disabled now */
-			printf("Enter/Leave event for winow %08x, sub: %08x\n",
+			ki_printf("Enter/Leave event for winow %08x, sub: %08x\n",
 				(word32)ev.xcrossing.window,
 				(word32)ev.xcrossing.subwindow);
-			printf("Enter/L mode: %08x, detail: %08x, type:%02x\n",
+			ki_printf("Enter/L mode: %08x, detail: %08x, type:%02x\n",
 				ev.xcrossing.mode, ev.xcrossing.detail,
 				ev.xcrossing.type);
 			break;
@@ -1535,17 +1535,17 @@ video_check_input_events_x11()
 					g_limit_speed = 0;
 				}
 
-				printf("Toggling g_limit_speed to %d\n",
+				ki_printf("Toggling g_limit_speed to %d\n",
 					g_limit_speed);
 				switch(g_limit_speed) {
 				case 0:
-					printf("...as fast as possible!\n");
+					ki_printf("...as fast as possible!\n");
 					break;
 				case 1:
-					printf("...1.024MHz\n");
+					ki_printf("...1.024MHz\n");
 					break;
 				case 2:
-					printf("...2.5MHz\n");
+					ki_printf("...2.5MHz\n");
 					break;
 				}
 			} else {
@@ -1584,13 +1584,13 @@ video_check_input_events_x11()
 			break;
 		case MotionNotify:
 			if(ev.xmotion.window != a2_win) {
-				printf("Motion in window %08x unknown!\n",
+				ki_printf("Motion in window %08x unknown!\n",
 					(word32)ev.xmotion.window);
 			}
 			motion = update_mouse(ev.xmotion.x, ev.xmotion.y, 0, 0);
 			break;
 		default:
-			printf("X event 0x%08x is unknown!\n",
+			ki_printf("X event 0x%08x is unknown!\n",
 				ev.type);
 			break;
 		}
@@ -1603,7 +1603,7 @@ video_check_input_events_x11()
 	}
 
 	if(refresh_needed) {
-		printf("Full refresh needed\n");
+		ki_printf("Full refresh needed\n");
 		a2_screen_buffer_changed = -1;
 		g_full_refresh_needed = -1;
 
@@ -1623,10 +1623,10 @@ video_warp_pointer_x11()
 #ifdef HAVE_VIDEO_X11
     if(g_warp_pointer) {
         XDefineCursor(display, a2_win, g_cursor);
-        printf("X Pointer grabbed\n");
+        ki_printf("X Pointer grabbed\n");
     } else {
         XDefineCursor(display, a2_win, None);
-        printf("X Pointer released\n");
+        ki_printf("X Pointer released\n");
     }
 #endif
 }
@@ -1665,7 +1665,7 @@ handle_keysym(XEvent *xev_in)
 
 	if((keysym == XK_F7) && !is_up) {
 		g_fast_disk_emul = !g_fast_disk_emul;
-		printf("g_fast_disk_emul is now %d\n", g_fast_disk_emul);
+		ki_printf("g_fast_disk_emul is now %d\n", g_fast_disk_emul);
 	}
 
 	if((keysym == XK_F9 || keysym == XK_F8) && !is_up) {
@@ -1680,11 +1680,11 @@ handle_keysym(XEvent *xev_in)
 
 	if(keysym == XK_F11 && !is_up) {
 		g_swap_paddles = !g_swap_paddles;
-		printf("Swap paddles is now: %d\n", g_swap_paddles);
+		ki_printf("Swap paddles is now: %d\n", g_swap_paddles);
 	}
 	if(keysym == XK_F12 && !is_up) {
 		g_invert_paddles = !g_invert_paddles;
-		printf("Invert paddles is now: %d\n", g_invert_paddles);
+		ki_printf("Invert paddles is now: %d\n", g_invert_paddles);
 	}
 
 #if 0
@@ -1697,11 +1697,11 @@ handle_keysym(XEvent *xev_in)
 	}
 
 	if(g_alt_left_up == 0 && g_alt_right_up == 0) {
-		printf("Sending sound to file\n");
+		ki_printf("Sending sound to file\n");
 		g_send_sound_to_file = 1;
 	} else {
 		if(g_send_sound_to_file) {
-			printf("Stopping sending sound to file\n");
+			ki_printf("Stopping sending sound to file\n");
 			close_sound_file();
 		}
 		g_send_sound_to_file = 0;
@@ -1757,13 +1757,13 @@ handle_keysym(XEvent *xev_in)
 	a2code = x_keysym_to_a2code(keysym, is_up);
 	if(a2code >= 0) {
 		adb_physical_key_update(a2code, is_up);
-        printf("keysym %04x -> a2code %x\n",(word32)keysym,a2code);
+        ki_printf("keysym %04x -> a2code %x\n",(word32)keysym,a2code);
 	} else if(a2code != -2) {
 		if((keysym >= XK_F7) && (keysym <= XK_F12)) {
 			/* just get out quietly */
 			return;
 		}
-		printf("Keysym: %04x of keycode: %02x unknown\n",
+		ki_printf("Keysym: %04x of keycode: %02x unknown\n",
 			(word32)keysym, keycode);
 	}
 }

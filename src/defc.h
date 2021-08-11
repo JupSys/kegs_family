@@ -14,6 +14,13 @@
 #ifndef KEGS_DEFC_H
 #define KEGS_DEFC_H
 
+#ifdef _WIN32
+#define CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
+
 #include "defcomm.h"
 
 #define STRUCT(a) typedef struct _ ## a a; struct _ ## a
@@ -80,6 +87,10 @@ void U_STACK_TRACE();
 #ifndef O_BINARY
 /* work around some Windows junk */
 # define O_BINARY	0
+#endif
+
+#ifndef W_OK		// OG Missing Windows declaration
+#define	W_OK		2
 #endif
 
 STRUCT(Pc_log) {

@@ -15,10 +15,11 @@
 /*								*/
 /****************************************************************/
 
-const char rcsid_joystick_driver_c[] = "@(#)$Header: joystick_driver.c,v 1.3 99/06/01 23:14:27 kentd Exp $";
+const char rcsid_joystick_driver_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/joystick_driver.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "joystick.h"
 #include "video.h"
+#include "ki.h"
 
 #ifdef HAVE_JOYSTICK_SDL
 static SDL_Joystick *joy0, *joy1;
@@ -45,7 +46,7 @@ joystick_init()
         return 1;
         break;
     case JOYSTICK_KEYPAD:
-        printf("--Keypad joystick not yet available\n");
+        ki_printf("--Keypad joystick not yet available\n");
         return 0;
         break;
     case JOYSTICK_LINUX:
@@ -148,7 +149,7 @@ int
 joystick_init_linux()
 {
 #ifndef HAVE_JOYSTICK_LINUX
-    printf("--Linux joystick not available\n");
+    ki_printf("--Linux joystick not available\n");
     return 0;
 #else
 	char	joy_name[MAX_JOY_NAME];
@@ -158,9 +159,9 @@ joystick_init_linux()
 
 	fd = open(g_joystick_dev, O_RDONLY | O_NONBLOCK);
 	if(fd < 0) {
-		printf("Unable to open joystick dev file: %s, errno: %d\n",
+		ki_printf("Unable to open joystick dev file: %s, errno: %d\n",
 			g_joystick_dev, errno);
-		printf("Defaulting to mouse joystick\n");
+		ki_printf("Defaulting to mouse joystick\n");
 		return 0;
 	}
 
@@ -172,7 +173,7 @@ joystick_init_linux()
 	ioctl(fd, JSIOCGBUTTONS, &g_joystick_num_buttons);
 	ioctl(fd, JSIOCGVERSION, &version);
 
-	printf("Detected joystick: %s [%d axes, %d buttons vers: %08x]\n",
+	ki_printf("Detected joystick: %s [%d axes, %d buttons vers: %08x]\n",
 		joy_name, g_joystick_num_axes, g_joystick_num_buttons,
 		version);
 
@@ -240,7 +241,7 @@ int
 joystick_init_win32()
 {
 #ifndef HAVE_JOYSTICK_WIN32
-    printf("--Win32 joystick not available\n");
+    ki_printf("--Win32 joystick not available\n");
     return 0;
 #else
     int i;
@@ -249,23 +250,23 @@ joystick_init_win32()
 
     // Check that there is a joystick device
     if (joyGetNumDevs()<=0) {
-        printf ("--No joystick hardware detected\n");
+        ki_printf ("--No joystick hardware detected\n");
         return 0;
     }
 
     // Check that at least joystick 1 or joystick 2 is available 
     if (joyGetPos(JOYSTICKID1,&info) != JOYERR_NOERROR && 
         joyGetPos(JOYSTICKID2,&info) != JOYERR_NOERROR) {
-        printf ("--No joystick attached\n");
+        ki_printf ("--No joystick attached\n");
         return 0;
     }
 
     // Print out the joystick device name being emulated
     if (joyGetDevCaps(JOYSTICKID1,&joycap,sizeof(joycap)) == JOYERR_NOERROR) {
-        printf ("--Joystick #1 = %s\n",joycap.szPname);
+        ki_printf ("--Joystick #1 = %s\n",joycap.szPname);
     }
     if (joyGetDevCaps(JOYSTICKID2,&joycap,sizeof(joycap)) == JOYERR_NOERROR) {
-        printf ("--Joystick #1 = %s\n",joycap.szPname);
+        ki_printf ("--Joystick #1 = %s\n",joycap.szPname);
     }
     
     g_joystick_type = JOYSTICK_WIN32;
@@ -336,7 +337,7 @@ int
 joystick_init_sdl()
 {
 #ifndef HAVE_JOYSTICK_SDL
-    printf("--SDL joystick not available\n");
+    ki_printf("--SDL joystick not available\n");
     return 0;
 #else
     int i;
@@ -344,7 +345,7 @@ joystick_init_sdl()
     SDL_InitSubSystem(SDL_INIT_JOYSTICK);
     /* Check that there is a joystick device */
     if (SDL_NumJoysticks()<=0) {
-        printf ("--No joystick hardware detected\n");
+        ki_printf ("--No joystick hardware detected\n");
         SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
         return 0;
     }
@@ -352,26 +353,26 @@ joystick_init_sdl()
     joy0=SDL_JoystickOpen(0);
     
     if(joy0) {
-        printf("Opened Joystick 0\n");
-        printf("Name: %s\n", SDL_JoystickName(0));
-        printf("Number of Axes: %d\n", SDL_JoystickNumAxes(joy0));
-        printf("Number of Buttons: %d\n", SDL_JoystickNumButtons(joy0));
-        printf("Number of Balls: %d\n", SDL_JoystickNumBalls(joy0));
+        ki_printf("Opened Joystick 0\n");
+        ki_printf("Name: %s\n", SDL_JoystickName(0));
+        ki_printf("Number of Axes: %d\n", SDL_JoystickNumAxes(joy0));
+        ki_printf("Number of Buttons: %d\n", SDL_JoystickNumButtons(joy0));
+        ki_printf("Number of Balls: %d\n", SDL_JoystickNumBalls(joy0));
     }
     else
-        printf("Couldn't open Joystick 0\n");
+        ki_printf("Couldn't open Joystick 0\n");
   
     joy1=SDL_JoystickOpen(1);
     
     if(joy1) {
-        printf("Opened Joystick 1\n");
-        printf("Name: %s\n", SDL_JoystickName(1));
-        printf("Number of Axes: %d\n", SDL_JoystickNumAxes(joy1));
-        printf("Number of Buttons: %d\n", SDL_JoystickNumButtons(joy1));
-        printf("Number of Balls: %d\n", SDL_JoystickNumBalls(joy1));
+        ki_printf("Opened Joystick 1\n");
+        ki_printf("Name: %s\n", SDL_JoystickName(1));
+        ki_printf("Number of Axes: %d\n", SDL_JoystickNumAxes(joy1));
+        ki_printf("Number of Buttons: %d\n", SDL_JoystickNumButtons(joy1));
+        ki_printf("Number of Balls: %d\n", SDL_JoystickNumBalls(joy1));
     }
     else
-        printf("Couldn't open Joystick 1\n");
+        ki_printf("Couldn't open Joystick 1\n");
   
    
     g_joystick_type = JOYSTICK_SDL;

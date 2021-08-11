@@ -2,7 +2,7 @@
 /* This file is included by video.c */
 
 #ifndef SUPERHIRES_INCLUDED
-const char rcsid_superhires_h[] = "@(#)$Header: superhires.h,v 1.7 98/07/04 19:32:27 kentd Exp $";
+const char rcsid_superhires_h[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/superhires.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 # define SUPERHIRES_INCLUDED
 #endif
 

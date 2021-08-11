@@ -1,3 +1,15 @@
+/****************************************************************/
+/*    	Apple IIgs emulator                                     */
+/*                                                              */
+/*    This code may not be used in a commercial product         */
+/*    without prior written permission of the authors.          */
+/*                                                              */
+/*    SDL Code by Frederic Devernay	                        */
+/*    Mac OS X port by Darrell Walisser & Benoit Dardelet	*/
+/*    You may freely distribute this code.                      */ 
+/*                                                              */
+/****************************************************************/
+
 #ifndef KEGS_VIDEO_SDL_H
 #define KEGS_VIDEO_SDL_H
 
@@ -46,6 +58,16 @@ extern SDL_Surface *screen;
 void sdl_draw_string(SDL_Surface *surf, Sint16 x, Sint16 y, const unsigned char *string, Uint16 maxstrlen, Uint16 xscale, Uint16 yscale, Uint8 fg, Uint8 bg);
 void configuration_menu_sdl(void);
 void sdl_warp_pointer(void);
+
+    /* The dirty rectangles for fast Mac OSX drawing */
+typedef struct {
+	SDL_Rect *rects;
+	int       size;
+	int       count;
+} rect_table;
+
+extern rect_table *gRectTable;
+void sdl_update_dirty_rects(rect_table *table, SDL_Surface *screen);
 
 #endif
 

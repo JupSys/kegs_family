@@ -2,8 +2,9 @@
 
 include vars
 
-VERSION = 0.63
-OBJECTS1 = adb.o clock.o dis.o joystick_driver.o paddles.o scc.o scc_driver.o iwm.o moremem.o sim65816.o smartport.o sound.o video.o video_driver.o video_driver_x11.o video_driver_win32.o video_driver_sdl.o config_sdl.o config.o sound_driver.o functions.o
+PACKAGE= kegs-sdl
+VERSION = 0.64
+OBJECTS1 = adb.o clock.o dis.o joystick_driver.o paddles.o scc.o scc_driver.o iwm.o moremem.o sim65816.o smartport.o sound.o video.o video_driver.o video_driver_x11.o video_driver_win32.o video_driver_sdl.o config_sdl.o configmenu.o sound_driver.o functions.o font.o ki.o rom.o
 PROJROOT = .
 
 SPECIALS = $(EXTRA_SPECIALS) 8inst_c 16inst_c size_c
@@ -13,13 +14,13 @@ SPECIALS = $(EXTRA_SPECIALS) 8inst_c 16inst_c size_c
 all: $(NAME)$(SUFFIX) partls to_pro dc2raw
 
 clean: specials_clean
-	rm -f *.o kegs partls to_pro dc2raw *~ #*#
+	rm -f *.o kegs-sdl partls to_pro dc2raw *~ #*#
 
 depend:
 	makedepend $(OPTS) $(XOPTS) $(OBJECTS1:.o=.c)
 
 dist:
-	cd ../..; tar cf - `cat kegs-$(VERSION)/FILELIST | sed -e s@^@kegs-$(VERSION)/@` |gzip -c > kegs-$(VERSION).tar.gz
+	cd ../..; tar cf - `cat $(PACKAGE)-$(VERSION)/FILELIST | sed -e s@^@$(PACKAGE)-$(VERSION)/@` |gzip -c > $(PACKAGE)-$(VERSION).tar.gz
 
 specials_clean:
 	rm -f $(SPECIALS) size_s Alib.h
@@ -76,5 +77,11 @@ to_pro: prodos.h prodos_protos.h to_pro.c
 	$(CC) $(CCOPTS) $(OPTS) -o to_pro$(SUFFIX) to_pro.c
 
 compile_time.o: $(OBJECTS)
+
+rom.c: makerom$(SUFFIX)
+	./$< > rom.c || (rm -f rom.c && false)
+
+makerom$(SUFFIX): makerom.c
+	$(CC) $(CCOPTS) $(OPTS) -o $@ $<
 
 # DO NOT DELETE

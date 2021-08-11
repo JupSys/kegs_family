@@ -13,7 +13,7 @@
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$Header: instable.h,v 1.94 99/10/23 15:59:11 kentd Exp $"
+	.stringz "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/instable.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $"
 # endif
 #endif
 

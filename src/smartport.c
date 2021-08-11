@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.23 2000/01/11 00:13:23 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/smartport.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "sim65816.h"
 #include "smartport.h"
@@ -39,7 +39,7 @@ get_fd_size(int fd)
 	if(ret != 0) {
 		fprintf(stderr,"fstat returned %d on fd %d, errno: %d\n",
 			ret, fd, errno);
-		exit(2);
+		my_exit(2);
 	}
 	return stat_buf.st_size;
 
@@ -52,16 +52,16 @@ read_partition_block(int fd, void *buf, int blk, int blk_size)
 
 	ret = lseek(fd, blk * blk_size, SEEK_SET);
 	if(ret != blk * blk_size) {
-		printf("lseek: %08x, wanted: %08x, errno: %d\n", ret,
+		ki_printf("lseek: %08x, wanted: %08x, errno: %d\n", ret,
 			blk * blk_size, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	ret = read(fd, (char *)buf, blk_size);
 	if(ret != blk_size) {
-		printf("ret: %08x, wanted %08x, errno: %d\n", ret, blk_size,
+		ki_printf("ret: %08x, wanted %08x, errno: %d\n", ret, blk_size,
 			errno);
-		exit(1);
+		my_exit(1);
 	}
 }
 
@@ -98,7 +98,7 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 		block_size = 512;
 	}
 	if(sig != 0x4552 || block_size < 0x200 || block_size > MAX_BLOCK_SIZE) {
-		printf("Partition error: No driver descriptor map found\n");
+		ki_printf("Partition error: No driver descriptor map found\n");
 		return -1;
 	}
 
@@ -113,7 +113,7 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 				GET_BE_WORD32(part_map_ptr->map_blk_cnt));
 		}
 		if(sig != 0x504d) {
-			printf("Partition entry %d bad sig\n", cur_blk);
+			ki_printf("Partition entry %d bad sig\n", cur_blk);
 			return -1;
 		}
 
@@ -125,12 +125,12 @@ find_partition_by_name(int fd, char *name, Disk *dsk)
 			data_off = GET_BE_WORD32(part_map_ptr->data_start);
 			data_len = GET_BE_WORD32(part_map_ptr->data_cnt);
 			if(data_off + data_len > len) {
-				printf("Poorly formed entry\n");
+				ki_printf("Poorly formed entry\n");
 				return -1;
 			}
 
 			if(data_len < 10 || start < 1) {
-				printf("Poorly formed entry3\n");
+				ki_printf("Poorly formed entry3\n");
 				return -1;
 			}
 
@@ -168,13 +168,13 @@ smartport_error(void)
 	int	i;
 
 	pos = g_smpt_log_pos;
-	printf("Smartport log pos: %d\n", pos);
+	ki_printf("Smartport log pos: %d\n", pos);
 	for(i = 0; i < LEN_SMPT_LOG; i++) {
 		pos--;
 		if(pos < 0) {
 			pos = LEN_SMPT_LOG - 1;
 		}
-		printf("%d:%d: t:%04x, cmd:%02x, rts:%04x, "
+		ki_printf("%d:%d: t:%04x, cmd:%02x, rts:%04x, "
 			"cmd_l:%04x, x:%d, unit:%d, buf:%04x, blk:%04x\n",
 			i, pos,
 			g_smpt_log[pos].start_addr,
@@ -290,7 +290,7 @@ do_c70d(word32 arg0)
 	case 0x00:	/* Status == 0x00 and 0x40 */
 		if(param_cnt != 3) {
 			disk_printf("param_cnt %d is != 3!\n", param_cnt);
-			exit(8);
+			my_exit(8);
 		}
 		unit = get_memory_c((cmd_list+1) & mask, 0);
 		status_ptr_lo = get_memory_c((cmd_list+2) & mask, 0);
@@ -415,7 +415,7 @@ do_c70d(word32 arg0)
 			}
 			return;
 		}
-		printf("cmd: 00, unknown unit/status code!\n");
+		ki_printf("cmd: 00, unknown unit/status code!\n");
 		break;
 	case 0x01:	/* Read Block == 0x01 and 0x41 */
 		if(param_cnt != 3) {
@@ -548,7 +548,7 @@ do_c70d(word32 arg0)
 
 		switch(ctl_code) {
 		case 0x00:
-			printf("Performing a reset on unit %d\n", unit);
+			ki_printf("Performing a reset on unit %d\n", unit);
 			break;
 		default:
 			halt_printf("control code: %02x unknown!\n", ctl_code);
@@ -687,7 +687,7 @@ do_read_c7(int unit_num, word32 buf, int blk)
 	image_start = iwm.smartport[unit_num].image_start;
 	image_size = iwm.smartport[unit_num].image_size;
 	if(fd < 0) {
-		printf("c7_fd == %d!\n", fd);
+		ki_printf("c7_fd == %d!\n", fd);
 		if(blk != 2 && blk != 0) {
 			/* don't print error if only reading directory */
 			smartport_error();
@@ -712,7 +712,7 @@ do_read_c7(int unit_num, word32 buf, int blk)
 
 	len = read(fd, &local_buf[0], 0x200);
 	if(len != 0x200) {
-		printf("read returned %08x, errno:%d, blk:%04x, unit: %02x\n",
+		ki_printf("read returned %08x, errno:%d, blk:%04x, unit: %02x\n",
 			len, errno, blk, unit_num);
 		halt_printf("name: %s\n", iwm.smartport[unit_num].name_ptr);
 		smartport_error();
@@ -800,7 +800,7 @@ do_write_c7(int unit_num, word32 buf, int blk)
 	}
 
 	if(dsk->write_prot) {
-		printf("Write, but %s is write protected!\n", dsk->name_ptr);
+		ki_printf("Write, but %s is write protected!\n", dsk->name_ptr);
 		return 0x2b;
 	}
 
@@ -865,12 +865,12 @@ do_format_c7(int unit_num)
 	}
 
 	if(dsk->write_prot) {
-		printf("Format, but %s is write protected!\n", dsk->name_ptr);
+		ki_printf("Format, but %s is write protected!\n", dsk->name_ptr);
 		return 0x2b;
 	}
 
 	if(dsk->write_through_to_unix == 0) {
-		printf("Format of %s ignored\n", dsk->name_ptr);
+		ki_printf("Format of %s ignored\n", dsk->name_ptr);
 		return 0x00;
 	}
 
@@ -910,7 +910,7 @@ do_c700(word32 ret)
 	engine.kpc = 0x801;
 
 	if(ret != 0) {
-		printf("Failure reading boot disk in s7d1!\n");
+		ki_printf("Failure reading boot disk in s7d1!\n");
 		engine.kpc = 0xe000;
 	}
 }

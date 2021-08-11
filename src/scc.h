@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_scc_h[] = "@(#)$Header: scc.h,v 1.4 99/04/05 00:10:32 kentd Exp $";
+const char rcsid_scc_h[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/scc.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 #endif
 
 #ifndef KEGS_SCC_H

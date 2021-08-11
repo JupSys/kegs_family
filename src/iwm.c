@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.99 2000/09/24 01:01:46 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/iwm.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include "sim65816.h"
 #include "moremem.h"
@@ -20,6 +20,9 @@ const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.99 2000/09/24 01:01:46 kentd 
 #include "engine.h"
 #include "iwm.h"
 #include "dis.h"
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+#endif
 
 static void iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525);
 static void iwm_flush_disk_to_unix(Disk *dsk);
@@ -53,8 +56,8 @@ static void disk_nib_out(Disk *dsk, byte val, int size);
 static void disk_nib_end_track(Disk *dsk);
 static void iwm_show_a_track(Track *trk);
 static void maybe_parse_disk_conf_file(void);
-static void insert_disk(Disk *dsk, char *name, int virtual_image, int size);
-static void eject_named_disk(Disk *dsk, char *name);
+static void insert_disk(Disk *dsk, const char *name, int virtual_image, int size);
+static void eject_named_disk(Disk *dsk, const char *name);
 static void eject_if_untouched(Disk *dsk);
 static void eject_disk(Disk *dsk);
 static void kegs_file_copy(char *orig_name, char *new_name);
@@ -64,13 +67,6 @@ static int iwm_read_data_35(Disk *dsk, int fast_disk_emul, double dcycs);
 static int iwm_read_data_525(Disk *dsk, int fast_disk_emul, double dcycs);
 static void iwm_write_data_35(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
 static void iwm_write_data_525(Disk *dsk, word32 val, int fast_disk_emul,double dcycs);
-
-#define NIB_LEN_525	0x1900		/* 51072 bits per track */
-#define NIBS_FROM_ADDR_TO_DATA		20
-
-#define DSK_TYPE_RAW			0
-#define DSK_TYPE_PRODOS			1
-#define DSK_TYPE_NIB			2
 
 static char g_kegs_conf_name[256];
 
@@ -120,6 +116,8 @@ static int	g_track_nibs_35[] = {
 
 
 int	g_fast_disk_emul = 1;
+// OG : add slow parameters for 525
+int	g_fast_disk_emul_525 = 0;
 int	g_slow_525_emul_wr = 0;
 static double	g_dcycs_end_emul_wr = 0.0;
 static int	g_fast_disk_unnib = 0;
@@ -195,7 +193,10 @@ iwm_init()
 		iwm_init_drive(&(iwm.smartport[i]), 1, i, 0);
 	}
 
+	/*
+	// Reboot
 	if(from_disk_byte_valid == 0) {
+	*/
 		for(i = 0; i < 256; i++) {
 			from_disk_byte[i] = -1;
 		}
@@ -204,17 +205,22 @@ iwm_init()
 			from_disk_byte[val] = i;
 		}
 		from_disk_byte_valid = 1;
+	/*
 	} else {
 		halt_printf("iwm_init called twice!\n");
 	}
+	*/
 
+#ifndef DISABLE_CONFFILE
 	// Find any kegs_conf and disk_conf files
 	setup_kegs_file(&g_kegs_conf_name[0], sizeof(g_kegs_conf_name), 0,
 					&g_kegs_conf_names[0]);
 
+	maybe_parse_disk_conf_file();
+#endif
+
 	iwm_reset();
 
-	maybe_parse_disk_conf_file();
 }
 
 void
@@ -285,7 +291,7 @@ iwm_flush_disk_to_unix(Disk *dsk)
 		return;
 	}
 
-	printf("Writing disk %s to Unix\n", dsk->name_ptr);
+	ki_printf("Writing disk %s to Unix\n", dsk->name_ptr);
 	dsk->disk_dirty = 0;
 	num_dirty = 0;
 
@@ -295,7 +301,7 @@ iwm_flush_disk_to_unix(Disk *dsk)
 		ret = disk_track_to_unix(dsk, j, &(buffer[0]));
 
 		if(ret != 1 && ret != 0) {
-			printf("iwm_flush_disk_to_unix ret: %d, cannot write "
+			ki_printf("iwm_flush_disk_to_unix ret: %d, cannot write "
 				"image to unix\n", ret);
 			halt_printf("Adjusting image not to write through!\n");
 			dsk->write_through_to_unix = 0;
@@ -329,7 +335,7 @@ iwm_flush_disk_to_unix(Disk *dsk)
 
 		ret = write(dsk->fd, &(buffer[0]), unix_len);
 		if(ret != unix_len) {
-			printf("write: %08x, errno:%d, qtrk: %02x, disk: %s\n",
+			ki_printf("write: %08x, errno:%d, qtrk: %02x, disk: %s\n",
 				ret, errno, j, dsk->name_ptr);
 		}
 	}
@@ -348,16 +354,19 @@ int g_iwm_vbl_count = 0;
 void
 iwm_vbl_update()
 {
+#ifndef DISABLE_CONFFILE
 	struct stat stat_buf;
-	Disk	*dsk;
 	time_t	mtime;
-	int	motor_on;
 	int	ret;
+#endif
+	Disk	*dsk;
+	int	motor_on;
+	
 	int	i;
 
 	if(iwm.motor_on && iwm.motor_off) {
 		if(iwm.motor_off_vbl_count <= g_vbl_count) {
-			printf("Disk timer expired, drive off: %08x\n",
+			ki_printf("Disk timer expired, drive off: %08x\n",
 				g_vbl_count);
 			iwm.motor_on = 0;
 			iwm.motor_off = 0;
@@ -390,6 +399,7 @@ iwm_vbl_update()
 
 		/* Also see if disk_conf has changed */
 
+#ifndef DISABLE_CONFFILE
 		ret = stat(g_kegs_conf_name, &stat_buf);
 		if(ret != 0) {
 			halt_printf("IWM: stat of disk_conf ret:%d, errno:%d\n",
@@ -406,6 +416,7 @@ iwm_vbl_update()
 		}
 
 		maybe_parse_disk_conf_file();
+#endif
 	}
 }
 
@@ -413,17 +424,17 @@ iwm_vbl_update()
 void
 iwm_show_stats()
 {
-	printf("IWM stats: q7,q6: %d, %d, reset,enable2: %d,%d, mode: %02x\n",
+	ki_printf("IWM stats: q7,q6: %d, %d, reset,enable2: %d,%d, mode: %02x\n",
 		iwm.q7, iwm.q6, iwm.reset, iwm.enable2, iwm.iwm_mode);
-	printf("motor: %d,%d, motor35:%d drive: %d, on: %d, head35: %d "
+	ki_printf("motor: %d,%d, motor35:%d drive: %d, on: %d, head35: %d "
 		"phs: %d %d %d %d\n",
 		iwm.motor_on, iwm.motor_off, g_iwm_motor_on,
 		iwm.drive_select, g_apple35_sel,
 		head_35, iwm.iwm_phase[0], iwm.iwm_phase[1], iwm.iwm_phase[2],
 		iwm.iwm_phase[3]);
-	printf("iwm.drive525[0].fd: %d, [1].fd: %d\n",
+	ki_printf("iwm.drive525[0].fd: %d, [1].fd: %d\n",
 		iwm.drive525[0].fd, iwm.drive525[1].fd);
-	printf("iwm.drive525[0].last_phase: %d, [1].last_phase: %d\n",
+	ki_printf("iwm.drive525[0].last_phase: %d, [1].last_phase: %d\n",
 		iwm.drive525[0].last_phase, iwm.drive525[1].last_phase);
 }
 
@@ -529,8 +540,8 @@ iwm_touch_switches(int loc, double dcycs)
 			iwm.q7 = on;
 			break;
 		default:
-			printf("iwm_touch_switches: loc: %02x unknown!\n", loc);
-			exit(2);
+			ki_printf("iwm_touch_switches: loc: %02x unknown!\n", loc);
+			my_exit(2);
 		}
 	}
 
@@ -611,13 +622,13 @@ iwm525_phase_change(int drive, int phase)
 	qtr_track += delta;
 	if(qtr_track < 0) {
 #if 0
-		printf("GRIND...GRIND...GRIND\n");
+		ki_printf("GRIND...GRIND...GRIND\n");
 #endif
 		qtr_track = 0;
 		last_phase = 0;
 	}
 	if(qtr_track > 4*34) {
-		printf("Disk arm moved past track 0x21, moving it back\n");
+		ki_printf("Disk arm moved past track 0x21, moving it back\n");
 		qtr_track = 4*34;
 		last_phase = 0;
 	}
@@ -771,7 +782,7 @@ iwm_do_action35(double dcycs)
 		case 0x03:	/* reset disk-switched flag? */
 			iwm_printf("Iwm reset disk switch\n");
 			dsk->just_ejected = 0;
-			/* set_halt(1); */
+			/* set_halt(HALT_WANTTOQUIT); */
 			break;
 		case 0x04:	/* step disk */
 			if(iwm.step_direction35) {
@@ -789,7 +800,7 @@ iwm_do_action35(double dcycs)
 			iwm.motor_on35 = 0;
 			break;
 		case 0x0d:	/* eject disk */
-			printf("Ejecting disk!\n");
+			ki_printf("Ejecting disk!\n");
 			dsk->just_ejected = 4;
 			eject_disk_by_num(5, drive+1);
 			break;
@@ -833,7 +844,7 @@ iwm_read_c0ec(double dcycs)
 			return iwm_read_data_35(dsk, g_fast_disk_emul, dcycs);
 		} else {
 			dsk = &(iwm.drive525[drive]);
-			return iwm_read_data_525(dsk, g_fast_disk_emul, dcycs);
+			return iwm_read_data_525(dsk, g_fast_disk_emul_525, dcycs);
 		}
 
 	}
@@ -854,6 +865,9 @@ read_iwm(int loc, double dcycs)
 	int	drive;
 	int	val;
 
+#ifdef DISABLE_CONFFILE
+	maybe_parse_disk_conf_file();
+#endif
 	loc = loc & 0xf;
 	on = loc & 1;
 
@@ -918,9 +932,9 @@ read_iwm(int loc, double dcycs)
 			} else {
 				status = 0xc0;
 				diff_dcycs = dcycs - dsk->dcycs_last_read;
-				cmp = 16.0;
+				cmp = 16;
 				if(dsk->disk_525 == 0) {
-					cmp = 32.0;
+					cmp = 32;
 				}
 				if(diff_dcycs > cmp) {
 					iwm_printf("Write underrun!\n");
@@ -991,7 +1005,7 @@ write_iwm(int loc, int val, double dcycs)
 			if(iwm.enable2) {
 				iwm_write_enable2(val, dcycs);
 			} else {
-				printf("Write iwm1, st: %02x, loc: %x: %02x\n",
+				ki_printf("Write iwm1, st: %02x, loc: %x: %02x\n",
 					state, loc, val);
 			}
 		}
@@ -1216,7 +1230,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		track = disk_unnib_4x4(dsk);
 		phys_sec = disk_unnib_4x4(dsk);
 		if(phys_sec < 0 || phys_sec > 15) {
-			printf("Track %02x, read sec as %02x\n", qtr_track>>2,
+			ki_printf("Track %02x, read sec as %02x\n", qtr_track>>2,
 				phys_sec);
 			break;
 		}
@@ -1228,7 +1242,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		cksum = disk_unnib_4x4(dsk);
 		if((vol ^ track ^ phys_sec ^ cksum) != 0) {
 			/* not correct format */
-			printf("Track %02x not DOS 3.3 since hdr cksum, %02x "
+			ki_printf("Track %02x not DOS 3.3 since hdr cksum, %02x "
 				"%02x %02x %02x\n",
 				qtr_track>>2, vol, track, phys_sec, cksum);
 			break;
@@ -1236,13 +1250,13 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 
 		/* see what sector it is */
 		if(track != (qtr_track>>2) || (phys_sec < 0)||(phys_sec > 15)) {
-			printf("Track %02x bad since track: %02x, sec: %02x\n",
+			ki_printf("Track %02x bad since track: %02x, sec: %02x\n",
 				qtr_track>>2, track, phys_sec);
 			break;
 		}
 
 		if(sector_done[phys_sec]) {
-			printf("Already done sector %02x on track %02x!\n",
+			ki_printf("Already done sector %02x on track %02x!\n",
 				phys_sec, qtr_track>>2);
 			break;
 		}
@@ -1272,9 +1286,9 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		}
 
 		if(i >= NIBS_FROM_ADDR_TO_DATA) {
-			printf("No data header, track %02x, sec %02x\n",
+			ki_printf("No data header, track %02x, sec %02x\n",
 				qtr_track>>2, phys_sec);
-			printf("nib_pos: %08x\n", dsk->nib_pos);
+			ki_printf("nib_pos: %08x\n", dsk->nib_pos);
 			break;
 		}
 
@@ -1286,9 +1300,9 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
 			if(val2 < 0) {
-				printf("Bad data area1, val:%02x,val2:%02x\n",
+				ki_printf("Bad data area1, val:%02x,val2:%02x\n",
 								val, val2);
-				printf(" i:%03x,n_pos:%04x\n", i, dsk->nib_pos);
+				ki_printf(" i:%03x,n_pos:%04x\n", i, dsk->nib_pos);
 				break;
 			}
 			prev_val = val2 ^ prev_val;
@@ -1300,8 +1314,8 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
 			if(val2 < 0) {
-				printf("Bad data area2, read: %02x\n", val);
-				printf("  nib_pos: %04x\n", dsk->nib_pos);
+				ki_printf("Bad data area2, read: %02x\n", val);
+				ki_printf("  nib_pos: %04x\n", dsk->nib_pos);
 				break;
 			}
 			prev_val = val2 ^ prev_val;
@@ -1312,14 +1326,14 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		val = iwm_read_data(dsk, 1, 0);
 		val2 = from_disk_byte[val];
 		if(val2 < 0) {
-			printf("Bad data area3, read: %02x\n", val);
-			printf("  nib_pos: %04x\n", dsk->nib_pos);
+			ki_printf("Bad data area3, read: %02x\n", val);
+			ki_printf("  nib_pos: %04x\n", dsk->nib_pos);
 			break;
 		}
 		if(val2 != prev_val) {
-			printf("Bad data cksum, got %02x, wanted: %02x\n",
+			ki_printf("Bad data cksum, got %02x, wanted: %02x\n",
 				val2, prev_val);
-			printf("  nib_pos: %04x\n", dsk->nib_pos);
+			ki_printf("  nib_pos: %04x\n", dsk->nib_pos);
 			break;
 		}
 
@@ -1355,12 +1369,12 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		return 1;
 	}
 
-	printf("Nibblization not done, %02x sectors found on track %02x\n",
+	ki_printf("Nibblization not done, %02x sectors found on track %02x\n",
 		num_sectors_done, qtr_track>>2);
-	printf("my_nib_cnt: %04x, nib_pos: %04x, trk_len: %04x\n", my_nib_cnt,
+	ki_printf("my_nib_cnt: %04x, nib_pos: %04x, trk_len: %04x\n", my_nib_cnt,
 		tmp_nib_pos, track_len);
 	for(i = 0; i < 16; i++) {
-		printf("sector_done[%d] = %d\n", i, sector_done[i]);
+		ki_printf("sector_done[%d] = %d\n", i, sector_done[i]);
 	}
 	return -1;
 }
@@ -1437,41 +1451,41 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		val = iwm_read_data(dsk, 1, 0);
 		phys_track = from_disk_byte[val];
 		if(phys_track != (track & 0x3f)) {
-			printf("Track %02x.%d, read track %02x, %02x\n",
+			ki_printf("Track %02x.%d, read track %02x, %02x\n",
 				track, side, phys_track, val);
 			break;
 		}
 
 		phys_sec = from_disk_byte[iwm_read_data(dsk, 1, 0)];
 		if(phys_sec < 0 || phys_sec >= num_sectors) {
-			printf("Track %02x.%d, read sector %02x??\n",
+			ki_printf("Track %02x.%d, read sector %02x??\n",
 				track, side, phys_sec);
 			break;
 		}
 		phys_side = from_disk_byte[iwm_read_data(dsk, 1, 0)];
 
 		if(phys_side != ((side << 5) + (track >> 6))) {
-			printf("Track %02x.%d, read side %02x??\n",
+			ki_printf("Track %02x.%d, read side %02x??\n",
 				track, side, phys_side);
 			break;
 		}
 		phys_capacity = from_disk_byte[iwm_read_data(dsk, 1, 0)];
 		if(phys_capacity != 0x24 && phys_capacity != 0x22) {
-			printf("Track %02x.%x capacity: %02x != 0x24/22\n",
+			ki_printf("Track %02x.%x capacity: %02x != 0x24/22\n",
 				track, side, phys_capacity);
 		}
 		cksum = from_disk_byte[iwm_read_data(dsk, 1, 0)];
 
 		tmp = phys_track ^ phys_sec ^ phys_side ^ phys_capacity;
 		if(cksum != tmp) {
-			printf("Track %02x.%d, sector %02x, cksum: %02x.%02x\n",
+			ki_printf("Track %02x.%d, sector %02x, cksum: %02x.%02x\n",
 				track, side, phys_sec, cksum, tmp);
 			break;
 		}
 
 
 		if(sector_done[phys_sec]) {
-			printf("Already done sector %02x on track %02x.%x!\n",
+			ki_printf("Already done sector %02x on track %02x.%x!\n",
 				phys_sec, track, side);
 			break;
 		}
@@ -1485,22 +1499,22 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			}
 		}
 		if(val != 0xd5) {
-			printf("No data header, track %02x.%x, sec %02x\n",
+			ki_printf("No data header, track %02x.%x, sec %02x\n",
 				track, side, phys_sec);
 			break;
 		}
 
 		val = iwm_read_data(dsk, 1, 0);
 		if(val != 0xaa) {
-			printf("Bad data hdr1,val:%02x trk %02x.%x, sec %02x\n",
+			ki_printf("Bad data hdr1,val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
-			printf("nib_pos: %08x\n", dsk->nib_pos);
+			ki_printf("nib_pos: %08x\n", dsk->nib_pos);
 			break;
 		}
 
 		val = iwm_read_data(dsk, 1, 0);
 		if(val != 0xad) {
-			printf("Bad data hdr2,val:%02x trk %02x.%x, sec %02x\n",
+			ki_printf("Bad data hdr2,val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
 			break;
 		}
@@ -1510,7 +1524,7 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		/* check sector again */
 		val = from_disk_byte[iwm_read_data(dsk, 1, 0)];
 		if(val != phys_sec) {
-			printf("Bad data hdr3,val:%02x trk %02x.%x, sec %02x\n",
+			ki_printf("Bad data hdr3,val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
 			break;
 		}
@@ -1527,8 +1541,8 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
 			if(val2 < 0) {
-				printf("Bad data area1b, read: %02x\n", val);
-				printf(" i:%03x,n_pos:%04x\n", i, dsk->nib_pos);
+				ki_printf("Bad data area1b, read: %02x\n", val);
+				ki_printf(" i:%03x,n_pos:%04x\n", i, dsk->nib_pos);
 				break;
 			}
 			tmp_66 = val2;
@@ -1540,7 +1554,7 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 			val = iwm_read_data(dsk, 1, 0);
 			val2 = from_disk_byte[val];
 			if(val2 < 0) {
-				printf("Bad data area2, read: %02x\n", val);
+				ki_printf("Bad data area2, read: %02x\n", val);
 				break;
 			}
 
@@ -1591,8 +1605,8 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		val = iwm_read_data(dsk, 1, 0);
 		val2 = from_disk_byte[val] + val2;
 		if(tmp_5e != val2) {
-			printf("Checksum 5e bad: %02x vs %02x\n", tmp_5e, val2);
-			printf("val:%02x trk %02x.%x, sec %02x\n",
+			ki_printf("Checksum 5e bad: %02x vs %02x\n", tmp_5e, val2);
+			ki_printf("val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
 			break;
 		}
@@ -1600,8 +1614,8 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		val = iwm_read_data(dsk, 1, 0);
 		val2 = from_disk_byte[val] + tmp_67;
 		if(tmp_5d != val2) {
-			printf("Checksum 5d bad: %02x vs %02x\n", tmp_5e, val2);
-			printf("val:%02x trk %02x.%x, sec %02x\n",
+			ki_printf("Checksum 5d bad: %02x vs %02x\n", tmp_5e, val2);
+			ki_printf("val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
 			break;
 		}
@@ -1609,8 +1623,8 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		val = iwm_read_data(dsk, 1, 0);
 		val2 = from_disk_byte[val] + tmp_66;
 		if(tmp_5c != val2) {
-			printf("Checksum 5c bad: %02x vs %02x\n", tmp_5e, val2);
-			printf("val:%02x trk %02x.%x, sec %02x\n",
+			ki_printf("Checksum 5c bad: %02x vs %02x\n", tmp_5e, val2);
+			ki_printf("val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
 			break;
 		}
@@ -1618,15 +1632,15 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		/* Whew, got it!...check for DE AA */
 		val = iwm_read_data(dsk, 1, 0);
 		if(val != 0xde) {
-			printf("Bad data epi1,val:%02x trk %02x.%x, sec %02x\n",
+			ki_printf("Bad data epi1,val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
-			printf("nib_pos: %08x\n", dsk->nib_pos);
+			ki_printf("nib_pos: %08x\n", dsk->nib_pos);
 			break;
 		}
 
 		val = iwm_read_data(dsk, 1, 0);
 		if(val != 0xaa) {
-			printf("Bad data epi2,val:%02x trk %02x.%x, sec %02x\n",
+			ki_printf("Bad data epi2,val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
 			break;
 		}
@@ -1664,10 +1678,10 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 	}
 
 	if(status < 0) {
-		printf("dsk->nib_pos: %04x, status: %d\n", dsk->nib_pos,
+		ki_printf("dsk->nib_pos: %04x, status: %d\n", dsk->nib_pos,
 			status);
 		for(i = 0; i < num_sectors; i++) {
-			printf("sector done[%d] = %d\n", i, sector_done[i]);
+			ki_printf("sector done[%d] = %d\n", i, sector_done[i]);
 		}
 	}
 
@@ -1679,7 +1693,7 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 		return 1;
 	}
 
-	printf("Nibblization not done, %02x sectors found on track %02x\n",
+	ki_printf("Nibblization not done, %02x sectors found on track %02x\n",
 		num_sectors_done, qtr_track>>2);
 	return -1;
 
@@ -1702,7 +1716,7 @@ disk_track_to_unix(Disk *dsk, int qtr_track, byte *outbuf)
 
 	if(trk->track_len == 0 || trk->track_dirty == 0) {
 #if 0
-		printf("disk_track_to_unix: dirty: %d\n", trk->track_dirty);
+		ki_printf("disk_track_to_unix: dirty: %d\n", trk->track_dirty);
 #endif
 		return 0;
 	}
@@ -1730,7 +1744,7 @@ show_hex_data(byte *buf, int count)
 	int	i;
 
 	for(i = 0; i < count; i += 16) {
-		printf("%04x: %02x %02x %02x %02x %02x %02x %02x %02x "
+		ki_printf("%04x: %02x %02x %02x %02x %02x %02x %02x %02x "
 			"%02x %02x %02x %02x %02x %02x %02x %02x\n", i,
 			buf[i+0], buf[i+1], buf[i+2], buf[i+3], 
 			buf[i+4], buf[i+5], buf[i+6], buf[i+7], 
@@ -1763,7 +1777,7 @@ disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size)
 	ret2 = -1;
 	for(i = 0; i < size; i++) {
 		if(buffer[i] != buf[i]) {
-			printf("buffer[%04x]: %02x != %02x\n", i, buffer[i],
+			ki_printf("buffer[%04x]: %02x != %02x\n", i, buffer[i],
 				buf[i]);
 			ret2 = i;
 			break;
@@ -1771,13 +1785,13 @@ disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size)
 	}
 
 	if(ret != 1 || ret2 >= 0) {
-		printf("disk_check_nib ret:%d, ret2:%d for q_track %03x\n",
+		ki_printf("disk_check_nib ret:%d, ret2:%d for q_track %03x\n",
 			ret, ret2, qtr_track);
 		show_hex_data(buf, 0x1000);
 		show_hex_data(buffer, 0x1000);
 		iwm_show_a_track(&(dsk->tracks[qtr_track]));
 
-		exit(2);
+		my_exit(2);
 	}
 }
 
@@ -1800,21 +1814,21 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 	must_clear_track = 0;
 
 	if(unix_len > TRACK_BUF_LEN) {
-		printf("diks_unix_to_nib: requested len of image %s = %05x\n",
+		ki_printf("diks_unix_to_nib: requested len of image %s = %05x\n",
 			dsk->name_ptr, unix_len);
 	}
 
 	if(unix_pos >= 0) {
 		ret = lseek(dsk->fd, unix_pos, SEEK_SET);
 		if(ret != unix_pos) {
-			printf("lseek of disk %s len 0x%x ret: %d, errno: %d\n",
+			ki_printf("lseek of disk %s len 0x%x ret: %d, errno: %d\n",
 				dsk->name_ptr, unix_pos, ret, errno);
 			must_clear_track = 1;
 		}
 
 		len = read(dsk->fd, track_buf, unix_len);
 		if(len != unix_len) {
-			printf("read of disk %s q_trk %d ret: %d, errno: %d\n",
+			ki_printf("read of disk %s q_trk %d ret: %d, errno: %d\n",
 				dsk->name_ptr, qtr_track, ret, errno);
 			must_clear_track = 1;
 		}
@@ -1827,10 +1841,10 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 	}
 
 #if 0
-	printf("Q_track %02x dumped out\n", qtr_track);
+	ki_printf("Q_track %02x dumped out\n", qtr_track);
 
 	for(i = 0; i < 4096; i += 32) {
-		printf("%04x: %02x%02x%02x%02x%02x%02x%02x%02x "
+		ki_printf("%04x: %02x%02x%02x%02x%02x%02x%02x%02x "
 			"%02x%02x%02x%02x%02x%02x%02x%02x "
 			"%02x%02x%02x%02x%02x%02x%02x%02x "
 			"%02x%02x%02x%02x%02x%02x%02x%02x\n", i,
@@ -2045,9 +2059,9 @@ iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 
 		log_sec = phys_to_log_sec[phys_sec];
 		if(log_sec < 0) {
-			printf("Track: %02x.%x phys_sec: %02x = %d!\n",
+			ki_printf("Track: %02x.%x phys_sec: %02x = %d!\n",
 				track, side, phys_sec, log_sec);
-			exit(2);
+			my_exit(2);
 		}
 
 		/* Create sync headers */
@@ -2241,10 +2255,10 @@ disk_nib_out(Disk *dsk, byte val, int size)
 	track_len = trk->track_len;
 
 	if(track_len <= 10) {
-		printf("Writing to an invalid qtr track: %02x!\n", qtr_track);
-		printf("name: %s, track_len: %08x, val: %08x, size: %d\n",
+		ki_printf("Writing to an invalid qtr track: %02x!\n", qtr_track);
+		ki_printf("name: %s, track_len: %08x, val: %08x, size: %d\n",
 			dsk->name_ptr, track_len, val, size);
-		exit(1);
+		my_exit(1);
 		return;
 	}
 
@@ -2346,13 +2360,13 @@ iwm_show_track(int slot_drive, int track)
 	trk = &(dsk->tracks[qtr_track]);
 
 	if(trk->track_len <= 0) {
-		printf("Track_len: %d\n", trk->track_len);
-		printf("No track for type: %d, drive: %d, qtrk: %02x\n",
+		ki_printf("Track_len: %d\n", trk->track_len);
+		ki_printf("No track for type: %d, drive: %d, qtrk: %02x\n",
 			g_apple35_sel, drive, qtr_track);
 		return;
 	}
 
-	printf("Current drive: %d, q_track: %02x\n", drive, qtr_track);
+	ki_printf("Current drive: %d, q_track: %02x\n", drive, qtr_track);
 
 	iwm_show_a_track(trk);
 }
@@ -2365,20 +2379,20 @@ iwm_show_a_track(Track *trk)
 	int	pos;
 	int	i;
 
-	printf("  Showtrack:dirty: %d, pos: %04x, ovfl: %04x, len: %04x\n",
+	ki_printf("  Showtrack:dirty: %d, pos: %04x, ovfl: %04x, len: %04x\n",
 		trk->track_dirty, trk->dsk->nib_pos,
 		trk->overflow_size, trk->track_len);
 
 	len = trk->track_len;
-	printf("Track len in bytes: %04x\n", len);
+	ki_printf("Track len in bytes: %04x\n", len);
 	if(len >= 2*15000) {
 		len = 2*15000;
-		printf("len too big, using %04x\n", len);
+		ki_printf("len too big, using %04x\n", len);
 	}
 
 	pos = 0;
 	for(i = 0; i < len; i += 16) {
-		printf("%04x: %2d,%02x %2d,%02x %2d,%02x %2d,%02x "
+		ki_printf("%04x: %2d,%02x %2d,%02x %2d,%02x %2d,%02x "
 			"%2d,%02x %2d,%02x %2d,%02x %2d,%02x\n", pos,
 			trk->nib_area[pos], trk->nib_area[pos+1],
 			trk->nib_area[pos+2], trk->nib_area[pos+3],
@@ -2399,7 +2413,7 @@ iwm_show_a_track(Track *trk)
 		sum += trk->nib_area[i];
 	}
 
-	printf("bit_sum: %d, expected: %d, overflow_size: %d\n",
+	ki_printf("bit_sum: %d, expected: %d, overflow_size: %d\n",
 		sum, len*8/2, trk->overflow_size);
 }
 
@@ -2408,6 +2422,8 @@ iwm_show_a_track(Track *trk)
 void
 maybe_parse_disk_conf_file()
 {
+
+#ifndef DISABLE_CONFFILE
 	char	buf[CONF_BUF_LEN];
 	FILE	*fconf;
 	char	*ptr;
@@ -2435,7 +2451,7 @@ maybe_parse_disk_conf_file()
 		return;
 	}
 
-	printf("Parsing disk_conf_file\n");
+	ki_printf("Parsing disk_conf_file\n");
 	g_reparse_delay = -1;
 
 	g_highest_smartport_unit = -1;
@@ -2451,8 +2467,8 @@ maybe_parse_disk_conf_file()
 
 	fconf = fopen(g_kegs_conf_name, "rt");
 	if(fconf == 0) {
-		printf("cannot open disk_conf!  Stopping!\n");
-		exit(3);
+		ki_printf("cannot open disk_conf!  Stopping!\n");
+		my_exit(3);
 	}
 
 	line = 0;
@@ -2515,12 +2531,12 @@ maybe_parse_disk_conf_file()
 		drive--;
 
 		if(disk_525 != 0 && disk_525 != 1) {
-			printf("Not valid slot: %c\n", buf[pos]);
+			ki_printf("Not valid slot: %c\n", buf[pos]);
 			continue;
 		}
 		if(drive < 0 || (smartport && (drive >= MAX_C7_DISKS)) ||
 						(!smartport && (drive > 1))) {
-			printf("Not valid drive: %c\n", buf[pos+3]);
+			ki_printf("Not valid drive: %c\n", buf[pos+3]);
 			continue;
 		}
 
@@ -2532,7 +2548,7 @@ maybe_parse_disk_conf_file()
 				size = size * 10 + buf[pos] - '0';
 				pos++;
 			}
-			printf("Read optional size as: %d\n", size);
+			ki_printf("Read optional size as: %d\n", size);
 			size = size * 1024;
 		}
 
@@ -2566,9 +2582,41 @@ maybe_parse_disk_conf_file()
 
 	ret = fclose(fconf);
 	if(ret != 0) {
-		printf("Closing disk_conf ret: %d, errno: %d\n", ret, errno);
-		exit(4);
+		ki_printf("Closing disk_conf ret: %d, errno: %d\n", ret, errno);
+		my_exit(4);
 	}
+
+#else
+
+	int i;
+
+	if (ki_mountImages())
+	{
+		ki_printf("parsing file...\n");
+		
+	
+		for(i = 0; i < MAX_C7_DISKS; i++) {
+			if(i < 2) {
+				iwm.drive525[i].just_ejected |= 0x80;
+				iwm.drive35[i].just_ejected |= 0x80;
+			}
+			iwm.smartport[i].just_ejected |= 0x80;
+		}
+
+				
+		insert_disk(&iwm.drive35[0],ki_getLocalIMG(5,1), 0,0);
+		insert_disk(&iwm.drive35[1],ki_getLocalIMG(5,2), 0,0);
+		insert_disk(&iwm.drive525[0],ki_getLocalIMG(6,1), 0,0);
+		insert_disk(&iwm.drive525[1],ki_getLocalIMG(6,2), 0,0);
+		if (ki_getLocalIMG(7,0))
+			g_highest_smartport_unit = 0;
+		else
+			g_highest_smartport_unit = -1;
+		insert_disk(&iwm.smartport[0],ki_getLocalIMG(7,0), 0,0);
+
+	}
+	
+#endif
 
 	/* and unmount/eject any disks that are now gone */
 	for(i = 0; i < MAX_C7_DISKS; i++) {
@@ -2584,7 +2632,7 @@ maybe_parse_disk_conf_file()
 
 
 void
-insert_disk(Disk *dsk, char *name, int virtual_image, int size)
+insert_disk(Disk *dsk, const char *name, int virtual_image, int size)
 {
 	char	tmp_buf[1024];
 	byte	buf_2img[512];
@@ -2592,7 +2640,6 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	char	*partition_name;
 	int	cmp_o, cmp_p, cmp_dot;
 	int	cmp_b, cmp_i, cmp_n;
-	int	acc;
 	int	can_write;
 	int	len;
 	int	nibs;
@@ -2602,13 +2649,19 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	int	ret;
 	int	tmp;
 	int	i;
+#ifdef HAVE_ZLIB
+	gzFile gf;
+#endif
+
+	
+	if (!name) return;
 
 	tmp = dsk->disk_525 + 5;
 	if(dsk->smartport) {
 		/* print smartport disks at s7dx */
 		tmp += 2;
 	}
-	printf("Inserting disk %s in slot %d, drive: %d\n", name,
+	ki_printf("Inserting disk %s in slot %d, drive: %d\n", name,
 		tmp, dsk->drive + 1);
 
 	dsk->just_ejected &= 0x7f;
@@ -2617,7 +2670,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		/* See if it has the same name--if so, just leave it */
 		if(!strcmp(dsk->name_ptr, name)) {
 			/* It's a match! Do nothing */
-			printf("Not remounting s%dd%d: %s\n", dsk->disk_525+5,
+			ki_printf("Not remounting s%dd%d: %s\n", dsk->disk_525+5,
 				dsk->drive, dsk->name_ptr);
 			return;
 		}
@@ -2636,14 +2689,26 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		eject_named_disk(&iwm.smartport[i], name);
 	}
 
-	name_len = strlen(name) + 1;
-	dsk->name_ptr = (char *)malloc(name_len);
-	memcpy(dsk->name_ptr, name, name_len);
+	if(dsk->name_ptr != 0) {
+		/* free old name_ptr */
+		free(dsk->name_ptr);
+	}
 
-	iwm_printf("Opening up disk image named: %s\n", dsk->name_ptr);
+	name_len = strlen(name);
+	name_ptr = (char *)malloc(name_len + 1);
+	memcpy(name_ptr, name, name_len + 1);
+	dsk->name_ptr = name_ptr;
+
+	iwm_printf("Opening up disk image named: %s\n", name_ptr);
+
+	if (name_len >= sizeof(tmp_buf) - 3) {
+	    ki_printf("Disk image name too long: %s\n", name_ptr);
+	    return;
+	}
+
+	iwm_printf("Opening up disk image named: %s\n", name_ptr);
 
 	/* see if it has a partition name */
-	name_ptr = dsk->name_ptr;
 	partition_name = 0;
 	tmp_buf[0] = 0;
 	for(i = 0; i < name_len; i++) {
@@ -2657,18 +2722,60 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		tmp_buf[i+1] = 0;
 	}
 
-	/* first, see if file exists.  If it doesn't just return */
-	dsk->fd = open(tmp_buf, O_RDONLY | O_BINARY, 0x1b6);
-	if(dsk->fd < 0) {
-		printf("Disk image %s does not exist!\n", tmp_buf);
-		return;
-	}
-	close(dsk->fd);
-
-	dsk->fd = open(tmp_buf, O_RDWR | O_BINARY, 0x1b6);
+	dsk->fd = -1;
 	can_write = 1;
+
+#ifdef HAVE_ZLIB
+	/* try opening gzipped image read-only first */
+	if(!((name_len > 3) && (strcmp(&name_ptr[name_len - 3], ".gz")) == 0)) {
+	    tmp_buf[name_len] = '.';
+	    tmp_buf[name_len+1] = 'g';
+	    tmp_buf[name_len+2] = 'z';
+	    tmp_buf[name_len+3] = 0;
+	}
+	gf = gzopen(tmp_buf, "rb");
+	if (gf == NULL) {
+	    /* remove .gz extension */
+	    tmp_buf[name_len] = 0;
+	}
+	else {
+	    const size_t buflen = 64 * 1024;
+
+	    iwm_printf("gzipped file %s opened successfully\n", tmp_buf);
+	    strncpy(tmp_buf,"/tmp/kegs-XXXXXX", sizeof(tmp_buf));
+	    dsk->fd = mkstemp (tmp_buf);
+	    if (dsk->fd < 0) {
+		ki_printf("Error: cannot create temp file %s\n",tmp_buf);
+		gzclose(gf);
+		return;
+	    }
+	    unlink (tmp_buf);
+	    char *buffer = malloc (buflen);
+	    while (!gzeof (gf)) {
+		size_t rcount, wcount;
+		rcount = gzread (gf,buffer,buflen);
+		if (rcount < 1)
+		    break;
+		wcount = write (dsk->fd, buffer, rcount);
+		if (wcount != rcount) {
+		    ki_printf("Error: cannot create temp file %s (disk full?)\n",tmp_buf);
+		    free(buffer);
+		    gzclose (gf);
+		    close(dsk->fd);
+		    dsk->fd = -1;
+		    return;
+		}
+	    }
+	    free (buffer);
+	    gzclose (gf);
+	    lseek(dsk->fd, 0, SEEK_SET);
+	}
+#endif
+	/* first, see if file exists.  If it doesn't just return */
+	if(dsk->fd < 0)
+	    dsk->fd = open(tmp_buf, O_RDWR | O_BINARY, 0x1b6);
 	if(dsk->fd < 0) {
-		printf("Trying to open %s read-only, errno: %d\n", tmp_buf,
+		ki_printf("Trying to open %s read-only, errno: %d\n", tmp_buf,
 								errno);
 		dsk->fd = open(tmp_buf, O_RDONLY | O_BINARY, 0x1b6);
 		can_write = 0;
@@ -2691,20 +2798,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		}
 	}
 
-	/* I used to allow images that were "executable" to mean KEGS will */
-	/*  treat the image as not write-protected, but will not propagate */
-	/*  changes through to the Unix file */
-	/* This confused many users, and no one seems to have used it, so */
-	/*  I'm getting rid of it */
-
-	if(dsk->fd >= 0) {
-		acc = access(tmp_buf, W_OK);
-	} else {
-		/* virtual image */
-		acc = 0;
-	}
-
-	if(acc == 0 && can_write != 0) {
+	if(can_write != 0) {
 		dsk->write_prot = 0;
 		dsk->write_through_to_unix = 1;
 	} else {
@@ -2712,30 +2806,30 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		dsk->write_through_to_unix = 0;
 	}
 
-	save_track = dsk->cur_qtr_track;
+	save_track = dsk->cur_qtr_track;	/* save arm position */
+	dsk->image_type = DSK_TYPE_PRODOS;
+	dsk->image_start = 0;
 
 	/* See if it is in 2IMG format */
 	ret = read(dsk->fd, (char *)&buf_2img[0], 512);
 	if(buf_2img[0] == '2' && buf_2img[1] == 'I' && buf_2img[2] == 'M' &&
 			buf_2img[3] == 'G') {
 		/* It's a 2IMG disk */
-		printf("Image named %s is in 2IMG format\n", dsk->name_ptr);
+		ki_printf("Image named %s is in 2IMG format\n", dsk->name_ptr);
 
 		if(buf_2img[12] == 0) {
-			printf("2IMG is in DOS 3.3 sector order\n");
-			dsk->image_type = 0;
-		} else {
-			dsk->image_type = DSK_TYPE_PRODOS;
+			ki_printf("2IMG is in DOS 3.3 sector order\n");
+			dsk->image_type = DSK_TYPE_DOS33;
 		}
 		if(buf_2img[19] & 0x80) {
 			/* disk is locked */
-			printf("2IMG is write protected\n");
+			ki_printf("2IMG is write protected\n");
 			dsk->write_prot = 1;
 			dsk->write_through_to_unix = 0;
 		}
-		if((buf_2img[17] & 1) && (dsk->image_type == 0)) {
+		if((buf_2img[17] & 1) && (dsk->image_type == DSK_TYPE_DOS33)) {
 			dsk->vol_num = buf_2img[16];
-			printf("Setting DOS 3.3 vol num to %d\n", dsk->vol_num);
+			ki_printf("Setting DOS 3.3 vol num to %d\n", dsk->vol_num);
 		}
 		//	Some 2IMG archives have the size byte reversed
 		size = (buf_2img[31] << 24) + (buf_2img[30] << 16) +
@@ -2746,6 +2840,14 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 			//	Byte reversed 0x0c8000
 			size = 0x0c8000;
 		}
+                
+                // Gilles Tschopp - Patch
+		// 2IMG created by Bernie have always a size of zero.
+		// Therefore we have to calculate the file length minus 64 bits (XGS header size)
+		if (size == 0) {
+			size = get_fd_size(dsk->fd) - 64 ;
+		}	
+
 		dsk->image_start = unix_pos;
 		dsk->image_size = size;
 	} else {
@@ -2792,7 +2894,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		if(partition_name) {
 			ret = find_partition_by_name(dsk->fd, partition_name,
 							dsk);
-			printf("partition %s mounted, write_prot: %d\n",
+			ki_printf("partition %s mounted, write_prot: %d\n",
 				partition_name, dsk->write_prot);
 
 			if(ret < 0) {
@@ -2815,7 +2917,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 			nibs = len;
 		}
 		if(size != 35*len) {
-			printf("Disk 5.25 error: size is %d, not %d\n",size,
+			ki_printf("Disk 5.25 error: size is %d, not %d\n",size,
 					35*len);
 		}
 		for(i = 0; i < 35; i++) {
@@ -2828,7 +2930,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 		unix_pos = dsk->image_start;
 		size = dsk->image_size;
 		if(size != 800*1024) {
-			printf("Disk 3.5 error: size is %d, not 800K\n", size);
+			ki_printf("Disk 3.5 error: size is %d, not 800K\n", size);
 		}
 		dsk->num_tracks = 2*80;
 		for(i = 0; i < 2*80; i++) {
@@ -2852,7 +2954,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 }
 
 void
-eject_named_disk(Disk *dsk, char *name)
+eject_named_disk(Disk *dsk, const char *name)
 {
 
 	if(dsk->fd < 0) {
@@ -2896,7 +2998,7 @@ eject_disk(Disk *dsk)
 
 	iwm_flush_disk_to_unix(dsk);
 
-	printf("Ejecting disk: %s\n", dsk->name_ptr);
+	ki_printf("Ejecting disk: %s\n", dsk->name_ptr);
 
 	/* Free all memory, close file */
 	
@@ -2925,6 +3027,7 @@ eject_disk(Disk *dsk)
 	dsk->just_ejected = 1;
 }
 
+#ifndef DISABLE_CONFFILE
 
 #define	COPY_BUF_SIZE	4096
 
@@ -2938,16 +3041,16 @@ kegs_file_copy(char *orig_name, char *new_name)
 
 	fd_in = open(orig_name, O_RDONLY | O_BINARY, 0x1b6);
 	if(fd_in < 0) {
-		printf("kegs_file_copy: open %s failed: %d %d\n",
+		ki_printf("kegs_file_copy: open %s failed: %d %d\n",
 			orig_name, fd_in, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	fd_out = open(new_name, O_WRONLY | O_BINARY | O_TRUNC | O_CREAT, 0x1b6);
 	if(fd_out < 0) {
-		printf("kegs_file_copy: open %s failed: %d %d\n",
+		ki_printf("kegs_file_copy: open %s failed: %d %d\n",
 			orig_name, fd_out, errno);
-		exit(1);
+		my_exit(1);
 	}
 
 	while(1) {
@@ -2959,15 +3062,15 @@ kegs_file_copy(char *orig_name, char *new_name)
 			if(errno == EINTR) {
 				continue;
 			}
-			printf("Error reading from file %s, errno: %d\n",
+			ki_printf("Error reading from file %s, errno: %d\n",
 				orig_name, errno);
-			exit(1);
+			my_exit(1);
 		}
 		ret = write(fd_out, &copy_buf[0], len);
 		if(ret != len) {
-			printf("Error writing to file %s: ret:%d, %d\n",
+			ki_printf("Error writing to file %s: ret:%d, %d\n",
 				new_name, ret, errno);
-			exit(1);
+			my_exit(1);
 		}
 	}
 	close(fd_in);
@@ -2991,9 +3094,9 @@ eject_disk_by_num(int slot, int drive)
 	fconf_old = fopen(tmp_buf2, "rt");
 	fconf_new = fopen(g_kegs_conf_name, "wt+");
 	if(fconf_old == 0 || fconf_new == 0) {
-		printf("Cannot open %s or %s: Stopping\n", tmp_buf2,
+		ki_printf("Cannot open %s or %s: Stopping\n", tmp_buf2,
 				g_kegs_conf_name);
-		exit(3);
+		my_exit(3);
 	}
 	line = 0;
 	while(1) {
@@ -3006,7 +3109,7 @@ eject_disk_by_num(int slot, int drive)
 		if((buf[0] == 's') && (buf[1] == (0x30 + slot)) &&
 				(buf[2] == 'd') && (buf[3] == (0x30 + drive))){
 			/* comment out this line */
-			printf("Ejecting s%dd%d from line %d of %s\n",
+			ki_printf("Ejecting s%dd%d from line %d of %s\n",
 				slot, drive, line, g_kegs_conf_name);
 			fputs("#", fconf_new);
 		}
@@ -3022,6 +3125,29 @@ eject_disk_by_num(int slot, int drive)
 	g_iwm_vbl_count = 0;
 }
 
+#else
+
+void
+eject_disk_by_num(int slot, int drive)
+{
+	ki_ejectIMG(slot,drive);
+
+	if (slot==5)
+	{
+		if (drive==1)
+			eject_disk(&iwm.drive35[0]);
+		else
+		if (drive==2)
+			eject_disk(&iwm.drive35[0]);
+	}
+
+	g_reparse_delay = 0;
+	g_iwm_vbl_count = 0;
+}
+
+
+#endif
+
 int
 get_fast_disk_emul()
 {
@@ -3033,4 +3159,42 @@ set_fast_disk_emul(int val)
 {
     g_fast_disk_emul = val;
     return 1;
+}
+
+// OG
+
+void iwm_shut()
+{
+	int i;
+
+//	from_disk_byte_valid = 0;
+	g_reparse_delay = 0;
+
+	g_dcycs_end_emul_wr = 0.0;
+	g_fast_disk_unnib = 0;
+	g_iwm_fake_fast = 0;
+	from_disk_byte_valid = 0;
+
+	g_apple35_sel = 0;
+	head_35 = 0;
+	g_iwm_motor_on = 0;
+
+	g_check_nibblization = 0;
+	g_disk_conf_mtime = 0;
+	g_highest_smartport_unit = -1;
+
+	// eject tousl es disks
+	for(i = 0; i < 2; i++) {
+		if (iwm.drive525[i].fd>=0) close(iwm.drive525[i].fd);
+		if (iwm.drive35[i].fd>=0) close(iwm.drive35[i].fd);	
+	}
+
+	for(i = 0; i < MAX_C7_DISKS; i++) {
+		if (iwm.smartport[i].fd>=0) close(iwm.smartport[i].fd);	
+	}
+
+	g_iwm_vbl_count = 0;
+	g_cnt_enable2_handshake = 0;
+
+	memset(&iwm,0,sizeof(iwm));
 }

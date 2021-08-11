@@ -12,14 +12,14 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.7 99/10/31 01:13:38 kentd Exp $";
+const char rcsid_sound_h[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/sound.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 #endif
 
 #ifndef KEGS_SOUND_H
 #define KEGS_SOUND_H
 
 
-#define SOUND_SHM_SAMP_SIZE		(8*1024)
+#define SOUND_SHM_SAMP_SIZE		(32*1024)
 
 #define SOUND_NONE 0
 #define SOUND_NATIVE 1

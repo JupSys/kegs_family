@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_disas_h[] = "@(#)$Header: disas.h,v 1.8 96/10/27 01:23:49 kentd Exp $";
+const char rcsid_disas_h[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/disas.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #ifdef WIN32
 #define _LONG LONG

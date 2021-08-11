@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.306 2000/10/03 12:17:55 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/sim65816.c,v 1.4 2005/09/23 12:37:09 fredyd Exp $";
 
 #if defined(WIN32)
 #include <windows.h>
@@ -37,6 +37,9 @@ const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.306 2000/10/03 12:1
 #include "engine.h"
 #include "clock.h"
 #include "scc.h"
+#include "configmenu.h"
+
+void fixed_memory_ptrs_shut();
 
 static void show_regs_act(Engine_reg *eptr);
 static void check_engine_asm_defines(void);
@@ -55,6 +58,13 @@ static void init_reg(void);
 static void handle_action(word32 ret);
 static void do_break(word32 ret);
 static void do_cop(word32 ret);
+static	void sim65816_shut();
+static void load_roms_init_memory();
+
+#ifdef __APPLE__
+    /* MacOS X resources folder */
+const char *g_kegs_default_paths[] = {"","./KEGS-OSX.app/Contents/Resources/", 0};
+#else
 
 const char *g_kegs_default_paths[] = { "", "./", "~/", "/usr/local/lib/",
 	"/usr/local/kegs/", "/usr/local/lib/kegs/", "/usr/share/kegs/",
@@ -62,6 +72,7 @@ const char *g_kegs_default_paths[] = { "", "./", "~/", "/usr/local/lib/",
 	"/etc/kegs/",
 	"./KEGS.app/Contents/Resources/", /* MacOS X resources folder */
 	0 };
+#endif
 
 #define MAX_EVENTS	64
 
@@ -73,7 +84,7 @@ const char *g_kegs_default_paths[] = { "", "./", "~/", "/usr/local/lib/",
 #define EV_DOC_INT	4
 #define EV_VBL_INT	5
 #define EV_SCC		6
-
+#define MEMORY_MARKER (('K'<<24) + ('E'<<16) + ('G'<<8) + 'S')
 
 Engine_reg engine;
 
@@ -126,12 +137,15 @@ int Halt_on = 0;
 
 word32 g_mem_size_base = 256*1024;	/* size of motherboard memory */
 word32 g_mem_size_exp = 4*1024*1024;	/* size of expansion RAM card */
+word32 g_mem_size_total = 256*1024;	/* Total contiguous RAM from 0 */
 
 byte *g_slow_memory_ptr = 0;
 byte *g_memory_ptr = 0;
 byte *g_dummy_memory1_ptr = 0;
 byte *g_rom_fc_ff_ptr = 0;
 byte *g_rom_cards_ptr = 0;
+
+void *g_memory_alloc_ptr = 0;		/* for freeing memory area */
 
 Page_info page_info_rd_wr[2*65536 + PAGE_INFO_PAD_SIZE];
 
@@ -151,6 +165,12 @@ Pc_log	*log_pc_end_ptr = &(pc_log_array[PC_LOG_LEN]);
 
 int g_toolbox_log_pos = 0;
 word32 g_toolbox_log_array[TOOLBOX_LOG_LEN][8];
+
+double	g_dtime_last_vbl = 0.0;
+double	g_dtime_expected = (1.0/60.0);
+
+int g_scan_int_events = 0;
+
 
 
 void
@@ -172,7 +192,7 @@ show_pc_log()
 	pcfile = fopen("pc_log_out", "wt");
 	if(pcfile == 0) {
 		fprintf(stderr,"fopen failed...errno: %d\n", errno);
-		exit(2);
+		my_exit(2);
 	}
 	fprintf(pcfile, "current pc_log_ptr: %p, start: %p, end: %p\n",
 		log_pc_ptr, log_pc_start_ptr, log_pc_end_ptr);
@@ -191,7 +211,7 @@ show_pc_log()
 		direct = log_pc_ptr->stack_direct & 0xffff;;
 		dcycs = log_pc_ptr->dcycs;
 
-		num = log_pc_ptr - log_pc_start_ptr;
+		num = (int)( log_pc_ptr - log_pc_start_ptr );
 
 		accsize = 2;
 		xsize = 2;
@@ -272,7 +292,7 @@ show_toolbox_log()
 	pos = g_toolbox_log_pos;
 
 	for(i = TOOLBOX_LOG_LEN - 1; i >= 0; i--) {
-		printf("%2d:%2d: %08x %06x  %04x: %08x %08x %08x %08x %08x\n",
+		ki_printf("%2d:%2d: %08x %06x  %04x: %08x %08x %08x %08x %08x\n",
 			i, pos,
 			g_toolbox_log_array[pos][0],
 			g_toolbox_log_array[pos][1],
@@ -332,10 +352,10 @@ get_memory_io(word32 loc, double *cyc_ptr)
 	}
 
 	/* Else it's an illegal addr...skip if memory sizing */
-	if(loc >= (g_mem_size_base + g_mem_size_exp)) {
+	if(loc >= g_mem_size_total) {
 		if((loc & 0xfffe) == 0) {
 #if 0
-			printf("get_io assuming mem sizing, not halting\n");
+			ki_printf("get_io assuming mem sizing, not halting\n");
 #endif
 			return 0;
 		}
@@ -357,8 +377,8 @@ get_memory_io(word32 loc, double *cyc_ptr)
 		return 0;
 	}
 
-	printf("get_memory_io for addr: %06x\n", loc);
-	printf("stat for addr: %06x = %p\n", loc,
+	ki_printf("get_memory_io for addr: %06x\n", loc);
+	ki_printf("stat for addr: %06x = %p\n", loc,
 				GET_PAGE_INFO_RD((loc >> 8) & 0xffff));
 	set_halt(g_halt_on_bad_read);
 
@@ -404,7 +424,7 @@ set_memory(word32 loc, int val, int diff_cycles)
 	}
 
 	if((loc & 0xfef000) == 0xe0c000) {
-		printf("set_memory_special: non-io for addr %08x, %02x, %d\n",
+		ki_printf("set_memory_special: non-io for addr %08x, %02x, %d\n",
 			loc, val, diff_cycles);
 		halt_printf("tmp: %08x\n", tmp);
 	}
@@ -426,8 +446,8 @@ set_memory(word32 loc, int val, int diff_cycles)
 		or_pos = (new_addr >> SHIFT_PER_CHANGE) & 0x1f;
 		or_val = DEP1(1, or_pos, 0);
 		if((new_addr >> CHANGE_SHIFT) >= SLOW_MEM_CH_SIZE) {
-			printf("new_addr: %08x\n", new_addr);
-			exit(12);
+			ki_printf("new_addr: %08x\n", new_addr);
+			my_exit(12);
 		}
 		slow_mem_changed[(new_addr & 0xffff) >> CHANGE_SHIFT] |= or_val;
 	}
@@ -449,10 +469,10 @@ set_memory_io(word32 loc, int val, double *cyc_ptr)
 	}
 
 	/* Else it's an illegal addr */
-	if(loc >= (g_mem_size_base + g_mem_size_exp)) {
+	if(loc >= g_mem_size_total) {
 		if((loc & 0xfffe) == 0) {
 #if 0
-			printf("set_io assuming mem sizing, not halting\n");
+			ki_printf("set_io assuming mem sizing, not halting\n");
 #endif
 			return;
 		}
@@ -460,6 +480,14 @@ set_memory_io(word32 loc, int val, double *cyc_ptr)
 
 	/* ignore writes to ROM */
 	if((loc & 0xfc0000) == 0xfc0000) {
+		return;
+	}
+        /* The Gog's patch : Photonix writes to E2 : ignore!!!  */
+	if((loc & 0xff0000) == 0xE20000) {
+		return;
+	}
+        /* The Gog's patch : Pom's demo write to 7F : ignore!!  */
+	if((loc & 0xff0000) == 0x7F0000) {
 		return;
 	}
 
@@ -476,7 +504,7 @@ set_memory_io(word32 loc, int val, double *cyc_ptr)
 	}
 
 	if((loc & 0xffc000) == 0x00c000) {
-		printf("set_memory %06x = %02x, warning\n", loc, val);
+		ki_printf("set_memory %06x = %02x, warning\n", loc, val);
 		return;
 	}
 
@@ -526,9 +554,9 @@ show_regs_act(Engine_reg *eptr)
 
 	tmp_psw = eptr->psr;
 
-	printf("  PC=%02x.%04x A=%04x X=%04x Y=%04x P=%03x",
+	ki_printf("  PC=%02x.%04x A=%04x X=%04x Y=%04x P=%03x",
 		kpc>>16, kpc & 0xffff ,tmp_acc,tmp_x,tmp_y,tmp_psw);
-	printf(" S=%04x D=%04x B=%02x,cyc:%.3f\n", stack, direct_page,
+	ki_printf(" S=%04x D=%04x B=%02x,cyc:%.3f\n", stack, direct_page,
 		dbank, g_cur_dcycs);
 }
 
@@ -541,13 +569,21 @@ show_regs()
 void
 my_exit(int ret)
 {
+	// OG
+	// Should only be used for fatal error (use halt_printf instead)
+	ki_printf("FATAL ERROR (%d) : Exiting...\n",ret);
+	exit(ret);
+	
+	/*
     sound_shutdown();
 	video_shutdown();
     joystick_close();
-	printf("exiting\n");
-	exit(ret);
+	ki_printf("exiting\n");
+	my_exit(ret);
+	*/
 }
 
+extern void initzipspeed();
 
 void
 do_reset()
@@ -583,15 +619,39 @@ do_reset()
 
 	g_stepping = 0;
 
+	// OG : Reset all the remaining irqs
+
+#define REMOVEIRQ(ADR) { extern int ADR; if (ADR) { remove_irq(); ADR=0; } }
+	
+	REMOVEIRQ(g_adb_kbd_srq_sent);
+	REMOVEIRQ(g_adb_data_int_sent);
+	REMOVEIRQ(g_adb_mouse_int_sent);
+	REMOVEIRQ(c046_vbl_irq_pending);
+	REMOVEIRQ(c046_25sec_irq_pend);
+	REMOVEIRQ(c023_scan_int_irq_pending);
+	REMOVEIRQ(c023_1sec_int_irq_pending);
+	REMOVEIRQ(c046_vbl_irq_pending);
+		
+	g_scan_int_events = 0;
+	initialize_events();
+
+	if (g_irq_pending) ki_printf("*** irq remainings...\n");
+
+	 g_c023_val = 0;            // Clear the interrupt flags
+     g_irq_pending = 0;    
+
+	// ~OG
+
+	initzipspeed();
 }
 
 #define CHECK(start, var, value, var1, var2)				\
 	var2 = PTR2WORD(&(var));					\
 	var1 = PTR2WORD((start));					\
 	if((var2 - var1) != value) {					\
-		printf("CHECK: " #var " is 0x%x, but " #value " is 0x%x\n", \
+		ki_printf("CHECK: " #var " is 0x%x, but " #value " is 0x%x\n", \
 			(var2 - var1), value);				\
-		exit(5);						\
+		my_exit(5);						\
 	}
 
 void
@@ -625,9 +685,9 @@ check_engine_asm_defines()
 	CHECK(pcptr, pcptr->xreg_yreg, LOG_PC_XREG_YREG, val1, val2);
 	CHECK(pcptr, pcptr->stack_direct, LOG_PC_STACK_DIRECT, val1, val2);
 	if(LOG_PC_SIZE != sizeof(pclog)) {
-		printf("LOG_PC_SIZE: %d != sizeof=%d\n", LOG_PC_SIZE,
+		ki_printf("LOG_PC_SIZE: %d != sizeof=%d\n", LOG_PC_SIZE,
 			(int)sizeof(pclog));
-		exit(2);
+		my_exit(2);
 	}
 
 	fplusptr = &fplus;
@@ -637,21 +697,41 @@ check_engine_asm_defines()
 	CHECK(fplusptr, fplusptr->plus_x_minus_1, FPLUS_PLUS_X_M1, val1, val2);
 }
 
+// OG
+void memfree_align(byte* ptr)
+{
+    if (*(int*)(ptr-8)!=MEMORY_MARKER) ki_alert("memory corrupted");
+	free(*(void**)(ptr-4));
+}
+// ~OG
+
 byte *
-memalloc_align(int size, int skip_amt)
+memalloc_align(int size, int skip_amt, void **alloc_ptr)
 {
 	byte	*bptr;
 	word32	addr;
 	word32	offset;
 
-	skip_amt = MAX(256, skip_amt);
-	bptr = malloc(size + skip_amt);
+	skip_amt = MAX(256, skip_amt);	
+	bptr = calloc(size + skip_amt + 256, 1);
+	if(alloc_ptr) {
+		/* Save allocation address */
+		*alloc_ptr = bptr;
+	}
+
 	addr = PTR2WORD(bptr) & 0xff;
 
 	/* must align bptr to be 256-byte aligned */
 	/* this code should work even if ptrs are > 32 bits */
 
 	offset = ((addr + skip_amt - 1) & (~0xff)) - addr;
+	
+	offset+=256;
+
+	// OG : garde l'ancien pointeur pour le libérer
+	*((int*)(bptr+offset-8)) = MEMORY_MARKER;
+	*((void**)(bptr+offset-4)) = (void*)bptr;
+
 	return (bptr + offset);
 }
 
@@ -660,11 +740,28 @@ memory_ptr_init()
 {
 	word32	mem_size;
 
-	mem_size = g_mem_size_base + g_mem_size_exp;
-	g_memory_ptr = memalloc_align(mem_size, 3*1024);
+	/* This routine may be called several times--each time the ROM file */
+	/*  changes this will be called */
+	mem_size = MIN(0xdf0000, g_mem_size_base + g_mem_size_exp);
+	g_mem_size_total = mem_size;
+	if(g_memory_alloc_ptr) {
+		free(g_memory_alloc_ptr);
+		g_memory_alloc_ptr = 0;
+	}
+	g_memory_ptr = memalloc_align(mem_size, 256, &g_memory_alloc_ptr);
 
-	printf("RAM size is 0 - %06x (%.2fMB)\n", mem_size,
+	ki_printf("RAM size is 0 - %06x (%.2fMB)\n", mem_size,
 		(double)mem_size/(1024.0*1024.0));
+}
+
+void
+memory_ptr_shut()
+{
+	
+	if (g_memory_ptr)
+		memfree_align(g_memory_ptr);
+	g_memory_ptr = NULL;
+	
 }
 
 static char g_display_env[512];
@@ -674,7 +771,7 @@ int	g_screen_depth = 8;
 void
 usage(const char *progname)
 {
-  printf("Usage: %s [OPTION]...\n",progname);
+  ki_printf("Usage: %s [OPTION]...\n",progname);
   puts("Apple IIgs emulator.\n");
   puts("  --badrd            Halt on bad reads.");
   puts("  --ignbadacc        Ignore bad memory accesses (e.g. for Appleworks GS).");
@@ -702,6 +799,7 @@ usage(const char *progname)
   puts("                     0x200=VIDEO).");
 }
 
+
 int
 main(int argc, char **argv)
 {
@@ -717,109 +815,109 @@ main(int argc, char **argv)
 		if(!strcmp("--help", argv[i]) || !strcmp("-h", argv[i])
 		   || !strcmp("-?", argv[i])) {
 		    usage(argv[0]);
-		    exit(0);
+		    my_exit(0);
 		} else if(!strcmp("--badrd", argv[i])) {
-			printf("Halting on bad reads\n");
+			ki_printf("Halting on bad reads\n");
 			g_halt_on_bad_read = 1;
 		} else if(!strcmp("--ignbadacc", argv[i])) {
-			printf("Ignoring bad memory accesses\n");
+			ki_printf("Ignoring bad memory accesses\n");
 			g_ignore_bad_acc = 1;
 		} else if(!strcmp("--24", argv[i])) {
-			printf("Using 24-bit visual\n");
+			ki_printf("Using 24-bit visual\n");
 			g_force_depth = 24;
 		} else if(!strcmp("--16", argv[i])) {
-			printf("Using 16-bit visual\n");
+			ki_printf("Using 16-bit visual\n");
 			g_force_depth = 16;
 		} else if(!strcmp("--15", argv[i])) {
-			printf("Using 15-bit visual\n");
+			ki_printf("Using 15-bit visual\n");
 			g_force_depth = 15;
 		} else if(!strcmp("--8", argv[i])) {
-			printf("Using 8-bit visual\n");
+			ki_printf("Using 8-bit visual\n");
 			g_force_depth = 8;
 		} else if(!strcmp("--mem", argv[i])) {
 			if((i+1) >= argc) {
-				printf("Missing argument\n");
-				exit(1);
+				ki_printf("Missing argument\n");
+				my_exit(1);
 			}
 			g_mem_size_exp = strtol(argv[i+1], 0, 0) & 0x00ff0000;
-			printf("Using %d as memory size\n", g_mem_size_exp);
+			ki_printf("Using %d as memory size\n", g_mem_size_exp);
 			i++;
 		} else if(!strcmp("--skip", argv[i])) {
 			if((i+1) >= argc) {
-				printf("Missing argument\n");
-				exit(1);
+				ki_printf("Missing argument\n");
+				my_exit(1);
 			}
 			skip_amt = strtol(argv[i+1], 0, 0);
-			printf("Using %d as skip_amt\n", skip_amt);
+			ki_printf("Using %d as skip_amt\n", skip_amt);
 			g_screen_redraw_skip_amt = skip_amt;
 			i++;
 		} else if(!strcmp("--audio", argv[i])) {
 			if((i+1) >= argc) {
-				printf("Missing argument\n");
-				exit(1);
+				ki_printf("Missing argument\n");
+				my_exit(1);
 			}
 			tmp1 = strtol(argv[i+1], 0, 0);
-			printf("Using %d as audio device type\n", tmp1);
+			ki_printf("Using %d as audio device type\n", tmp1);
 			audio_devtype = tmp1;
 			i++;
 		} else if(!strcmp("--video", argv[i])) {
 			if((i+1) >= argc) {
-				printf("Missing argument\n");
-				exit(1);
+				ki_printf("Missing argument\n");
+				my_exit(1);
 			}
 			tmp1 = strtol(argv[i+1], 0, 0);
-			printf("Using %d as video device type\n", tmp1);
+			ki_printf("Using %d as video device type\n", tmp1);
 			video_devtype = tmp1;
 			i++;
 		} else if(!strcmp("--arate", argv[i])) {
 			if((i+1) >= argc) {
-				printf("Missing argument\n");
-				exit(1);
+				ki_printf("Missing argument\n");
+				my_exit(1);
 			}
 			tmp1 = strtol(argv[i+1], 0, 0);
-			printf("Using %d as preferred audio rate\n", tmp1);
+			ki_printf("Using %d as preferred audio rate\n", tmp1);
 			g_preferred_rate = tmp1;
 			i++;
 		} else if(!strcmp("-v", argv[i]) || !strcmp("--verbose", argv[i])) {
 			if((i+1) >= argc) {
-				printf("Missing argument\n");
-				exit(1);
+				ki_printf("Missing argument\n");
+				my_exit(1);
 			}
 			tmp1 = strtol(argv[i+1], 0, 0);
-			printf("Setting Verbose = 0x%03x\n", tmp1);
+			ki_printf("Setting Verbose = 0x%03x\n", tmp1);
 			Verbose = tmp1;
 			i++;
 #ifndef __NeXT__
 		} else if(!strcmp("--display", argv[i])) {
 			if((i+1) >= argc) {
-				printf("Missing argument\n");
-				exit(1);
+				ki_printf("Missing argument\n");
+				my_exit(1);
 			}
-			printf("Using %s as display\n", argv[i+1]);
+			ki_printf("Using %s as display\n", argv[i+1]);
 			sprintf(g_display_env, "DISPLAY=%s", argv[i+1]);
 			putenv(&g_display_env[0]);
 			i++;
 #endif
 		} else if(!strcmp("-noshm", argv[i])) {
-			printf("Not using X shared memory\n");
+			ki_printf("Not using X shared memory\n");
 			g_video_fast = 0;
 		} else if(!strcmp("-joystick", argv[i])) {
 			if((i+1) >= argc) {
-				printf("Missing argument\n");
-				exit(1);
+				ki_printf("Missing argument\n");
+				my_exit(1);
 			}
 			tmp1 = strtol(argv[i+1], 0, 0);
-			printf("Using %d as joystick type\n", tmp1);
+			ki_printf("Using %d as joystick type\n", tmp1);
 			g_joystick_type = tmp1;
 		} else if(!strcmp("-dhr140", argv[i])) {
-			printf("Using simple dhires color map\n");
+			ki_printf("Using simple dhires color map\n");
 			g_use_dhr140 = 1;
 		} else {
-			printf("Bad option: %s\n", argv[i]);
-			exit(3);
+			ki_printf("Bad option: %s\n", argv[i]);
+			my_exit(3);
 		}
 	}
-    printf("OK\n");
+    ki_printf("OK\n");
     fprintf(stderr,"ERR\n");
     fprintf(stdout,"OK2\n");
 
@@ -827,62 +925,99 @@ main(int argc, char **argv)
 	fixed_memory_ptrs_init();
 
 	if(sizeof(word32) != 4) {
-		printf("sizeof(word32) = %d, must be 4!\n",
+		ki_printf("sizeof(word32) = %d, must be 4!\n",
 							(int)sizeof(word32));
-		exit(1);
+		my_exit(1);
 	}
 
 	if(!g_engine_c_mode) {
 		diff = &defs_instr_end_8 - &defs_instr_start_8;
 		if(diff != 1) {
-			printf("defs_instr_end_8 - start is %d\n",diff);
-			exit(1);
+			ki_printf("defs_instr_end_8 - start is %d\n",diff);
+			my_exit(1);
 		}
 
 		diff = &defs_instr_end_16 - &defs_instr_start_16;
 		if(diff != 1) {
-			printf("defs_instr_end_16 - start is %d\n", diff);
-			exit(1);
+			ki_printf("defs_instr_end_16 - start is %d\n", diff);
+			my_exit(1);
 		}
 
 		diff = &op_routs_end - &op_routs_start;
 		if(diff != 1) {
-			printf("op_routs_end - start is %d\n", diff);
-			exit(1);
+			ki_printf("op_routs_end - start is %d\n", diff);
+			my_exit(1);
 		}
 	}
 
+	iwm_init();
 
-	load_roms();
-	memory_ptr_init();
+	load_roms_init_memory();
 
 	init_reg();
 	clear_halt();
 
 	initialize_events();
 
-    joystick_init();
 	video_init(video_devtype);
 
 	sound_init(audio_devtype);
 
-	iwm_init();
 	scc_init();
 	setup_bram();		/* load_roms must be called first! */
 	adb_init();
+	joystick_init();
+#ifndef DISABLE_CONFFILE
+	configuration_load(1);
+#endif
 
-	do_reset();
+        do_reset();
 	g_stepping = 0;
 	do_go();
 
 	/* If we get here, we hit a breakpoint, call debug intfc */
-	do_debug_intfc();
+	if (halt_sim&HALT_WANTTOBRK)
+		do_debug_intfc();
+
+
+	do_reset();	// to clear interrupt
 
     sound_shutdown();
 	video_shutdown();
     joystick_close();
 
+	// OG
+	fixed_memory_ptrs_shut();
+	sim65816_shut(); 
+	iwm_shut();
+	clock_shut();
+	moremem_shut();
+	memory_ptr_shut();
+
 	return 0;
+}
+
+static void
+load_roms_init_memory()
+{
+	load_roms();
+	memory_ptr_init();
+	/* clk_setup_bram_version(); */	/* Must be after config_load_roms */
+#if 0
+	if(g_rom_version >= 3) {
+		g_c036_val_speed |= 0x40;	/* set power-on bit */
+	} else {
+		g_c036_val_speed &= (~0x40);	/* clear the bit */
+	}
+#endif
+	do_reset();
+
+	/* if user booted ROM 01, switches to ROM 03, then switches back */
+	/*  to ROM 01, then the reset routines call to Tool $0102 looks */
+	/*  at uninitialized $e1/15fe and if it is negative it will JMP */
+	/*  through $e1/1688 which ROM 03 left pointing to fc/0199 */
+	/* So set e1/15fe = 0 */
+	set_memory16_c(0xe115fe, 0, 0);
 }
 
 void
@@ -903,7 +1038,7 @@ setup_kegs_file(char *outname, int maxlen, int ok_if_missing,
 		cur_name_ptr = name_ptr;
 		while(*cur_name_ptr) {
 			sprintf(outname, "%s%s", *path_ptr, *cur_name_ptr);
-			printf("Trying =%s=\n", outname);
+			ki_printf("Trying =%s=\n", outname);
 			ret = stat(outname, &stat_buf);
 			if(ret == 0) {
 				/* got it! */
@@ -921,12 +1056,12 @@ setup_kegs_file(char *outname, int maxlen, int ok_if_missing,
 
 	/* couldn't find it, print out all the attempts */
 	path_ptr = save_path_ptr;
-	printf("Could not find %s in any of these directories:\n", *name_ptr);
+	ki_printf("Could not find %s in any of these directories:\n", *name_ptr);
 	while(*path_ptr) {
-		printf("  %s\n", *path_ptr++);
+		ki_printf("  %s\n", *path_ptr++);
 	}
 
-	exit(2);
+	my_exit(2);
 }
 
 Event g_event_list[MAX_EVENTS];
@@ -947,7 +1082,8 @@ initialize_events()
 	g_event_start.next = 0;
 	g_event_start.dcycs = 0.0;
 
-	add_event_entry(DCYCS_IN_16MS, EV_60HZ);
+	// OG add even entry since the first events
+	add_event_entry(g_cur_dcycs+DCYCS_IN_16MS, EV_60HZ);
 }
 
 void
@@ -1061,7 +1197,7 @@ remove_event_entry(int type)
 
 	halt_printf("remove event_entry: %08x, but not found!\n", type);
 	if((type & 0xff) == EV_DOC_INT) {
-		printf("DOC, g_doc_saved_ctl = %02x\n", g_doc_saved_ctl);
+		ki_printf("DOC, g_doc_saved_ctl = %02x\n", g_doc_saved_ctl);
 	}
 #ifdef HPUX
 	U_STACK_TRACE();
@@ -1135,7 +1271,7 @@ show_all_events()
 	ptr = g_event_start.next;
 	while(ptr != 0) {
 		dcycs = ptr->dcycs;
-		printf("Event: %02x: type: %05x, dcycs: %f (%f)\n",
+		ki_printf("Event: %02x: type: %05x, dcycs: %f (%f)\n",
 			count, ptr->type, dcycs, dcycs - g_cur_dcycs);
 		ptr = ptr->next;
 		count++;
@@ -1153,7 +1289,7 @@ double	g_dtime_exp_array[60];
 double	g_dtime_pmhz_array[60];
 double	g_dtime_eff_pmhz_array[60];
 int	speed_changed = 0;
-int	g_limit_speed = 2;
+int	g_limit_speed = SPEED_GS;
 double	sim_time[60];
 double	g_sim_sum = 0.0;
 
@@ -1163,18 +1299,20 @@ double	g_projected_pmhz = 1.0;
 Fplus	g_recip_projected_pmhz_slow;
 Fplus	g_recip_projected_pmhz_fast;
 Fplus	g_recip_projected_pmhz_unl;
-
+Fplus	g_recip_projected_pmhz_zip;
+double	g_speed_zip_mult;
 Fplus	*g_cur_fplus_ptr = 0;
 
 void
 show_pmhz()
 {
-	printf("Pmhz: %f, plus_1: %f, fast: %d, limit: %d\n",
+	ki_printf("Pmhz: %f, plus_1: %f, fast: %d, limit: %d\n",
 		g_projected_pmhz, g_cur_fplus_ptr->plus_1, speed_fast,
 		g_limit_speed);
 
 }
 
+double	fspeed_mult;
 
 void
 run_prog()
@@ -1186,7 +1324,7 @@ run_prog()
 	double	now_dtime;
 	double	prev_dtime;
 	double	prerun_fcycles;
-	double	fspeed_mult;
+/*	double	fspeed_mult; */
 	double	fcycles_stop;
 	word32	ret;
 	int	type;
@@ -1236,13 +1374,19 @@ run_prog()
 				(g_slot_motor_detect & 0x4) &&
 				(g_slow_525_emul_wr || !g_fast_disk_emul);
 		iwm_25 = (motor_on && apple35_sel) && !g_fast_disk_emul;
-		if(fast && (!iwm_1 && !iwm_25) && (limit_speed == 0)) {
+                if(fast && (!iwm_1 && !iwm_25) && (limit_speed == 0)) {
 			/* unlimited speed */
 			fspeed_mult = g_projected_pmhz;
 			fplus_ptr = &g_recip_projected_pmhz_unl;
 		} else if(fast && (iwm_25 || (!iwm_1 && limit_speed == 2)) ) {
-			fspeed_mult = 2.5;
-			fplus_ptr = &g_recip_projected_pmhz_fast;
+			/* else original speed */
+                        fspeed_mult = 2.6;
+                        fplus_ptr = &g_recip_projected_pmhz_fast;
+                } else if(fast && (iwm_25 || (!iwm_1 && limit_speed == 3)) ) {
+                        /* else ZipGS speed */
+                        fspeed_mult = g_speed_zip_mult;
+                        fplus_ptr = &g_recip_projected_pmhz_zip;
+			
 		} else {
 			/* else run slow */
 			fspeed_mult = 1.0;
@@ -1264,9 +1408,9 @@ run_prog()
 		g_fcycles_stop = fcycles_stop;
 
 #if 0
-		printf("Enter engine, fcycs: %f, stop: %f\n",
+		ki_printf("Enter engine, fcycs: %f, stop: %f\n",
 			prerun_fcycles, fcycles_stop);
-		printf("g_cur_dcycs: %f, last_vbl_dcyc: %f\n", g_cur_dcycs,
+		ki_printf("g_cur_dcycs: %f, last_vbl_dcyc: %f\n", g_cur_dcycs,
 			g_last_vbl_dcycs);
 #endif
 
@@ -1280,7 +1424,7 @@ run_prog()
         /* XXX patch from kegs32. useful? */
         /*
         if (now_dtime < prev_dtime) {
-            printf ("Wrap around time\n");
+            ki_printf ("Wrap around time\n");
             prev_dtime = prev_dtime-(~(int)0);
         }
         */
@@ -1294,7 +1438,7 @@ run_prog()
 					fspeed_mult;
 
 #if 0
-		printf("...back, engine.fcycles: %f, dcycs: %f\n",
+		ki_printf("...back, engine.fcycles: %f, dcycs: %f\n",
 			(double)engine.fcycles, dcycs);
 #endif
 
@@ -1316,9 +1460,9 @@ run_prog()
 		if(!g_testing && run_cycles < -2000000) {
 			halt_printf("run_cycles: %d, cycles: %d\n", run_cycles,
 								cycles);
-			printf("this_type: %05x\n", this_type);
-			printf("duff_cycles: %d\n", duff_cycles);
-			printf("start.next->rel_time: %d, type: %05x\n",
+			ki_printf("this_type: %05x\n", this_type);
+			ki_printf("duff_cycles: %d\n", duff_cycles);
+			ki_printf("start.next->rel_time: %d, type: %05x\n",
 				g_event_start.next->rel_time,
 				g_event_start.next->type);
 		}
@@ -1337,8 +1481,8 @@ run_prog()
 				update_60hz(dcycs, now_dtime);
 				break;
 			case EV_STOP:
-				printf("type: EV_STOP\n");
-				printf("next: %p, dcycs: %f\n",
+				ki_printf("type: EV_STOP\n");
+				ki_printf("next: %p, dcycs: %f\n",
 						g_event_start.next, dcycs);
 				db1 = g_event_start.next;
 				halt_printf("next.dcycs: %f\n", db1->dcycs);
@@ -1359,8 +1503,8 @@ run_prog()
 				do_scc_event(type >> 8, dcycs);
 				break;
 			default:
-				printf("Unknown event: %d!\n", type);
-				exit(3);
+				ki_printf("Unknown event: %d!\n", type);
+				my_exit(3);
 			}
 
 			this_event = g_event_start.next;
@@ -1373,7 +1517,7 @@ run_prog()
 
 #if 0
 		if(!g_testing && g_event_start.next->rel_time > 2000000) {
-			printf("Z:start.next->rel_time: %d, duff_cycles: %d\n",
+			ki_printf("Z:start.next->rel_time: %d, duff_cycles: %d\n",
 				g_event_start.next->rel_time, duff_cycles);
 			halt_printf("Zrun_cycles:%d, cycles:%d\n", run_cycles,
 						cycles);
@@ -1391,7 +1535,7 @@ run_prog()
 	}
 
 	if(!g_testing) {
-		printf("leaving run_prog, halt_sim:%d\n", halt_sim);
+		ki_printf("leaving run_prog, halt_sim:%d\n", halt_sim);
 	}
     set_warp_pointer(0);
     if(get_fullscreen())
@@ -1495,11 +1639,6 @@ take_irq(int is_it_brk)
 
 }
 
-double	g_dtime_last_vbl = 0.0;
-double	g_dtime_expected = (1.0/60.0);
-
-int g_scan_int_events = 0;
-
 
 
 void
@@ -1516,7 +1655,7 @@ show_dtime_array()
 
 	for(i = 0; i < 60; i++) {
 		pos = (g_vbl_index_count + i) % 60;
-		printf("%2d:%2d dt:%.5f adjc:%9.1f this_vbl:%.6f "
+		ki_printf("%2d:%2d dt:%.5f adjc:%9.1f this_vbl:%.6f "
 			"exp:%.5f p:%2.2f ep:%2.2f\n",
 			i, pos,
 			dtime_array[pos] - dfirst_time,
@@ -1594,7 +1733,7 @@ update_60hz(double dcycs, double dtime_now)
 	g_vbl_index_count = cur_vbl_index;
 
 	if(prev_vbl_index == 0) {
-		if(g_sim_sum < (1.0/128.0)) {
+		if(g_sim_sum < (1.0/190.0)) {
 			sim_mhz_ptr = "???";
 		} else {
 			sprintf(sim_mhz_buf, "%2.2f",
@@ -1651,7 +1790,7 @@ update_60hz(double dcycs, double dtime_now)
 
 		draw_iwm_status(5, status_buf);
 
-		update_status_line(6, "KEGS v0.63");
+		update_status_line(6, "KEGS v0.64");
 
 		g_status_refresh_needed = 1;
 
@@ -1725,7 +1864,7 @@ update_60hz(double dcycs, double dtime_now)
 		predicted_pmhz = 1.0;
 	}
 
-	if(!(predicted_pmhz < 90.0)) {
+	if(!(predicted_pmhz < 150.0)) {
 		irq_printf("predicted: %f, setting to 90.0\n", predicted_pmhz);
 		predicted_pmhz = 90.0;
 	}
@@ -1885,7 +2024,7 @@ check_scan_line_int(double dcycs, int cur_video_line)
 		}
 		if(g_slow_memory_ptr[0x19d00+i] & 0x40) {
 			irq_printf("Adding scan_int for line %d\n", i);
-			delay = (DCYCS_IN_16MS/262.0) * ((double)line);
+			delay = (int) ((DCYCS_IN_16MS/262.0) * ((double)line));
 			add_event_entry(g_last_vbl_dcycs + delay, EV_SCAN_INT +
 					(line << 8));
 			g_scan_int_events = 1;
@@ -1957,6 +2096,10 @@ handle_action(word32 ret)
 		irq_printf("Special fast IRQ response.  irq_pending: %x\n",
 			g_irq_pending);
 		break;
+        /* Treat WDM as NOP NOP. The Gog's patch for Bouncing Ferno */        
+	case RET_WDM:
+		engine.kpc = (engine.kpc + 2);
+		break;
 	default:
 		halt_printf("Unknown special action: %08x!\n", ret);
 	}
@@ -1981,8 +2124,8 @@ void
 do_break(word32 ret)
 {
 	if(!g_testing) {
-		printf("I think I got a break, second byte: %02x!\n", ret);
-		printf("kpc: %06x\n", engine.kpc);
+		ki_printf("I think I got a break, second byte: %02x!\n", ret);
+		ki_printf("kpc: %06x\n", engine.kpc);
 	}
 
 	halt_printf("do_break, kpc: %06x\n", engine.kpc);
@@ -2008,10 +2151,10 @@ do_mvn(word32 banks)
 
 	halt_printf("In MVN...just quitting\n");
 	return;
-	printf("MVN instr with %04x, cycles: %08x\n", banks, engine.cycles);
+	ki_printf("MVN instr with %04x, cycles: %08x\n", banks, engine.cycles);
 	src_bank = banks >> 8;
 	dest_bank = banks & 0xff;
-	printf("psr: %03x\n", engine.psr);
+	ki_printf("psr: %03x\n", engine.psr);
 	if((engine.psr & 0x30) != 0) {
 		halt_printf("MVN in non-native mode unimplemented!\n");
 	}
@@ -2019,7 +2162,7 @@ do_mvn(word32 banks)
 	dest = dest_bank << 16 | engine.yreg;
 	src = src_bank << 16 | engine.xreg;
 	num = engine.acc;
-	printf("Moving %08x+1 bytes from %08x to %08x\n", num, src, dest);
+	ki_printf("Moving %08x+1 bytes from %08x to %08x\n", num, src, dest);
 
 	for(i = 0; i <= num; i++) {
 		val = get_memory_c(src, 0);
@@ -2032,7 +2175,7 @@ do_mvn(word32 banks)
 	engine.yreg = dest & 0xffff;
 	engine.xreg = src & 0xffff;
 	engine.kpc = (engine.kpc + 3);
-	printf("move done. db: %02x, acc: %04x, y: %04x, x: %04x, num: %08x\n",
+	ki_printf("move done. db: %02x, acc: %04x, y: %04x, x: %04x, num: %08x\n",
 		engine.dbank, engine.acc, engine.yreg, engine.xreg, num);
 }
 #endif
@@ -2074,4 +2217,52 @@ set_limit_speed(int rate)
 {
     g_limit_speed = rate;
     return 1;
+}
+
+// OG
+
+void sim65816_shut()
+{
+
+	g_fcycles_stop = 0.0;
+	halt_sim = 0;
+	enter_debug = 0;
+	g_rom_version = 0;
+	g_halt_on_bad_read = 0;
+	g_ignore_bad_acc = 0;
+
+	g_last_vbl_dcycs = START_DCYCS; 
+	g_cur_dcycs = START_DCYCS;
+
+	g_last_vbl_dadjcycs = 0.0;
+	g_dadjcycs = 0.0;
+
+	g_wait_pending = 0;
+	if (g_irq_pending)
+		ki_printf("irq pending...(%d)\n",g_irq_pending);
+	g_irq_pending = 0;
+
+	g_num_irq = 0;
+	g_num_brk = 0;
+	g_num_cop = 0;
+	g_num_enter_engine = 0;
+	g_io_amt = 0;
+	g_engine_action = 0;
+	g_engine_halt_event = 0;
+	g_engine_scan_int = 0;
+	g_engine_doc_int = 0;
+
+	g_testing = 0;
+
+	g_25sec_cntr = 0;
+	g_1sec_cntr = 0;
+
+	Verbose = 0;
+	Halt_on = 0;
+
+	kbd_in_end = 0;
+
+	g_toolbox_log_pos = 0;
+	
+
 }

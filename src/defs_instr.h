@@ -16,7 +16,7 @@
 	.data
 	.export rcsdif_defs_instr_h,data
 rcsdif_defs_instr_h
-	.stringz "@(#)$Header: defs_instr.h,v 1.52 99/09/13 22:12:10 kentd Exp $"
+	.stringz "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/defs_instr.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $"
 	.code
 # endif
 

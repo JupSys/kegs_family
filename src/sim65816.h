@@ -1,6 +1,8 @@
 #ifndef KEGS_SIM65816_H
 #define KEGS_SIM65816_H
+
 #include "defc.h"
+#include "ki.h"
 
 extern word32 g_vbl_count;
 extern int g_rom_version;
@@ -54,7 +56,8 @@ void add_event_scc(double dcycs, int type);
 void my_exit(int ret);
 word32 get_memory_io(word32 loc, double *cyc_ptr);
 void set_memory_io(word32 loc, int val, double *cyc_ptr);
-byte *memalloc_align(int size, int skip_amt);
+byte *memalloc_align(int size, int skip_amt, void **alloc_ptr);
+void	memfree_align(byte* ptr);
 void show_dtime_array(void);
 void show_all_events(void);
 void show_toolbox_log(void);

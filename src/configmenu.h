@@ -1,5 +1,15 @@
+/****************************************************************/
+/*    	Apple IIgs emulator                                     */
+/*                                                              */
+/*    This code may not be used in a commercial product         */
+/*    without prior written permission of the authors.          */
+/*                                                              */
+/*    SDL Code by Frederic Devernay	                        */
+/*    You may freely distribute this code.                      */ 
+/*                                                              */
+/****************************************************************/
 
-#define CONFIG_MAX_CHOICES 10
+#define CONFIG_MAX_CHOICES 11
 #define CONFIG_MAX_ITEMS 8
 
 typedef struct config_choice {
@@ -31,3 +41,7 @@ extern const unsigned char config_panel_title[];
 extern const config_menu_t config_panel[];
 
 extern int g_font_size;
+
+int configuration_save(int);
+int configuration_load(int);
+

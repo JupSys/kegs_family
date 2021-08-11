@@ -1,9 +1,21 @@
+/****************************************************************/
+/*    	Apple IIgs emulator                                     */
+/*                                                              */
+/*    This code may not be used in a commercial product         */
+/*    without prior written permission of the authors.          */
+/*                                                              */
+/*    SDL Code by Frederic Devernay	                        */
+/*    You may freely distribute this code.                      */ 
+/*                                                              */
+/****************************************************************/
+
 #include <assert.h>
 #include "sim65816.h"
 #include "video.h"
 #include "videodriver.h"
 #include "video_sdl.h"
-#include "config.h"
+#include "configmenu.h"
+#include "engine.h"
 
 #ifdef HAVE_VIDEO_SDL
 
@@ -192,7 +204,7 @@ configuration_menu(int menu, Uint16 sx, Uint16 sy, Uint8 fg, Uint8 bg)
     nbitems = i;
     configuration_menu_drawframe(config_panel_title, config_panel[menu].title, sx, sy, fg, bg);
     configuration_menu_drawmenu(menu,selected, init_values, choices, sx, sy, fg, bg);
-
+	sdl_update_dirty_rects(gRectTable, screen);
     while(!quit && SDL_WaitEvent(&event)) {
         switch(event.type) {
         case SDL_KEYUP:
@@ -235,9 +247,10 @@ configuration_menu(int menu, Uint16 sx, Uint16 sy, Uint8 fg, Uint8 bg)
                 break;
             }
             configuration_menu_drawmenu(menu,selected, init_values, choices, sx, sy, fg, bg);
-            break;
+            sdl_update_dirty_rects(gRectTable, screen);
+			break;
         case SDL_QUIT:
-            my_exit(0);
+            set_halt(HALT_WANTTOQUIT);
             break;
         default:
             /* ignored */
@@ -257,6 +270,7 @@ configuration_menu(int menu, Uint16 sx, Uint16 sy, Uint8 fg, Uint8 bg)
         configuration_menu_colors(&fg,&bg);
         configuration_menu_scale(&sx,&sy);
         configuration_menu_drawframe(config_panel_title, NULL, sx, sy, fg, bg);
+		sdl_update_dirty_rects(gRectTable, screen);
     }
 }
 
@@ -306,6 +320,7 @@ configuration_menu_panel(Uint16 sx, Uint16 sy, Uint8 fg, Uint8 bg)
     for(nbmenus = 0; config_panel[nbmenus].title != NULL; nbmenus++) {}
     configuration_menu_drawframe(config_panel_title, NULL, sx, sy, fg, bg);
     configuration_menu_drawpanel(selected, sx, sy, fg, bg);
+	sdl_update_dirty_rects(gRectTable, screen);
     while(!quit && SDL_WaitEvent(&event)) {
         switch(event.type) {
         case SDL_KEYUP:
@@ -324,7 +339,8 @@ configuration_menu_panel(Uint16 sx, Uint16 sy, Uint8 fg, Uint8 bg)
                     configuration_menu(selected,sx,sy,fg,bg);
                     configuration_menu_scale(&sx, &sy);
                     configuration_menu_drawframe(config_panel_title, NULL, sx, sy, fg, bg);
-                }
+                    sdl_update_dirty_rects(gRectTable, screen);
+				}
                 break;
             case SDLK_UP:
                 /*if(selected == -2)*/
@@ -345,9 +361,10 @@ configuration_menu_panel(Uint16 sx, Uint16 sy, Uint8 fg, Uint8 bg)
                 break;
             }
             configuration_menu_drawpanel(selected, sx, sy, fg, bg);
+			sdl_update_dirty_rects(gRectTable, screen);
             break;
         case SDL_QUIT:
-            my_exit(0);
+            set_halt(HALT_WANTTOQUIT);
             break;
         default:
             /* ignored */

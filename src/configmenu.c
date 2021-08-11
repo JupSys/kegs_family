@@ -1,3 +1,15 @@
+/****************************************************************/
+/*    	Apple IIgs emulator                                     */
+/*                                                              */
+/*    This code may not be used in a commercial product         */
+/*    without prior written permission of the authors.          */
+/*                                                              */
+/*    SDL Code by Frederic Devernay	                        */
+/*    Mac OS X changes by Benoit Dardelet			*/
+/*    You may freely distribute this code.                      */ 
+/*                                                              */
+/****************************************************************/
+
 #include <assert.h>
 #include "sim65816.h"
 #include "adb.h"
@@ -10,16 +22,21 @@
 #include "functions.h"
 #include "video.h"
 #include "videodriver.h"
-#include "config.h"
+#include "configmenu.h"
 
 static int get_no(void);
-static int configuration_save(int);
-static int configuration_load(int);
 static int cold_start(int);
 static int get_font_size(void);
 static int set_font_size(int);
 
+#ifdef __APPLE__
+    /* Name of the profile file for MacOS X users */
+static const char g_kegsrc_name[] = "Config.kegs";
+void ki_loading(int _motorOn) { };
+#else
+
 static const char g_kegsrc_name[] = ".kegsrc";
+#endif
 
 const unsigned char config_panel_title[]="KEGS Configuration";
 
@@ -56,6 +73,7 @@ const config_menu_t config_panel[] = {
     {"Keyboard", {
         {"F6 Function", get_func_f6, set_func_f6, {
             {"None", FUNCTION_NONE},
+            {"Enter Debugger", FUNCTION_ENTER_DEBUGGER},
             {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},
             {"Toggle Grab Mouse", FUNCTION_TOGGLE_WARP_POINTER},
             {"Toggle Display Size", FUNCTION_TOGGLE_VIDEOMODE},
@@ -67,6 +85,7 @@ const config_menu_t config_panel[] = {
             {NULL}}},
         {"F7 Function", get_func_f7, set_func_f7, {
             {"None", FUNCTION_NONE},
+            {"Enter Debugger", FUNCTION_ENTER_DEBUGGER},
             {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},
             {"Toggle Grab Mouse", FUNCTION_TOGGLE_WARP_POINTER},
             {"Toggle Display Size", FUNCTION_TOGGLE_VIDEOMODE},
@@ -78,6 +97,7 @@ const config_menu_t config_panel[] = {
             {NULL}}},
         {"F8 Function", get_func_f8, set_func_f8, {
             {"None", FUNCTION_NONE},
+            {"Enter Debugger", FUNCTION_ENTER_DEBUGGER},
             {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},
             {"Toggle Grab Mouse", FUNCTION_TOGGLE_WARP_POINTER},
             {"Toggle Display Size", FUNCTION_TOGGLE_VIDEOMODE},
@@ -89,6 +109,7 @@ const config_menu_t config_panel[] = {
             {NULL}}},
         {"F9 Function", get_func_f9, set_func_f9, {
             {"None", FUNCTION_NONE},
+            {"Enter Debugger", FUNCTION_ENTER_DEBUGGER},
             {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},
             {"Toggle Grab Mouse", FUNCTION_TOGGLE_WARP_POINTER},
             {"Toggle Display Size", FUNCTION_TOGGLE_VIDEOMODE},
@@ -100,6 +121,7 @@ const config_menu_t config_panel[] = {
             {NULL}}},
         {"F10 Function", get_func_f10, set_func_f10, {
             {"None", FUNCTION_NONE},
+            {"Enter Debugger", FUNCTION_ENTER_DEBUGGER},
             {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},
             {"Toggle Grab Mouse", FUNCTION_TOGGLE_WARP_POINTER},
             {"Toggle Display Size", FUNCTION_TOGGLE_VIDEOMODE},
@@ -111,6 +133,7 @@ const config_menu_t config_panel[] = {
             {NULL}}},
         {"F11 Function", get_func_f11, set_func_f11, {
             {"None", FUNCTION_NONE},
+            {"Enter Debugger", FUNCTION_ENTER_DEBUGGER},
             {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},
             {"Toggle Grab Mouse", FUNCTION_TOGGLE_WARP_POINTER},
             {"Toggle Display Size", FUNCTION_TOGGLE_VIDEOMODE},
@@ -122,6 +145,7 @@ const config_menu_t config_panel[] = {
             {NULL}}},
         {"F12 Function", get_func_f12, set_func_f12, {
             {"None", FUNCTION_NONE},
+            {"Enter Debugger", FUNCTION_ENTER_DEBUGGER},
             {"Toggle Fast Disk Emul.", FUNCTION_TOGGLE_FAST_DISK_EMUL},
             {"Toggle Grab Mouse", FUNCTION_TOGGLE_WARP_POINTER},
             {"Toggle Display Size", FUNCTION_TOGGLE_VIDEOMODE},
@@ -192,9 +216,10 @@ const config_menu_t config_panel[] = {
         {NULL}}},
     {"Emulation", {
         {"Speed Limit", get_limit_speed, set_limit_speed, {
-            {"None (fast)", 0},
-            {"1.024MHz", 1},
-            {"2.5MHz", 2},
+            {"None (Very fast)", SPEED_UNLIMITED},
+            {"1.024MHz (Slow)", SPEED_1MHZ},
+            {"2.8MHz (Normal)", SPEED_GS},
+            {"8.0MHz (Zip Speed)", SPEED_ZIP},
             {NULL}}},
         {"Cold Start", get_no, cold_start, {
             {"No", 0},
@@ -261,7 +286,7 @@ configuration_save(int val)
 
     assert(val == 1);
     if(kegsrc == NULL) {
-        printf("Can't open config file %s for writing\n",g_kegsrc_name);
+        ki_printf("Can't open config file %s for writing\n",g_kegsrc_name);
         return 0;
     }
     for(menu = config_panel; menu->title != NULL; menu++) {
@@ -293,7 +318,7 @@ configuration_load(int val)
 
     assert(val == 1);
     if(kegsrc == NULL) {
-        printf("Can't open config file %s for reading\n",g_kegsrc_name);
+        ki_printf("Can't open config file %s for reading\n",g_kegsrc_name);
         return 0;
     }
     while(!feof(kegsrc)) {
@@ -305,7 +330,7 @@ configuration_load(int val)
             menu++) {}
             
         if(menu->title == NULL) {
-            printf("Can't find configuration menu for %s\n", line);
+            ki_printf("Can't find configuration menu for %s\n", line);
             continue;
         }
         c = &line[strlen(menu->title)+1]; /* skip "/" */
@@ -313,7 +338,7 @@ configuration_load(int val)
             item->title != NULL && strncmp(item->title, c, strlen(item->title));
             item++) {}
         if(item->title == NULL) {
-            printf("Can't find configuration item for %s\n", c);
+            ki_printf("Can't find configuration item for %s\n", c);
             continue;
         }
         c = &c[strlen(item->title)+2]; /* skip ": " */
@@ -321,7 +346,7 @@ configuration_load(int val)
             choice->name != NULL && strncmp(choice->name, c, strlen(choice->name));
             choice++) {}
         if(choice->name == NULL) {
-            printf("Can't find configuration choice for %s\n", c);
+            ki_printf("Can't find configuration choice for %s\n", c);
             continue;
         }
         item->set(choice->value);

@@ -16,7 +16,7 @@
 	.data
 	.export rcsdif_op_routs_h,data
 rcsdif_op_routs_h
-	.stringz "@(#)$Header: op_routs.h,v 1.36 99/09/06 18:07:55 kentd Exp $"
+	.stringz "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/op_routs.h,v 1.3 2005/09/23 12:37:09 fredyd Exp $"
 	.code
 # endif
 

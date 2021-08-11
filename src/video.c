@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.103 2000/09/24 00:56:44 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$Header: /cvsroot/kegs-sdl/kegs/src/video.c,v 1.3 2005/09/23 12:37:09 fredyd Exp $";
 
 #include <time.h>
 
@@ -47,11 +47,7 @@ static void redraw_changed_super_hires_oneline_a2vid_fill_320(byte *screen_data,
 static void redraw_changed_super_hires(int start_offset, int start_line, int in_reparse, byte *screen_data);
 static void display_screen(void);
 static void refresh_line(int line);
-static int font_fail(int num);
 static void read_a2_font(void);
-static int skip_to_brace(FILE *font_file);
-static int get_file_byte(FILE *font_file);
-static int get_token(FILE *font_file);
 
 int a2_line_stat[25];
 static int a2_line_must_reparse[25];
@@ -83,8 +79,7 @@ static word32 font80_off1_bits[0x100][8][12/4];
 static word32 font80_off2_bits[0x100][8][12/4];
 static word32 font80_off3_bits[0x100][8][12/4];
 
-byte font_array[256][8];
-static const char *g_kegs_font_names[] = { "font.65sim", "font.kegs", "kegs.font", 0 };
+extern byte font_array[256][8];
 
 static byte superhires_scan_save[256];
 
@@ -338,7 +333,7 @@ video_init(int devtype)
         vid_printf("Video device type %d not available, disabling video\n",devtype);
         if(!video_init_device(VIDEO_NONE)) {
             vid_printf("Cannot initialize video\n");
-            exit(1);
+            my_exit(1);
         }
     }
             
@@ -381,8 +376,8 @@ video_init(int devtype)
 			break;
 #endif
 		default:
-			printf("i: %d, unknown\n", i);
-			exit(3);
+			ki_printf("i: %d, unknown\n", i);
+			my_exit(3);
 		}
 
 		for(j = 0; j < total >> 2; j++) {
@@ -454,16 +449,16 @@ show_a2_line_stuff()
 	int	i;
 
 	for(i = 0; i < 25; i++) {
-		printf("line: %d: stat: %04x, ptr: %p, reparse: %d, "
+		ki_printf("line: %d: stat: %04x, ptr: %p, reparse: %d, "
 			"left_edge:%d, right_edge:%d\n",
 			i, a2_line_stat[i], a2_line_xim[i],
 			a2_line_must_reparse[i], a2_line_left_edge[i],
 			a2_line_right_edge[i]);
 	}
 
-	printf("new_a2_stat_cur_line: %d\n", g_new_a2_stat_cur_line);
+	ki_printf("new_a2_stat_cur_line: %d\n", g_new_a2_stat_cur_line);
 	for(i = 0; i < A2_MAX_ALL_STAT; i++) {
-		printf("cur_all[%d]: %03x new_all: %03x\n", i,
+		ki_printf("cur_all[%d]: %03x new_all: %03x\n", i,
 			a2_cur_all_stat[i], a2_new_all_stat[i]);
 	}
 
@@ -543,7 +538,7 @@ change_display_mode(double dcycs)
 		halt_printf("Line < 0!\n");
 	}
 	line = line >> 3;
-	if(line > 25) {
+	if(line > 24) {
 		line = 0;
 	}
 
@@ -587,7 +582,7 @@ get_line_stat(int line, int new_all_stat)
 			mode = MODE_BORDER;
 			page = 0; dbl = 0; color = 0;
 		} else if((new_all_stat & ALL_STAT_TEXT) ||
-						(line > 20 && mix_t_gr)) {
+						(line >= 20 && mix_t_gr)) {
 			mode = MODE_TEXT;
 			color = 0;
 			altchar = EXTRU(new_all_stat,
@@ -694,7 +689,7 @@ change_a2vid_palette(int new_palette)
 		a2_line_must_reparse[i] = 1;
 	}
 
-	printf("Changed a2vid_palette to %x\n", new_palette);
+	ki_printf("Changed a2vid_palette to %x\n", new_palette);
 
 	g_a2vid_palette = new_palette;
 	g_cur_a2_stat = (g_cur_a2_stat & (~ALL_STAT_A2VID_PALETTE)) +
@@ -768,7 +763,7 @@ update_a2_line_info()
 	cur_stat = a2_new_all_stat[end_line];
 
 #if 0
-	printf("g_cur_a2_stat:%03x, new_all_stat[%d]: %03x\n", g_cur_a2_stat,
+	ki_printf("g_cur_a2_stat:%03x, new_all_stat[%d]: %03x\n", g_cur_a2_stat,
 		end_line, cur_stat);
 #endif
 
@@ -809,7 +804,7 @@ change_border_color(double dcycs, int val)
 	int	pos;
 
 	pos = g_num_border_changes;
-	border_changes[pos].fcycs = dcycs - g_last_vbl_dcycs;
+	border_changes[pos].fcycs = (float)(dcycs - g_last_vbl_dcycs);
 	border_changes[pos].val = val;
 
 	pos++;
@@ -842,10 +837,10 @@ update_border_info()
 	limit = g_num_border_changes;
 	last_line = 0;
 	for(i = 0; i < limit; i++) {
-		new_line = (border_changes[i].fcycs * flines_per_fcyc);
+		new_line = (int)(border_changes[i].fcycs * flines_per_fcyc);
 		new_val = border_changes[i].val;
 		if(new_line < 0 || new_line > 262) {
-			printf("new_line: %d\n", new_line);
+			ki_printf("new_line: %d\n", new_line);
 			new_line = last_line;
 		}
 		for(j = last_line; j < new_line; j++) {
@@ -870,7 +865,7 @@ update_border_info()
 
 #if 0
 	if(g_num_border_changes) {
-		printf("Border changes: %d\n", g_num_border_changes);
+		ki_printf("Border changes: %d\n", g_num_border_changes);
 	}
 #endif
 
@@ -905,7 +900,7 @@ update_border_line(int line_in, int color)
 
 		if(2*line >= (X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8) ||
 				(line < 0)) {
-			printf("Line out of range: %d\n", line);
+			ki_printf("Line out of range: %d\n", line);
 			line = 0;
 		}
 
@@ -920,7 +915,7 @@ update_border_line(int line_in, int color)
 		line = line_in - 192;
 
 		if(line >= 8) {
-			printf("Line out of range2: %d\n", line);
+			ki_printf("Line out of range2: %d\n", line);
 			line = 0;
 		}
 
@@ -1127,7 +1122,7 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 	a2_line_right_edge[start_line] = (right*14) + BORDER_CENTER_X;
 
 	if(left >= right || left < 0 || right < 0) {
-		printf("line %d, 40: left >= right: %d >= %d\n",
+		ki_printf("line %d, 40: left >= right: %d >= %d\n",
 			start_line, left, right);
 	}
 
@@ -1313,7 +1308,7 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 	a2_line_right_edge[start_line] = (right*14)+BORDER_CENTER_X;
 
 	if(left >= right || left < 0 || right < 0) {
-		printf("line %d, 80: left >= right: %d >= %d\n",
+		ki_printf("line %d, 80: left >= right: %d >= %d\n",
 			start_line, left, right);
 	}
 
@@ -1356,7 +1351,7 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 	line_mask = 1 << y;
 	mem_ptr = 0x400 + screen_index[y] + start_offset;
 	if(mem_ptr < 0x400 || mem_ptr >= 0xc00) {
-		printf("redraw_changed_gr: mem_ptr: %08x\n", mem_ptr);
+		ki_printf("redraw_changed_gr: mem_ptr: %08x\n", mem_ptr);
 	}
 
 	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
@@ -1467,7 +1462,7 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 	line_mask = 1 << y;
 	mem_ptr = 0x400 + screen_index[y] + start_offset;
 	if(mem_ptr < 0x400 || mem_ptr >= 0xc00) {
-		printf("redraw_changed_gr: mem_ptr: %08x\n", mem_ptr);
+		ki_printf("redraw_changed_gr: mem_ptr: %08x\n", mem_ptr);
 	}
 
 	CH_SETUP_A2_VID(mem_ptr, ch_mask, reparse);
@@ -2429,12 +2424,12 @@ redraw_changed_super_hires(int start_offset, int start_line, int in_reparse,
 							left >= right) {
 			halt_printf("shr: line: %d, left: %d, right:%d\n",
 				start_line, left, right);
-			printf("mask_per_line: %08x, all_checks: %08x\n",
+			ki_printf("mask_per_line: %08x, all_checks: %08x\n",
 				mask_per_line, all_checks);
 			for(i = 0; i < 8; i++) {
-				printf("check[%d] = %08x\n", i, check[i]);
+				ki_printf("check[%d] = %08x\n", i, check[i]);
 			}
-			printf("a2_screen_chang: %08x, init_left: %d, "
+			ki_printf("a2_screen_chang: %08x, init_left: %d, "
 				"init_right:%d\n", kd_tmp_debug,
 				a2_line_full_left_edge[start_line],
 				a2_line_full_right_edge[start_line]);
@@ -2561,7 +2556,7 @@ refresh_line(int line)
 	mode = (stat >> 4) & 7;
 
 #if 0
-	printf("refresh line: %d, stat: %04x\n", line, stat);
+	ki_printf("refresh line: %d, stat: %04x\n", line, stat);
 #endif
 
 	switch(mode) {
@@ -2621,55 +2616,25 @@ refresh_line(int line)
 		break;
 	default:
 		halt_printf("refresh screen: mode: 0x%02x unknown!\n", mode);
-		exit(7);
+		my_exit(7);
 	}
 
 	a2_line_must_reparse[line] = 0;
 }
 
-int
-font_fail(int num)
-{
-	printf("Error parsing char %d\n", num);
-	exit(1);
-}
-
 void
 read_a2_font()
 {
-	char	name_buf[256];
-	FILE	*font_file;
+
+
 	byte	*f40_e_ptr;
 	byte	*f40_o_ptr;
 	byte	*f80_0_ptr, *f80_1_ptr, *f80_2_ptr, *f80_3_ptr;
 	int	char_num;
 	int	j, k;
 	int	val0;
-	int	ret;
 	int	mask;
 	int	pix;
-
-	setup_kegs_file(name_buf, sizeof(name_buf), 0, &g_kegs_font_names[0]);
-	font_file = fopen(name_buf, "rt");
-	if(font_file == (FILE *)0) {
-		printf("fopen of %s ret %p, errno: %d\n", name_buf,
-				font_file, errno);
-	}
-
-	for(char_num = 0; char_num < 256; char_num++) {
-		ret = skip_to_brace(font_file);
-		if(ret < 0) {
-			font_fail(char_num);
-		}
-		for(j = 0; j < 8; j++) {
-			val0 = get_file_byte(font_file);
-			if(val0 == -1) {
-				font_fail(char_num);
-			}
-			font_array[char_num][j] = val0;
-		}
-	}
-	fclose(font_file);
 
 	for(char_num = 0; char_num < 0x100; char_num++) {
 		for(j = 0; j < 8; j++) {
@@ -2719,101 +2684,6 @@ read_a2_font()
 	}
 }
 
-int
-skip_to_brace(FILE *font_file)
-{
-	int	cnt;
-	int	c;
-
-	cnt = 0;
-
-	while((c = get_token(font_file)) != -1) {
-		if(c == '{') {			/* } */
-			return cnt;
-		}
-		cnt++;
-	}
-	return -1;
-}
-
-int
-get_file_byte(FILE *font_file)
-{
-	int	c;
-	int	val;
-	int	dig_count;
-	int	base;
-
-	val = 0;
-	dig_count = 0;
-	base = 10;
-	while((c = get_token(font_file)) != -1) {
-		if(c >= '0' && c <= '9') {
-			val = (val * base) + (c - '0');
-			dig_count++;
-			continue;
-		}
-		if(base > 10) {
-			if(c >= 'a' && c <= 'f') {
-				val = (val * base) + 10 + (c - 'a');
-				dig_count++;
-				continue;
-			}
-			if(c >= 'A' && c <= 'F') {
-				val = (val * base) + 10 + (c - 'A');
-				dig_count++;
-				continue;
-			}
-		}
-		if(c == 'x' || c == 'X') {
-			if(dig_count && val == 0) {
-				base = 16;
-				continue;
-			}
-		}
-		if(c == ',') {
-			if(dig_count) {
-				return val;
-			} else {
-				continue;
-			}
-		}			/* { */
-		if(c == '}') {
-			if(dig_count) {
-				return val;
-			}
-			return -1;
-		}
-	}
-	return -1;
-}
-
-int
-get_token(FILE *font_file)
-{
-	int	c;
-
-	while((c = getc(font_file)) != EOF) {
-		if(c == ' ' || c == 0x0a || c == 0x0d || c == 0x09) {
-			continue;
-		}
-		if(c == '#') {
-			printf("sucking up comment\n");
-			while((c = getc(font_file)) != EOF) {
-				if(c == 0x0d || c == 0x0a) {
-					break;
-				}
-			}
-			if(c == EOF) {
-				return -1;
-			} else {
-				continue;
-			}
-		}
-		return c;
-	}
-	return -1;
-}
 
 #define MAX_STATUS_LINES	7
 #define X_LINE_LENGTH		88
@@ -2829,8 +2699,8 @@ update_status_line(int line, const char *string)
 	int	i;
 
 	if(line >= MAX_STATUS_LINES || line < 0) {
-		printf("update_status_line: line: %d!\n", line);
-		exit(1);
+		ki_printf("update_status_line: line: %d!\n", line);
+		my_exit(1);
 	}
 
 	ptr = string;
