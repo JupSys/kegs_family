@@ -13,44 +13,16 @@
 
 const char rcsid_moremem_c[] = "@(#)$Header: moremem.c,v 1.218 2000/09/24 00:55:40 kentd Exp $";
 
-#include "defc.h"
-
-extern long timezone;
-extern int daylight;
-
-extern byte *g_memory_ptr;
-extern byte *g_dummy_memory1_ptr;
-extern byte *g_slow_memory_ptr;
-extern byte *g_rom_fc_ff_ptr;
-extern byte *g_rom_cards_ptr;
-extern word32 g_mem_size_base, g_mem_size_exp;
-
-extern word32 slow_mem_changed[];
-
-extern int g_num_breakpoints;
-extern word32 g_breakpts[];
-
-extern int halt_sim;
-extern double g_last_vbl_dcycs;
-extern int speed_changed;
-
-extern Page_info page_info_rd_wr[];
-
-extern int scr_mode;
-
-extern int Verbose;
-extern int Halt_on;
-extern double g_paddle_trig_dcycs;
-extern int g_rom_version;
-
-extern int g_paddle_button[4];
-
-extern Fplus *g_cur_fplus_ptr;
-
-/* from iwm.c */
-extern int head_35;
-extern int g_apple35_sel;
-extern int cur_drive;
+#include "sim65816.h"
+#include "paddles.h"
+#include "dis.h"
+#include "video.h"
+#include "sound.h"
+#include "adb.h"
+#include "engine.h"
+#include "clock.h"
+#include "scc.h"
+#include "iwm.h"
 
 int	g_zipgs_unlock = 0;
 int	g_zipgs_disabled = 0;
@@ -64,8 +36,6 @@ int	halt_on_c02a = 0;
 int	g_shadow_all_banks = 0;
 int	g_num_shadow_all_banks = 0;
 
-extern Engine_reg engine;
-
 #define IOR(val) ( (val) ? 0x80 : 0x00 )
 
 int	linear_vid = 1;
@@ -74,8 +44,6 @@ int	bank1latch = 0;
 int	wrdefram = 0;
 int	int_crom[8] = { 0, 0, 0, 0,  0, 0, 0, 0 };
 
-extern int g_cur_a2_stat;
-
 int	annunc_0 = 0;
 int	annunc_1 = 0;
 int	annunc_2 = 0;
@@ -83,10 +51,6 @@ int	annunc_2 = 0;
 int	shadow_reg = 0x08;
 
 int	stop_on_c03x = 0;
-
-extern int doc_ptr;
-
-int	shadow_text = 1;
 
 int	g_border_color = 0;
 
@@ -122,6 +86,33 @@ int	c046_vbl_irq_pending = 0;
 #define UNIMPL_WRITE	\
 	halt_printf("UNIMP WRITE to addr %08x, val: %04x\n", loc, val);	\
 	return;
+
+static void fixup_hires_on(void);
+static void fixup_bank0_2000_4000(void);
+static void fixup_bank0_0400_0800(void);
+static void fixup_any_bank_any_page(int start_page, int num_pages, byte *mem0rd, byte *mem0wr);
+static void fixup_intcx(void);
+static void fixup_wrdefram(int new_wrdefram);
+static void fixup_st80col(double dcycs);
+static void fixup_altzp(void);
+static void fixup_page2(double dcycs);
+static void fixup_ramrd(void);
+static void fixup_ramwrt(void);
+static void fixup_lcbank2(void);
+static void fixup_rdrom(void);
+static void set_statereg(double dcycs, int val);
+static void fixup_shadow_txt1(void);
+static void fixup_shadow_txt2(void);
+static void fixup_shadow_hires1(void);
+static void fixup_shadow_hires2(void);
+static void fixup_shadow_shr(void);
+static void fixup_shadow_iolc(void);
+static void update_shadow_reg(int val);
+static void fixup_shadow_all_banks(void);
+static void show_bankptrs(int bnk);
+static void show_addr(byte *ptr);
+static int in_vblank(double dcycs);
+static int read_vid_counters(int loc, double dcycs);
 
 void
 fixup_brks()
@@ -1679,7 +1670,7 @@ io_write(word32 loc, int val, double *cyc_ptr)
 		case 0x2b: /* 0xc02b */
 			c02b_val = val;
 			if(val != 0x08 && val != 0x00) {
-				halt_printf("Writing c02b with %02x\n", val);
+				printf("Writing c02b with %02x (change display language)\n", val);
 			}
 			return;
 		case 0x2d: /* 0xc02d */

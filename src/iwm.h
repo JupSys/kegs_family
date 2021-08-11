@@ -15,6 +15,9 @@
 const char rcsid_iwm_h[] = "@(#)$Header: iwm.h,v 1.7 99/02/15 20:38:54 kentd Exp $";
 #endif
 
+#ifndef KEGS_IWM_H
+#define KEGS_IWM_H
+
 #define MAX_TRACKS	(2*80)
 #define MAX_C7_DISKS	32
 
@@ -108,3 +111,29 @@ STRUCT(Part_map) {
 	char	processor[16];
 	char	junk[128];
 };
+
+extern int head_35;
+extern int g_apple35_sel;
+extern int cur_drive;
+extern int g_fast_disk_emul;
+extern int g_iwm_motor_on;
+extern int g_slow_525_emul_wr;
+extern char g_kegs_conf_name[256];
+extern Iwm iwm;
+extern int g_highest_smartport_unit;
+
+void iwm_show_track(int slot_drive, int track);
+void iwm_show_stats(void);
+void iwm_set_apple35_sel(int newval);
+int iwm_read_c0ec(double dcycs);
+int read_iwm(int loc, double dcycs);
+void write_iwm(int loc, int val, double dcycs);
+void iwm_init(void);
+void iwm_reset(void);
+void draw_iwm_status(int line, char *buf);
+void iwm_vbl_update(void);
+
+int get_fast_disk_emul(void);
+int set_fast_disk_emul(int);
+
+#endif /* KEGS_IWM_H */

@@ -12,6 +12,7 @@
 /****************************************************************/
 
 #include <stdio.h>
+#include <unistd.h>
 
 typedef unsigned char byte;
 typedef unsigned short word16;
@@ -43,7 +44,6 @@ main(int argc, char **argv)
 	int	ret;
 	int	len;
 	int	rawlen;
-	int	i, j;
 
 	len = read(0, rawbuf, MAX_DC_SIZE);
 	fprintf(stderr, "Read 0x%x bytes\n", len);
@@ -65,4 +65,5 @@ main(int argc, char **argv)
 			rawlen, ret, errno);
 		exit(2);
 	}
+    exit(0);
 }

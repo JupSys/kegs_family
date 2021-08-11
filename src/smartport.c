@@ -13,19 +13,17 @@
 
 const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.23 2000/01/11 00:13:23 kentd Exp $";
 
-#include "defc.h"
+#include "sim65816.h"
+#include "smartport.h"
+#include "iwm.h"
+#include "engine.h"
+#include "dis.h"
 
-extern int Verbose;
-extern int Halt_on;
-extern int g_rom_version;
-extern int g_io_amt;
-extern int g_highest_smartport_unit;
+static void read_partition_block(int fd, void *buf, int blk, int blk_size);
+static void smartport_log(word32 start_addr, int cmd, int rts_addr, int cmd_list);
 
-int g_cycs_in_io_read = 0;
+word32 g_cycs_in_io_read = 0;
 
-extern Engine_reg engine;
-
-extern Iwm iwm;
 
 #define MAX_BLOCK_SIZE		0x4000
 

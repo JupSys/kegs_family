@@ -15,90 +15,101 @@ const char rcsid_video_c[] = "@(#)$Header: video.c,v 1.103 2000/09/24 00:56:44 k
 
 #include <time.h>
 
-#include "defc.h"
+#include "sim65816.h"
+#include "moremem.h"
+#include "video.h"
+#include "videodriver.h"
+#include "dis.h"
 
-extern int Verbose;
+static int get_line_stat(int line, int new_all_stat);
+static void update_a2_ptrs(int line, int new_stat);
+static void check_a2vid_palette(void);
+static void update_a2_line_info(void);
+static void update_border_info(void);
+static void update_border_line(int line_in, int color);
+static void redraw_changed_text_40(int start_offset, int start_line, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val);
+static void redraw_changed_text_80(int start_offset, int start_line, int reparse, byte *screen_data, int altcharset, int bg_val, int fg_val);
+static void redraw_changed_gr(int start_offset, int start_line, int reparse, byte *screen_data);
+static void redraw_changed_dbl_gr(int start_offset, int start_line, int reparse, byte *screen_data);
+static void redraw_changed_hires(int start_offset, int start_line, int color, int reparse, byte *screen_data);
+static void redraw_changed_hires_bw(int start_offset, int start_line, int reparse, byte *screen_data);
+static void redraw_changed_hires_color(int start_offset, int start_line, int reparse, byte *screen_data);
+static void redraw_changed_dbl_hires(int start_offset, int start_line, int color, int reparse, byte *screen_data);
+static void redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse, byte *screen_data);
+static void redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse, byte *screen_data);
+static void check_super_hires_palette_changes(int reparse);
+static void redraw_changed_super_hires_oneline_norm_320(byte *screen_data, int y, int scan, word32 ch_mask);
+static void redraw_changed_super_hires_oneline_norm_640(byte *screen_data, int y, int scan, word32 ch_mask);
+static void redraw_changed_super_hires_oneline_a2vid_320(byte *screen_data, int y, int scan, word32 ch_mask);
+static void redraw_changed_super_hires_oneline_a2vid_640(byte *screen_data, int y, int scan, word32 ch_mask);
+static void redraw_changed_super_hires_oneline_fill_320(byte *screen_data, int y, int scan, word32 ch_mask);
+static void redraw_changed_super_hires_oneline_a2vid_fill_320(byte *screen_data, int y, int scan, word32 ch_mask);
+static void redraw_changed_super_hires(int start_offset, int start_line, int in_reparse, byte *screen_data);
+static void display_screen(void);
+static void refresh_line(int line);
+static int font_fail(int num);
+static void read_a2_font(void);
+static int skip_to_brace(FILE *font_file);
+static int get_file_byte(FILE *font_file);
+static int get_token(FILE *font_file);
 
 int a2_line_stat[25];
-int a2_line_must_reparse[25];
+static int a2_line_must_reparse[25];
 int a2_line_left_edge[25];
 int a2_line_right_edge[25];
 int a2_line_full_left_edge[25];
 int a2_line_full_right_edge[25];
-byte *a2_line_ptr[25];
+static byte *a2_line_ptr[25];
 void *a2_line_xim[25];
 
-int mode_text[2][25];
-int mode_hires[2][25];
-int mode_superhires[25];
-int mode_border[25];
+static int mode_text[2][25];
+static int mode_hires[2][25];
+static int mode_superhires[25];
+static int mode_border[25];
 
-byte cur_border_colors[270];
-byte new_special_border[64][64];
-byte cur_special_border[64][64];
+static byte cur_border_colors[270];
 
 word32	a2_screen_buffer_changed = -1;
 word32	g_full_refresh_needed = -1;
 
 word32 g_cycs_in_40col = 0;
 
-extern int screen_index[];
-extern byte *g_slow_memory_ptr;
-extern int g_screen_depth;
-
-extern int statereg;
-extern double g_cur_dcycs;
-
-extern int g_border_color;
-
-typedef byte Change;
-
 word32 slow_mem_changed[SLOW_MEM_CH_SIZE];
 
-word32 font40_even_bits[0x100][8][16/4];
-word32 font40_odd_bits[0x100][8][16/4];
-word32 font80_off0_bits[0x100][8][12/4];
-word32 font80_off1_bits[0x100][8][12/4];
-word32 font80_off2_bits[0x100][8][12/4];
-word32 font80_off3_bits[0x100][8][12/4];
+static word32 font40_even_bits[0x100][8][16/4];
+static word32 font40_odd_bits[0x100][8][16/4];
+static word32 font80_off0_bits[0x100][8][12/4];
+static word32 font80_off1_bits[0x100][8][12/4];
+static word32 font80_off2_bits[0x100][8][12/4];
+static word32 font80_off3_bits[0x100][8][12/4];
 
-byte superhires_scan_save[256];
+byte font_array[256][8];
+static const char *g_kegs_font_names[] = { "font.65sim", "font.kegs", "kegs.font", 0 };
 
-extern void *ximage_text[2];
-extern void *ximage_hires[2];
-extern void *ximage_superhires;
-extern void *ximage_border_special;
-extern void *ximage_border_sides;
+static byte superhires_scan_save[256];
 
-extern byte *data_text[2];
-extern byte *data_hires[2];
-extern byte *data_superhires;
-extern byte *data_border_special;
-extern byte *data_border_sides;
 
-extern double g_last_vbl_dcycs;
-
-int	need_redraw = 1;
-int	g_palette_changed = 1;
+static int	need_redraw = 1;
+static int	g_palette_changed = 1;
 int	g_border_sides_refresh_needed = 1;
 int	g_border_special_refresh_needed = 1;
-int	g_border_line24_refresh_needed = 1;
+static int	g_border_line24_refresh_needed = 1;
 int	g_status_refresh_needed = 1;
 
-int	g_vbl_border_color = 0;
-int	g_border_last_vbl_changes = 0;
+static int	g_vbl_border_color = 0;
+static int	g_border_last_vbl_changes = 0;
 
 int	g_use_dhr140 = 1;		/* HACK */
 
 #define A2_MAX_ALL_STAT		34
 
-int	a2_new_all_stat[A2_MAX_ALL_STAT];
-int	a2_cur_all_stat[A2_MAX_ALL_STAT];
-int	g_new_a2_stat_cur_line = 0;
+static int	a2_new_all_stat[A2_MAX_ALL_STAT];
+static int	a2_cur_all_stat[A2_MAX_ALL_STAT];
+static int	g_new_a2_stat_cur_line = 0;
 
-int	g_expanded_col_0[16];
-int	g_expanded_col_1[16];
-int	g_expanded_col_2[16];
+static int	g_expanded_col_0[16];
+static int	g_expanded_col_1[16];
+static int	g_expanded_col_2[16];
 
 
 int g_cur_a2_stat = ALL_STAT_TEXT | ALL_STAT_ANNUNC3 |
@@ -107,7 +118,13 @@ int g_cur_a2_stat = ALL_STAT_TEXT | ALL_STAT_ANNUNC3 |
 int	g_a2vid_palette = 0xe;
 int	g_installed_full_superhires_colormap = 0;
 
-const int dbhires_colors[] = {
+static const int screen_index[24] = {
+		0x000, 0x080, 0x100, 0x180, 0x200, 0x280, 0x300, 0x380,
+		0x028, 0x0a8, 0x128, 0x1a8, 0x228, 0x2a8, 0x328, 0x3a8,
+		0x050, 0x0d0, 0x150, 0x1d0, 0x250, 0x2d0, 0x350, 0x3d0 };
+
+
+static const int dbhires_colors[] = {
 		/* rgb */
 		0x000,		/* 0x0 black */
 		0xd03,		/* 0x1 deep red */
@@ -127,10 +144,10 @@ const int dbhires_colors[] = {
 		0xfff		/* 0xf white */
 };
 
-word32 g_dhires_convert[4096];	/* look up table of 7 bits (concat): */
+static word32 g_dhires_convert[4096];	/* look up table of 7 bits (concat): */
 				/* { 4 bits, |3 prev bits| } */
 
-const byte g_dhires_colors_16[] = {
+static const byte g_dhires_colors_16[] = {
 		0x00,	/* 0x0 black */
 		0x02,	/* 0x1 dark blue */
 		0x04,	/* 0x2 dark green */
@@ -149,7 +166,7 @@ const byte g_dhires_colors_16[] = {
 		0x0f/* 0xf white */
 };
 
-const int lores_colors[] = {
+const int lores_colors[16] = {
 		/* rgb */
 		0x000,		/* 0x0 black */
 		0xd03,		/* 0x1 deep red */
@@ -170,7 +187,7 @@ const int lores_colors[] = {
 };
 
 #if 0
-int hires_colors[] = {
+static const int hires_colors[] = {
 		/* rgb */
 		0x000,		/* 0x0 black */
 		0x0d0,		/* 0x1 green */
@@ -183,14 +200,14 @@ int hires_colors[] = {
 };
 #endif
 
-const word32 bw_hires_convert[4] = {
+static const word32 bw_hires_convert[4] = {
 	BIGEND(0x00000000),
 	BIGEND(0x0f0f0000),
 	BIGEND(0x00000f0f),
 	BIGEND(0x0f0f0f0f)
 };
 
-const word32 bw_dhires_convert[16] = {
+static const word32 bw_dhires_convert[16] = {
 	BIGEND(0x00000000),
 	BIGEND(0x0f000000),
 	BIGEND(0x000f0000),
@@ -283,16 +300,9 @@ const word32 hires_convert[64] = {
 };
 
 void
-video_init()
+video_init_stat()
 {
-	word32	col[4];
-	word32	*ptr;
-	word32	val0, val1, val2, val3;
-	word32	prev_col, match_col;
-	word32	val;
-	int	total;
-	int	i, j;
-/* Initialize video system */
+    int i;
 
 	for(i = 0; i < 25; i++) {
 		a2_line_ptr[i] = (byte *)0;
@@ -308,8 +318,30 @@ video_init()
 	}
 
 	g_new_a2_stat_cur_line = 0;
+}
 
-	dev_video_init();
+void
+video_init(int devtype)
+{
+	word32	col[4];
+	word32	*ptr;
+	word32	val0, val1, val2, val3;
+	word32	prev_col, match_col;
+	word32	val;
+	int	total;
+	int	i, j;
+/* Initialize video system */
+
+	video_init_stat();
+
+	if(!video_init_device(devtype)) {
+        vid_printf("Video device type %d not available, disabling video\n",devtype);
+        if(!video_init_device(VIDEO_NONE)) {
+            vid_printf("Cannot initialize video\n");
+            exit(1);
+        }
+    }
+            
 
 	read_a2_font();
 
@@ -318,34 +350,36 @@ video_init()
 	for(i = 0; i < 5; i++) {
 		switch(i) {
 		case 0:
-			ptr = (word32 *)&(data_text[0][0]);
+			ptr = (word32 *)&(video_data_text[0][0]);
 			total = (A2_WINDOW_HEIGHT)*(A2_WINDOW_WIDTH);
 			break;
 		case 1:
-			ptr = (word32 *)&(data_text[1][0]);
+			ptr = (word32 *)&(video_data_text[1][0]);
 			total = (A2_WINDOW_HEIGHT)*(A2_WINDOW_WIDTH);
 			break;
 		case 2:
-			ptr = (word32 *)&(data_hires[0][0]);
+			ptr = (word32 *)&(video_data_hires[0][0]);
 			total = (A2_WINDOW_HEIGHT)*(A2_WINDOW_WIDTH);
 			break;
 		case 3:
-			ptr = (word32 *)&(data_hires[1][0]);
+			ptr = (word32 *)&(video_data_hires[1][0]);
 			total = (A2_WINDOW_HEIGHT)*(A2_WINDOW_WIDTH);
 			break;
 		case 4:
-			ptr = (word32 *)&(data_superhires[0]);
+			ptr = (word32 *)&(video_data_superhires[0]);
 			total = (A2_WINDOW_HEIGHT)*(A2_WINDOW_WIDTH);
 			break;
+#if 0
 		case 5:
-			ptr = (word32 *)&(data_border_sides[0]);
+			ptr = (word32 *)&(video_data_border_sides[0]);
 			total = (A2_WINDOW_HEIGHT)*(EFF_BORDER_WIDTH);
 			break;
 		case 6:
-			ptr = (word32 *)&(data_border_special[0]);
+			ptr = (word32 *)&(video_data_border_special[0]);
 			total = (X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8) *
 					(X_A2_WINDOW_WIDTH);
 			break;
+#endif
 		default:
 			printf("i: %d, unknown\n", i);
 			exit(3);
@@ -447,7 +481,7 @@ video_reset()
 
 	update_a2_line_info();
 	/* install_a2vid_colormap(); */
-	update_physical_colormap();
+	video_update_physical_colormap();
 	g_palette_changed = 0;
 }
 
@@ -468,7 +502,7 @@ video_update()
 	update_border_info();
 
 	GET_ITIMER(start_time);
-	check_input_events();
+	video_check_input_events();
 	GET_ITIMER(end_time);
 
 	g_cycs_in_check_input += (end_time - start_time);
@@ -509,7 +543,7 @@ change_display_mode(double dcycs)
 		halt_printf("Line < 0!\n");
 	}
 	line = line >> 3;
-	if(line > 24) {
+	if(line > 25) {
 		line = 0;
 	}
 
@@ -553,7 +587,7 @@ get_line_stat(int line, int new_all_stat)
 			mode = MODE_BORDER;
 			page = 0; dbl = 0; color = 0;
 		} else if((new_all_stat & ALL_STAT_TEXT) ||
-						(line >= 20 && mix_t_gr)) {
+						(line > 20 && mix_t_gr)) {
 			mode = MODE_TEXT;
 			color = 0;
 			altchar = EXTRU(new_all_stat,
@@ -602,21 +636,21 @@ update_a2_ptrs(int line, int new_stat)
 	switch(mode) {
 	case MODE_TEXT:
 	case MODE_GR:
-		ptr = data_text[page];
-		xim = ximage_text[page];
+		ptr = video_data_text[page];
+		xim = video_image_text[page];
 		mode_ptr = &(mode_text[page][0]);
 		break;
 	case MODE_HGR:
-		ptr = data_hires[page];
-		xim = ximage_hires[page];
+		ptr = video_data_hires[page];
+		xim = video_image_hires[page];
 		mode_ptr = &(mode_hires[page][0]);
 		/*  arrange to force superhires reparse since we use the */
 		/*    same memory */
 		mode_superhires[line] = -1;
 		break;
 	case MODE_SUPER_HIRES:
-		ptr = data_superhires;
-		xim = ximage_superhires;
+		ptr = video_data_superhires;
+		xim = video_image_superhires;
 		mode_ptr = &(mode_superhires[0]);
 		/*  arrange to force hires reparse since we use the */
 		/*    same memory */
@@ -625,8 +659,8 @@ update_a2_ptrs(int line, int new_stat)
 		break;
 	case MODE_BORDER:
 		/* Hack: reuse text page last line as the special border */
-		ptr = data_text[0];
-		xim = ximage_text[0];
+		ptr = video_data_text[0];
+		xim = video_image_text[0];
 		mode_ptr = &(mode_border[0]);
 		break;
 	default:
@@ -766,8 +800,8 @@ STRUCT(Border_changes) {
 	int	val;
 };
 
-Border_changes border_changes[MAX_BORDER_CHANGES];
-int	g_num_border_changes = 0;
+static Border_changes border_changes[MAX_BORDER_CHANGES];
+static int	g_num_border_changes = 0;
 
 void
 change_border_color(double dcycs, int val)
@@ -875,7 +909,7 @@ update_border_line(int line_in, int color)
 			line = 0;
 		}
 
-		ptr =(word32 *)&(data_border_special[2*line*X_A2_WINDOW_WIDTH]);
+		ptr =(word32 *)&(video_data_border_special[2*line*X_A2_WINDOW_WIDTH]);
 		limit = (2*X_A2_WINDOW_WIDTH) >> 2;
 
 		g_border_special_refresh_needed = 1;
@@ -890,7 +924,7 @@ update_border_line(int line_in, int color)
 			line = 0;
 		}
 
-		ptr =(word32 *)&(data_text[0][2*(192 + line)*A2_WINDOW_WIDTH]);
+		ptr =(word32 *)&(video_data_text[0][2*(192 + line)*A2_WINDOW_WIDTH]);
 		limit = (2*A2_WINDOW_WIDTH) >> 2;
 
 		g_border_line24_refresh_needed = 1;
@@ -901,7 +935,7 @@ update_border_line(int line_in, int color)
 	}
 	if(line_in < 200) {
 		line = line_in;
-		ptr = (word32 *)&(data_border_sides[2*line * EFF_BORDER_WIDTH]);
+		ptr = (word32 *)&(video_data_border_sides[2*line * EFF_BORDER_WIDTH]);
 		limit = (2 * EFF_BORDER_WIDTH) >> 2;
 		g_border_sides_refresh_needed = 1;
 		for(i = 0; i < limit; i++) {
@@ -969,8 +1003,8 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 	register word32 start_time, end_time;
 
 
-	a2_line_full_left_edge[start_line] = 0;
-	a2_line_full_right_edge[start_line] = 560;
+	a2_line_full_left_edge[start_line] = 0 + BORDER_CENTER_X;
+	a2_line_full_right_edge[start_line] = 560 + BORDER_CENTER_X;
 
 	y = start_line;
 	line_mask = 1 << (y);
@@ -1013,7 +1047,7 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 		left = MIN(x1, left);
 		right = MAX(x1 + shift_per, right);
 		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
+		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14 + BORDER_CENTER_X];
 		img_ptr = (word32 *)b_ptr;
 		img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
 
@@ -1089,8 +1123,8 @@ redraw_changed_text_40(int start_offset, int start_line, int reparse,
 	}
 	GET_ITIMER(end_time);
 
-	a2_line_left_edge[start_line] = (left*14);
-	a2_line_right_edge[start_line] = (right*14);
+	a2_line_left_edge[start_line] = (left*14) + BORDER_CENTER_X;
+	a2_line_right_edge[start_line] = (right*14) + BORDER_CENTER_X;
 
 	if(left >= right || left < 0 || right < 0) {
 		printf("line %d, 40: left >= right: %d >= %d\n",
@@ -1132,11 +1166,11 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 	int	shift_per;
 	int	left, right;
 
-	a2_line_full_left_edge[start_line] = 0;
-	a2_line_full_right_edge[start_line] = 560;
+	a2_line_full_left_edge[start_line] = 0 + BORDER_CENTER_X;
+	a2_line_full_right_edge[start_line] = 560 + BORDER_CENTER_X;
 
 	y = start_line;
-	line_mask = 1 << (y);
+	line_mask = 1 << y;
 	mem_ptr = 0x400 + screen_index[y] + start_offset;
 	if(mem_ptr < 0x400 || mem_ptr >= 0xc00) {
 		halt_printf("redraw_changed_text: mem_ptr: %08x\n", mem_ptr);
@@ -1173,7 +1207,7 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 		right = MAX(x1 + shift_per, right);
 
 		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
+		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14 + BORDER_CENTER_X];
 		img_ptr = (word32 *)b_ptr;
 		img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
 
@@ -1275,8 +1309,8 @@ redraw_changed_text_80(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	a2_line_left_edge[start_line] = (left*14);
-	a2_line_right_edge[start_line] = (right*14);
+	a2_line_left_edge[start_line] = (left*14)+BORDER_CENTER_X;
+	a2_line_right_edge[start_line] = (right*14)+BORDER_CENTER_X;
 
 	if(left >= right || left < 0 || right < 0) {
 		printf("line %d, 80: left >= right: %d >= %d\n",
@@ -1315,8 +1349,8 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 	int	shift_per;
 	int	left, right;
 
-	a2_line_full_left_edge[start_line] = 0;
-	a2_line_full_right_edge[start_line] = 560;
+	a2_line_full_left_edge[start_line] = 0 + BORDER_CENTER_X;
+	a2_line_full_right_edge[start_line] = 560 + BORDER_CENTER_X;
 
 	y = start_line;
 	line_mask = 1 << y;
@@ -1349,7 +1383,7 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 		right = MAX(x1 + shift_per, right);
 
 		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
+		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14 + BORDER_CENTER_X];
 		img_ptr = (word32 *)b_ptr;
 
 		for(x2 = 0; x2 < shift_per; x2 += 2) {
@@ -1390,8 +1424,8 @@ redraw_changed_gr(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	a2_line_left_edge[start_line] = (left*14);
-	a2_line_right_edge[start_line] = (right*14);
+	a2_line_left_edge[start_line] = (left*14) + BORDER_CENTER_X;
+	a2_line_right_edge[start_line] = (right*14) + BORDER_CENTER_X;
 
 	need_redraw = 0;
 }
@@ -1426,8 +1460,8 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 	int	shift_per;
 	int	left, right;
 
-	a2_line_full_left_edge[start_line] = 0;
-	a2_line_full_right_edge[start_line] = 560;
+	a2_line_full_left_edge[start_line] = 0 + BORDER_CENTER_X;
+	a2_line_full_right_edge[start_line] = 560 + BORDER_CENTER_X;
 
 	y = start_line;
 	line_mask = 1 << y;
@@ -1460,7 +1494,7 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 		right = MAX(x1 + shift_per, right);
 
 		slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14];
+		b_ptr = &screen_data[(y*16)*A2_WINDOW_WIDTH + x1*14 + BORDER_CENTER_X];
 		img_ptr = (word32 *)b_ptr;
 
 		for(x2 = 0; x2 < shift_per; x2 += 2) {
@@ -1520,8 +1554,8 @@ redraw_changed_dbl_gr(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	a2_line_left_edge[start_line] = (left*14);
-	a2_line_right_edge[start_line] = (right*14);
+	a2_line_left_edge[start_line] = (left*14) + BORDER_CENTER_X;
+	a2_line_right_edge[start_line] = (right*14) + BORDER_CENTER_X;
 
 	need_redraw = 0;
 }
@@ -1565,8 +1599,8 @@ redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
 	int	shift_per;
 	int	left, right;
 
-	a2_line_full_left_edge[start_line] = 0;
-	a2_line_full_right_edge[start_line] = 560;
+	a2_line_full_left_edge[start_line] = 0 + BORDER_CENTER_X;
+	a2_line_full_right_edge[start_line] = 560 + BORDER_CENTER_X;
 
 	palette_add = (g_a2vid_palette << 4);
 	palette_add = palette_add + (palette_add << 8) + (palette_add << 16) +
@@ -1603,7 +1637,7 @@ redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
 			right = MAX(x1 + shift_per, right);
 
 			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
+            b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14 + BORDER_CENTER_X];
 			img_ptr = (word32 *)b_ptr;
 			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
 	
@@ -1650,8 +1684,8 @@ redraw_changed_hires_bw(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	a2_line_left_edge[start_line] = (left*14);
-	a2_line_right_edge[start_line] = (right*14);
+	a2_line_left_edge[start_line] = (left*14) + BORDER_CENTER_X;
+	a2_line_right_edge[start_line] = (right*14) + BORDER_CENTER_X;
 
 	need_redraw = 0;
 }
@@ -1688,8 +1722,8 @@ redraw_changed_hires_color(int start_offset, int start_line, int reparse,
 	int	shift_per;
 	int	left, right;
 
-	a2_line_full_left_edge[start_line] = 0;
-	a2_line_full_right_edge[start_line] = 560;
+	a2_line_full_left_edge[start_line] = 0 + BORDER_CENTER_X;
+	a2_line_full_right_edge[start_line] = 560 + BORDER_CENTER_X;
 
 	palette_add = (g_a2vid_palette << 4);
 	palette_add = palette_add + (palette_add << 8) + (palette_add << 16) +
@@ -1726,7 +1760,7 @@ redraw_changed_hires_color(int start_offset, int start_line, int reparse,
 			right = MAX(x1 + shift_per, right);
 
 			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
+            b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14 + BORDER_CENTER_X];
 			img_ptr = (word32 *)b_ptr;
 			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
 
@@ -1784,8 +1818,8 @@ redraw_changed_hires_color(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	a2_line_left_edge[start_line] = (left*14);
-	a2_line_right_edge[start_line] = (right*14);
+	a2_line_left_edge[start_line] = (left*14) + BORDER_CENTER_X;
+	a2_line_right_edge[start_line] = (right*14) + BORDER_CENTER_X;
 
 	need_redraw = 0;
 }
@@ -1831,8 +1865,8 @@ redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
 	int	shift_per;
 	int	left, right;
 
-	a2_line_full_left_edge[start_line] = 0;
-	a2_line_full_right_edge[start_line] = 560;
+	a2_line_full_left_edge[start_line] = 0 + BORDER_CENTER_X;
+	a2_line_full_right_edge[start_line] = 560 + BORDER_CENTER_X;
 
 	palette_add = (g_a2vid_palette << 4);
 	palette_add = palette_add + (palette_add << 8) + (palette_add << 16) +
@@ -1864,7 +1898,7 @@ redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
 			right = MAX(x1 + shift_per, right);
 	
 			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
+            b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14 + BORDER_CENTER_X];
 			img_ptr = (word32 *)b_ptr;
 			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
 
@@ -1916,8 +1950,8 @@ redraw_changed_dbl_hires_bw(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	a2_line_left_edge[start_line] = (left*14);
-	a2_line_right_edge[start_line] = (right*14);
+	a2_line_left_edge[start_line] = (left*14) + BORDER_CENTER_X;
+	a2_line_right_edge[start_line] = (right*14) + BORDER_CENTER_X;
 
 	need_redraw = 0;
 }
@@ -1949,8 +1983,8 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 	int	shift_per;
 	int	left, right;
 
-	a2_line_full_left_edge[start_line] = 0;
-	a2_line_full_right_edge[start_line] = 560;
+	a2_line_full_left_edge[start_line] = 0 + BORDER_CENTER_X;
+	a2_line_full_right_edge[start_line] = 560 + BORDER_CENTER_X;
 
 	palette_add = (g_a2vid_palette << 4);
 	palette_add = palette_add + (palette_add << 8) + (palette_add << 16) +
@@ -1988,7 +2022,7 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 			right = MAX(x1 + shift_per, right);
 	
 			slow_mem_ptr = &(g_slow_memory_ptr[mem_ptr + x1]);
-			b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14];
+            b_ptr = &screen_data[(y*2)*A2_WINDOW_WIDTH + x1*14 + BORDER_CENTER_X];
 			img_ptr = (word32 *)b_ptr;
 			img_ptr2 = (word32 *)(b_ptr + A2_WINDOW_WIDTH);
 
@@ -2047,8 +2081,8 @@ redraw_changed_dbl_hires_color(int start_offset, int start_line, int reparse,
 		}
 	}
 
-	a2_line_left_edge[start_line] = (left*14);
-	a2_line_right_edge[start_line] = (right*14);
+	a2_line_left_edge[start_line] = (left*14) + BORDER_CENTER_X;
+	a2_line_right_edge[start_line] = (right*14) + BORDER_CENTER_X;
 
 	need_redraw = 0;
 }
@@ -2159,7 +2193,7 @@ check_super_hires_palette_changes(int reparse)
 		for(j = 0; j < 16; j++) {
 			val0 = *byte_ptr++;
 			val1 = *byte_ptr++;
-			update_color_array(i*16 + j, (val1<<8) + val0);
+			video_update_color(i*16 + j, (val1<<8) + val0);
 		}
 	}
 
@@ -2420,15 +2454,39 @@ display_screen()
 
 	for(i = 0; i < 25; i++) {
 		a2_line_must_reparse[i] = 1;
-		a2_line_full_left_edge[i] = 0;
-		a2_line_full_right_edge[i] = 560;
+		a2_line_full_left_edge[i] = 0 + BORDER_CENTER_X;
+		a2_line_full_right_edge[i] = 560 + BORDER_CENTER_X;
 	}
 
 	refresh_screen();
 }
 
+void
+video_full_redraw()
+{
+    int i;
+    for(i = 0; i < 25; i++) {
+        update_a2_ptrs(i, a2_line_stat[i]);
+    }
+    //a2_screen_buffer_changed = -1;
+    //g_full_refresh_needed = -1;
+    
+    //g_border_sides_refresh_needed = 1;
+    //g_border_special_refresh_needed = 1;
+    //g_status_refresh_needed = 1;
+    g_border_last_vbl_changes = 1;
+    {
+        int i;
+        for(i = 0; i < 262; i++) {
+            cur_border_colors[i] ^= 1;;
+        }
+    }
+    video_update_physical_colormap();    
+    display_screen();
+}
+
 word32 g_cycs_in_refresh_line = 0;
-word32 g_cycs_in_refresh_ximage = 0;
+word32 g_cycs_in_refresh_video_image = 0;
 
 int	g_num_lines_a2vid = 0;
 int	g_num_lines_superhires = 0;
@@ -2455,7 +2513,7 @@ refresh_screen()
 	}
 
 	if(g_palette_changed) {
-		update_physical_colormap();
+		video_update_physical_colormap();
 		g_palette_changed = 0;
 	}
 	if(previous_superhires && !g_num_lines_superhires) {
@@ -2463,21 +2521,18 @@ refresh_screen()
 		g_border_sides_refresh_needed = 1;
 	}
 
-	/* deal with border */
-	refresh_border();
-
 	if(g_status_refresh_needed) {
 		g_status_refresh_needed = 0;
-		redraw_status_lines();
+		video_redraw_status_lines();
 	}
 
 	GET_ITIMER(end_time);
 	g_cycs_in_refresh_line += (end_time - start_time);
 
 	GET_ITIMER(start_time);
-	x_refresh_ximage();
+	video_refresh_image();
 	GET_ITIMER(end_time);
-	g_cycs_in_refresh_ximage += (end_time - start_time);
+	g_cycs_in_refresh_video_image += (end_time - start_time);
 }
 
 void
@@ -2555,10 +2610,10 @@ refresh_line(int line)
 		if(line != 24) {
 			halt_printf("Border line not 24!\n");
 		}
-		a2_line_full_left_edge[line] = 0;
-		a2_line_left_edge[line] = 0;
-		a2_line_full_right_edge[line] = 560;
-		a2_line_right_edge[line] = 560;
+		a2_line_full_left_edge[line] = 0 + BORDER_CENTER_X;
+		a2_line_left_edge[line] = 0 + BORDER_CENTER_X;
+		a2_line_full_right_edge[line] = 560 + BORDER_CENTER_X;
+		a2_line_right_edge[line] = 560 + BORDER_CENTER_X;
 		if(g_border_line24_refresh_needed) {
 			g_border_line24_refresh_needed = 0;
 			a2_screen_buffer_changed |= (1 << 24);
@@ -2571,22 +2626,6 @@ refresh_line(int line)
 
 	a2_line_must_reparse[line] = 0;
 }
-
-void
-refresh_border()
-{
-	/**ZZZZ***/
-}
-
-void
-end_screen()
-{
-	printf("In end_screen\n");
-	xdriver_end();
-}
-
-byte font_array[256][8];
-const char *g_kegs_font_names[] = { "font.65sim", "font.kegs", "kegs.font", 0 };
 
 int
 font_fail(int num)
@@ -2630,6 +2669,7 @@ read_a2_font()
 			font_array[char_num][j] = val0;
 		}
 	}
+	fclose(font_file);
 
 	for(char_num = 0; char_num < 0x100; char_num++) {
 		for(j = 0; j < 8; j++) {
@@ -2677,8 +2717,6 @@ read_a2_font()
 			}
 		}
 	}
-
-	fclose(font_file);
 }
 
 int
@@ -2775,5 +2813,36 @@ get_token(FILE *font_file)
 		return c;
 	}
 	return -1;
+}
+
+#define MAX_STATUS_LINES	7
+#define X_LINE_LENGTH		88
+
+
+char	g_video_status_buf[MAX_STATUS_LINES][X_LINE_LENGTH + 1];
+
+void
+update_status_line(int line, const char *string)
+{
+	char	*buf;
+	const char *ptr;
+	int	i;
+
+	if(line >= MAX_STATUS_LINES || line < 0) {
+		printf("update_status_line: line: %d!\n", line);
+		exit(1);
+	}
+
+	ptr = string;
+	buf = &(g_video_status_buf[line][0]);
+	for(i = 0; i < X_LINE_LENGTH; i++) {
+		if(*ptr) {
+			buf[i] = *ptr++;
+		} else {
+			buf[i] = ' ';
+		}
+	}
+
+	buf[X_LINE_LENGTH] = 0;
 }
 

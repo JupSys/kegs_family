@@ -15,17 +15,168 @@ const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.38 99/10/11 01:30:41 kentd Ex
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
+#include "sim65816.h"
 #include "adb.h"
-
-extern int Verbose;
-extern word32 g_vbl_count;
-extern int g_rom_version;
+#include "video.h"
+#include "dis.h"
 
 enum {
 	ADB_IDLE = 0,
 	ADB_IN_CMD,
 	ADB_SENDING_DATA,
 };
+
+#define LEN_ADB_LOG	16
+STRUCT(Adb_log) {
+	word32	addr;
+	int	val;
+	int	state;
+};
+
+static void adb_log(word32 addr, int val);
+static void adb_error(void);
+static void adb_add_kbd_srq(void);
+static void adb_clear_kbd_srq(void);
+static void adb_add_data_int(void);
+static void adb_add_mouse_int(void);
+static void adb_clear_data_int(void);
+static void adb_clear_mouse_int(void);
+static void adb_send_bytes(int num_bytes, word32 val0, word32 val1, word32 val2);
+static void adb_send_1byte(word32 val);
+static void adb_response_packet(int num_bytes, word32 val);
+static void adb_kbd_reg0_data(int a2code, int is_up);
+static void adb_kbd_talk_reg0(void);
+static void adb_set_config(word32 val0, word32 val1, word32 val2);
+static void adb_set_new_mode(word32 val);
+static void do_adb_cmd(void);
+static int read_adb_ram(word32 addr);
+static void write_adb_ram(word32 addr, int val);
+static void adb_key_event(int a2code, int is_up);
+static void adb_virtual_key_update(int a2code, int is_up);
+
+int g_warp_pointer = 0;
+int g_mouse_cur_x = 0;
+int g_mouse_cur_y = 0;
+
+static const int a2_key_to_ascii_raw[][4] = {
+	{ A2KEY_ESCAPE,	0x1b,	0x1b,	-1 },	/* Esc */
+	{ A2KEY_F1,	0x107a,	0x107a,	-1 },	/* F1 */
+#ifdef APPLE_EXTENDED_KEYBOARD
+	{ A2KEY_F2,	0x1078,	0x1078,	-1 },	/* F2 */
+#else
+	{ A2KEY_F2,	0x107b,	0x107b,	-1 },	/* F2 */
+#endif
+	{ A2KEY_F3,	0x1063,	0x1063,	-1 },	/* F3 */
+	{ A2KEY_F4,	0x1076,	0x1076,	-1 },	/* F4 */
+	{ A2KEY_F5,	0x1060,	0x1060,	-1 },	/* F5 */
+	{ A2KEY_F6,	0x1061,	0x1061,	-1 },	/* F6 */
+	{ A2KEY_F7,	0x1062,	0x1062,	-1 },	/* F7 */
+	{ A2KEY_F8,	0x1064,	0x1064,	-1 },	/* F8 */
+	{ A2KEY_F9,	0x1065,	0x1065,	-1 },	/* F9 */
+	{ A2KEY_F10,	0x106d,	0x106d,	-1 },	/* F10 */
+	{ A2KEY_F11,	0x1067,	0x1067,	-1 },	/* F11 */
+	{ A2KEY_F12,	0x106f,	0x106f,	-1 },	/* F12 */
+	{ A2KEY_F13,	0x1069,	0x1069,	-1 },	/* F13 */
+	{ A2KEY_F14,	0x106b,	0x106b,	-1 },	/* F14 */
+	{ A2KEY_F15,	0x1071,	0x1071,	-1 },	/* F15 */
+	{ A2KEY_RESET, -1,	-1,	-1 },	/* Reset */
+	{ A2KEY_BACKQUOTE,	'`',	'~',	-1 },
+	{ 0x12,	'1',	'!',	-1 },
+	{ 0x13,	'2',	'@',	0x80 },
+	{ 0x14,	'3',	'#',	-1 },
+	{ 0x15,	'4',	'$',	-1 },
+	{ 0x17,	'5',	'%',	-1 },
+	{ 0x16,	'6',	'^',	0x1e },
+	{ 0x1a,	'7',	'&',	-1 },
+	{ 0x1c,	'8',	'*',	-1 },
+	{ 0x19,	'9',	'(',	-1 },
+	{ 0x1d,	'0',	')',	-1 },
+	{ 0x1b,	'-',	'_',	0 },
+	{ 0x18,	'=',	'+',	-1 },
+	{ A2KEY_DELETE,	0x7f,	0x7f,	-1 },	/* Delete */
+	{ A2KEY_INSERTHELP,	0x1072,	0x1072,	-1 },	/* Help, insert */
+	{ A2KEY_HOME,	0x1073,	0x1073,	-1 },	/* Home */
+	{ A2KEY_PAGEUP,	0x1074,	0x1074,	-1 },	/* Page up */
+	{ 0x47,	0x1018,	0x1018,	-1 },	/* keypad Clear */
+	{ 0x51,	0x103d,	0x103d,	-1 },	/* keypad = */
+	{ 0x4b,	0x102f,	0x102f,	-1 },	/* keypad / */
+	{ 0x43,	0x102a,	0x102a,	-1 },	/* keypad * */
+
+	{ A2KEY_TAB,	0x09,	0x09,	-1 },	/* tab */
+	{ 0x0c,	'q',	'Q',	0 },
+	{ 0x0d,	'w',	'W',	0 },
+	{ 0x0e,	'e',	'E',	0 },
+	{ 0x0f,	'r',	'R',	0 },
+	{ 0x11,	't',	'T',	0 },
+	{ 0x10,	'y',	'Y',	0 },
+	{ 0x20,	'u',	'U',	0 },
+	{ 0x22,	'i',	'I',	0 },
+	{ 0x1f,	'o',	'O',	0 },
+	{ 0x23,	'p',	'P',	0 },
+	{ 0x21,	'[',	'{',	0 },
+	{ 0x1e,	']',	'}',	0 },
+	{ 0x2a,	0x5c,	'|',	0 },	/* \, | */
+	{ A2KEY_FWDDEL,	0x1075,	0x1075,	-1 },	/* keypad delete */
+	{ A2KEY_END,	0x1077,	0x1077,	-1 },	/* keypad end */
+	{ A2KEY_PAGEDOWN,	0x1079,	0x1079,	-1 },	/* keypad page down */
+	{ 0x59,	0x1037, 0x1037,	-1 },	/* keypad 7 */
+	{ 0x5b,	0x1038,	0x1038,	-1 },	/* keypad 8 */
+	{ 0x5c,	0x1039,	0x1039,	-1 },	/* keypad 9 */
+	{ 0x4e,	0x102d,	0x102d,	-1 },	/* keypad - */
+
+	{ A2KEY_CAPSLOCK,	0x0400,	0x0400,	-1 },	/* caps lock */
+	{ 0x00,	'a',	'A',	0 },
+	{ 0x01,	's',	'S',	0 },
+	{ 0x02,	'd',	'D',	0 },
+	{ 0x03,	'f',	'F',	0 },
+	{ 0x05,	'g',	'G',	0 },
+	{ 0x04,	'h',	'H',	0 },
+	{ 0x26,	'j',	'J',	0 },
+	{ 0x28,	'k',	'K',	0 },
+	{ 0x25,	'l',	'L',	0 },
+	{ 0x29,	';',	':',	-1 },
+	{ 0x27,	0x27,	'"',	-1 },	/* single quote */
+	{ 0x24,	0x0d,	0x0d,	-1 },	/* return */
+	{ 0x56,	0x1034,	0x1034,	-1 },	/* keypad 4 */
+	{ 0x57,	0x1035, 0x1035, -1 },	/* keypad 5 */
+	{ 0x58,	0x1036, 0x1036, -1 },	/* keypad 6 */
+	{ 0x45,	0x102b, 0x102b, -1 },	/* keypad + */
+
+	{ A2KEY_SHIFT,	0x0100,	0x0100, -1 },	/* shift */
+	{ 0x06,	'z',	'Z',	0 },
+	{ 0x07,	'x',	'X',	0 },
+	{ 0x08,	'c',	'C',	0 },
+	{ 0x09,	'v',	'V',	0 },
+	{ 0x0b,	'b',	'B',	0 },
+	{ 0x2d,	'n',	'N',	0 },
+	{ 0x2e,	'm',	'M',	0 },
+	{ 0x2b,	',',	'<',	-1 },
+	{ 0x2f,	'.',	'>',	-1 },
+	{ 0x2c,	'/',	'?',	0x7f },
+	{ A2KEY_UP,	0x0b,	0x0b,	-1 },	/* up arrow */
+	{ 0x53,	0x1031,	0x1031,	-1 },	/* keypad 1 */
+	{ 0x54,	0x1032,	0x1032,	-1 },	/* keypad 2 */
+	{ 0x55,	0x1033,	0x1033,	-1 },	/* keypad 3 */
+
+	{ A2KEY_RCTRL,	0x0200,	0x0200,	-1 },	/* control */
+	{ A2KEY_OPTION,	0x4000,	0x4000,	-1 },	/* Option */
+	{ A2KEY_COMMAND,	0x8000,	0x8000,	-1 },	/* Command */
+	{ A2KEY_SPACE,	' ',	' ',	-1 },
+#ifdef APPLE_EXTENDED_KEYBOARD
+	{ A2KEY_LCTRL,	0x0200,	0x0200,	-1 },	/* control */
+#endif
+	{ A2KEY_LEFT,	0x08,	0x08,	-1 },	/* left */
+	{ A2KEY_DOWN,	0x0a,	0x0a,	-1 },	/* down */
+	{ A2KEY_RIGHT,	0x15,	0x15,	-1 },	/* right */
+	{ 0x52,	0x1030,	0x1030,	-1 },	/* keypad 0 */
+	{ 0x41,	0x102e,	0x102e,	-1 },	/* keypad . */
+	{ 0x4c,	0x100d,	0x100d,	-1 },	/* keypad enter */
+	{ -1,	-1,	-1 }
+};
+
+static Adb_log g_adb_log[LEN_ADB_LOG];
+static int	g_adb_log_pos = 0;
+
 
 #define ADB_C027_MOUSE_DATA	0x80
 #define ADB_C027_MOUSE_INT	0x40
@@ -42,78 +193,75 @@ enum {
 		ADB_C027_CMD_FULL))
 
 
-int halt_on_all_c027 = 0;
+static int halt_on_all_c027 = 0;
 
-word32	g_adb_repeat_delay = 45;
-word32	g_adb_repeat_rate = 3;
-word32	g_adb_repeat_info = 0x23;
-word32	g_adb_char_set = 0x0;
-word32	g_adb_layout_lang = 0x0;
+static word32	g_adb_repeat_delay = 45;
+static word32	g_adb_repeat_rate = 3;
+static word32	g_adb_repeat_info = 0x23;
+static word32	g_adb_char_set = 0x0;
+static word32	g_adb_layout_lang = 0x0;
 
-word32	g_adb_interrupt_byte = 0;
-int	g_adb_state = ADB_IDLE;
+static word32	g_adb_interrupt_byte = 0;
+static int	g_adb_state = ADB_IDLE;
 
-word32	g_adb_cmd = -1;
-int	g_adb_cmd_len = 0;
-int	g_adb_cmd_so_far = 0;
-word32	g_adb_cmd_data[16];
+static word32	g_adb_cmd = -1;
+static int	g_adb_cmd_len = 0;
+static int	g_adb_cmd_so_far = 0;
+static word32	g_adb_cmd_data[16];
 
 #define MAX_ADB_DATA_PEND	16
 
-word32	g_adb_data[MAX_ADB_DATA_PEND];
-int	g_adb_data_pending = 0;
+static word32	g_adb_data[MAX_ADB_DATA_PEND];
+static int	g_adb_data_pending = 0;
 
-word32	g_c027_val = 0;
-word32	g_c025_val = 0;
+static word32	g_c027_val = 0;
+static word32	g_c025_val = 0;
 
-byte	adb_memory[256];
+static byte	adb_memory[256];
 
-word32 g_adb_mode = 0;		/* mode set via set_modes, clear_modes */
+static word32 g_adb_mode = 0;		/* mode set via set_modes, clear_modes */
 
-int a2_mouse_button = 0;
+static int a2_mouse_button = 0;
 
-int g_warp_pointer = 0;
-int g_mouse_cur_x = 0;
-int g_mouse_cur_y = 0;
-int g_mouse_moved = 0;
-int g_mouse_button = 0;
+static int g_mouse_moved = 0;
+static int g_mouse_button = 0;
 
-int g_mouse_delta_x = 0;
-int g_mouse_delta_y = 0;
-int g_mouse_overflow_x = 0;
-int g_mouse_overflow_y = 0;
-int g_mouse_overflow_button = 0;
-int g_mouse_overflow_valid = 0;
+static int g_mouse_delta_x = 0;
+static int g_mouse_delta_y = 0;
+static int g_mouse_overflow_x = 0;
+static int g_mouse_overflow_y = 0;
+static int g_mouse_overflow_button = 0;
+static int g_mouse_overflow_valid = 0;
 
-int	g_adb_mouse_valid_data = 0;
-int	g_adb_mouse_coord = 0;
+static int	g_adb_mouse_valid_data = 0;
+static int	g_adb_mouse_coord = 0;
 
-int	g_adb_data_int_sent = 0;
-int	g_adb_mouse_int_sent = 0;
-int	g_adb_kbd_srq_sent = 0;
+static int	g_adb_data_int_sent = 0;
+static int	g_adb_mouse_int_sent = 0;
+static int	g_adb_kbd_srq_sent = 0;
 
 
 #define MAX_KBD_BUF		8
 
-int	g_key_down = 0;
-int	g_hard_key_down = 0;
-int	g_a2code_down = 0;
-int	g_kbd_read_no_update = 0;
-int	g_kbd_chars_buffered = 0;
-int	g_kbd_buf[MAX_KBD_BUF];
-word32	g_adb_repeat_vbl = 0;
+static int	g_key_down = 0;
+static int	g_hard_key_down = 0;
+static int	g_a2code_down = 0;
+static int	g_kbd_read_no_update = 0;
+static int	g_kbd_chars_buffered = 0;
+static int	g_kbd_buf[MAX_KBD_BUF];
+static word32	g_adb_repeat_vbl = 0;
 
-int	g_kbd_dev_addr = 2;		/* ADB physical kbd addr */
-int	g_mouse_dev_addr = 3;		/* ADB physical mouse addr */
+static int	g_kbd_dev_addr = 2;		/* ADB physical kbd addr */
+static int	g_mouse_dev_addr = 3;		/* ADB physical mouse addr */
 
-int	g_kbd_ctl_addr = 2;		/* ADB microcontroller's kbd addr */
-int	g_mouse_ctl_addr = 3;		/* ADB ucontroller's mouse addr*/
+static int	g_kbd_ctl_addr = 2;		/* ADB microcontroller's kbd addr */
+static int	g_mouse_ctl_addr = 3;		/* ADB ucontroller's mouse addr*/
 			/* above are ucontroller's VIEW of where mouse/kbd */
 			/*  are...if they are moved, mouse/keyboard funcs */
 			/*  should stop (c025, c000, c024, etc). */
 
-int	a2_key_to_ascii[128][4];
-word32	g_virtual_key_up[4];
+static int	a2_key_to_ascii[128][4];
+static word32	g_virtual_key_up[4];
 
 #define SHIFT_DOWN	( (g_c025_val & 0x01) )
 #define CTRL_DOWN	( (g_c025_val & 0x02) )
@@ -124,12 +272,12 @@ word32	g_virtual_key_up[4];
 
 #define MAX_ADB_KBD_REG3	16
 
-int g_kbd_reg0_pos = 0;
-int g_kbd_reg0_data[MAX_ADB_KBD_REG3];
-int g_kbd_reg3_16bit = 0x602;			/* also set in adb_reset()! */
+static int g_kbd_reg0_pos = 0;
+static int g_kbd_reg0_data[MAX_ADB_KBD_REG3];
+static int g_kbd_reg3_16bit = 0x602;			/* also set in adb_reset()! */
 
 
-int	g_adb_init = 0;
+static int	g_adb_init = 0;
 
 void
 adb_init()
@@ -221,16 +369,6 @@ adb_reset()
 	g_kbd_reg0_pos = 0;
 	g_kbd_reg3_16bit = 0x602;
 }
-
-#define LEN_ADB_LOG	16
-STRUCT(Adb_log) {
-	word32	addr;
-	int	val;
-	int	state;
-};
-
-Adb_log g_adb_log[LEN_ADB_LOG];
-int	g_adb_log_pos = 0;
 
 void
 adb_log(word32 addr, int val)
@@ -462,12 +600,12 @@ adb_kbd_talk_reg0()
 	if(g_kbd_reg0_pos > 0) {
 		num_bytes = 2;
 		num = 1;
-		if((val0 & 0x7f) == 0x7f) {
+		if((val0 & A2KEY_MASK) == A2KEY_RESET) {
 			/* reset */
 			val1 = val0;
 		} else if(g_kbd_reg0_pos > 1) {
 			num = 2;
-			if((val1 & 0x7f) == 0x7f) {
+			if((val1 & A2KEY_MASK) == A2KEY_RESET) {
 				/* If first byte some other key, don't */
 				/*  put RESET next! */
 				num = 1;
@@ -573,7 +711,7 @@ adb_set_new_mode(word32 val)
 		printf("Disabling keyboard/mouse:%02x!\n", val);
 	}
 
-	if(val & 0xe2) {
+	if(val & 0xa2) {
 		halt_printf("ADB set mode: %02x!\n", val);
 		adb_error();
 	}
@@ -902,7 +1040,7 @@ do_adb_cmd()
 	case 0x11:	/* Send ADB keycodes */
 		val = g_adb_cmd_data[0];
 		adb_printf("Performing send ADB keycodes: %02x\n", val);
-		adb_virtual_key_update(val & 0x7f, val >> 7);
+		adb_virtual_key_update(val & A2KEY_MASK, val >> 7);
 		break;
 	case 0x12:	/* ADB cmd12 */
 		adb_printf("Performing ADB cmd 12\n");
@@ -1100,25 +1238,46 @@ write_adb_ram(word32 addr, int val)
 int
 update_mouse(int x, int y, int button_state, int button_valid)
 {
-
 	if(x < 0 && y < 0) {
 		return 0;
 	}
+    /*printf("update_mouse(%d,%d,%d,%d)\n",x,y,button_state,button_valid);*/
 
 	if((x == X_A2_WINDOW_WIDTH/2) && (y == X_A2_WINDOW_HEIGHT/2) &&
 							g_warp_pointer) {
 		/* skip it */
+        /*
 		g_mouse_cur_x = x;
 		g_mouse_cur_y = y;
-		g_mouse_moved = 0;
+		*/
+        g_mouse_moved = 0;
 	} else {
 		g_mouse_moved = 1;
 	}
 
-	g_mouse_delta_x += x - g_mouse_cur_x;
-	g_mouse_delta_y += y - g_mouse_cur_y;
-	g_mouse_cur_x = x;
-	g_mouse_cur_y = y;
+    if(g_warp_pointer) {
+        if(g_mouse_moved) {
+            g_mouse_delta_x += x - X_A2_WINDOW_WIDTH/2;
+            g_mouse_delta_y += y - X_A2_WINDOW_HEIGHT/2;
+            g_mouse_cur_x += x - X_A2_WINDOW_WIDTH/2;
+            g_mouse_cur_y += y - X_A2_WINDOW_HEIGHT/2;
+            if(g_mouse_cur_x < 0)
+                g_mouse_cur_x = 0;
+            if(g_mouse_cur_x >= X_A2_WINDOW_WIDTH)
+                g_mouse_cur_x = X_A2_WINDOW_WIDTH - 1;
+            if(g_mouse_cur_y < 0)
+                g_mouse_cur_y = 0;
+            if(g_mouse_cur_y >= X_A2_WINDOW_HEIGHT)
+            g_mouse_cur_y = X_A2_WINDOW_HEIGHT - 1;
+        }
+        /*printf("delta = %d,%d g_mouse_xur=%d,%d\n",x - X_A2_WINDOW_WIDTH/2,y - X_A2_WINDOW_HEIGHT/2,g_mouse_cur_x,g_mouse_cur_y);*/
+    }
+    else {
+        g_mouse_delta_x += x - g_mouse_cur_x;
+        g_mouse_delta_y += y - g_mouse_cur_y;
+        g_mouse_cur_x = x;
+        g_mouse_cur_y = y;
+    }
 
 	if(button_valid) {
 		if(!g_mouse_overflow_valid && (button_state != g_mouse_button)){
@@ -1241,12 +1400,12 @@ adb_key_event(int a2code, int is_up)
 			a2code, g_key_down);
 	}
 
-	if(a2code < 0 || a2code > 0x7f) {
+	if(a2code < 0 || a2code > A2KEY_MASK) {
 		halt_printf("add_key_event: a2code: %04x!\n", a2code);
 		return;
 	}
 
-	if(!is_up && a2code == 0x35) {
+	if(!is_up && a2code == A2KEY_ESCAPE) {
 		/* ESC pressed, see if ctrl & cmd key down */
 		if(CTRL_DOWN && CMD_DOWN) {
 			/* Desk mgr int */
@@ -1270,6 +1429,9 @@ adb_key_event(int a2code, int is_up)
 	ascii = a2_key_to_ascii[a2code][0];
 	if(CAPS_LOCK_DOWN && (ascii >= 'a' && ascii <= 'z')) {
 		pos = 1;
+        if (SHIFT_DOWN && g_adb_mode&0x40) {
+            pos =0;
+        }
 	} else if(SHIFT_DOWN) {
 		pos = 1;
 	}
@@ -1279,7 +1441,7 @@ adb_key_event(int a2code, int is_up)
 	}
 
 	ascii = a2_key_to_ascii[a2code][pos];
-	key = (ascii & 0x7f) + 0x80;
+	key = (ascii & A2KEY_MASK) + 0x80;
 
 	special = (ascii >> 8) & 0xff;
 	if(ascii < 0) {
@@ -1361,7 +1523,7 @@ adb_access_c010()
 
 	g_kbd_read_no_update = 0;
 
-	tmp = g_kbd_buf[0] & 0x7f;
+	tmp = g_kbd_buf[0] & A2KEY_MASK;
 	g_kbd_buf[0] = tmp;
 
 	tmp = tmp | (g_hard_key_down << 7);
@@ -1422,13 +1584,13 @@ adb_physical_key_update(int a2code, int is_up)
 
 	adb_printf("Handle a2code: %02x, is_up: %d\n", a2code, is_up);
 
-	if(a2code < 0 || a2code > 0x7f) {
+	if(a2code < 0 || a2code > A2KEY_MASK) {
 		halt_printf("a2code: %04x!\n", a2code);
 		return;
 	}
 
 	/* Only process reset requests here */
-	if(is_up == 0 && a2code == 0x7f && CTRL_DOWN) {
+	if(is_up == 0 && a2code == A2KEY_RESET && CTRL_DOWN) {
 		/* Reset pressed! */
 		printf("Reset pressed since CTRL_DOWN: %d\n", CTRL_DOWN);
 		do_reset();
@@ -1466,7 +1628,7 @@ adb_virtual_key_update(int a2code, int is_up)
 
 	adb_printf("Virtual handle a2code: %02x, is_up: %d\n", a2code, is_up);
 
-	if(a2code < 0 || a2code > 0x7f) {
+	if(a2code < 0 || a2code > A2KEY_MASK) {
 		halt_printf("a2code: %04x!\n", a2code);
 		return;
 	}
@@ -1494,4 +1656,23 @@ void
 adb_kbd_repeat_off()
 {
 	g_key_down = 0;
+}
+
+int
+get_warp_pointer()
+{
+    return(g_warp_pointer & 0x1);
+}
+
+int
+set_warp_pointer(int val)
+{
+    if(val == 0)
+        g_warp_pointer &= ~0x1;
+    else
+        g_warp_pointer |= 0x1;
+    video_warp_pointer();
+	if(g_warp_pointer)
+        update_mouse(X_A2_WINDOW_WIDTH/2,X_A2_WINDOW_HEIGHT/2,0,0);
+    return 1;
 }

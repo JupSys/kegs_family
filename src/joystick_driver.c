@@ -17,30 +17,140 @@
 
 const char rcsid_joystick_driver_c[] = "@(#)$Header: joystick_driver.c,v 1.3 99/06/01 23:14:27 kentd Exp $";
 
-#include "defc.h"
-#include <sys/time.h>
+#include "joystick.h"
+#include "video.h"
 
-#ifdef __linux__
-# include <linux/joystick.h>
+#ifdef HAVE_JOYSTICK_SDL
+static SDL_Joystick *joy0, *joy1;
 #endif
 
-extern int g_joystick_type;		/* in paddles.c */
-extern int g_paddle_button[];
-extern int g_paddle_val[];
+#ifdef HAVE_JOYSTICK_LINUX
 
-
-const char *g_joystick_dev = "/dev/js0";	/* default joystick dev file */
 #define MAX_JOY_NAME	128
 
-int	g_joystick_fd = -1;
-int	g_joystick_num_axes = 0;
-int	g_joystick_num_buttons = 0;
+static const char *g_joystick_dev = "/dev/js0";	/* default joystick dev file */
+static int	g_joystick_fd = -1;
+static int	g_joystick_num_axes = 0;
+static int	g_joystick_num_buttons = 0;
+#endif
 
 
-#ifdef __linux__
-void
+/* Joystick handling routines for SDL */
+int
 joystick_init()
 {
+    switch(g_joystick_type) {
+    case JOYSTICK_NONE:
+    case JOYSTICK_MOUSE:
+        return 1;
+        break;
+    case JOYSTICK_KEYPAD:
+        printf("--Keypad joystick not yet available\n");
+        return 0;
+        break;
+    case JOYSTICK_LINUX:
+        return joystick_init_linux();
+        break;
+    case JOYSTICK_WIN32:
+        return joystick_init_win32();
+        break;
+    case JOYSTICK_SDL:
+        return joystick_init_sdl();
+        break;
+    }
+    return 0;
+}
+
+void
+joystick_update()
+{
+    switch(g_joystick_type) {
+    case JOYSTICK_NONE:
+        break;
+    case JOYSTICK_MOUSE:
+        joystick_update_mouse();        
+        break;
+    case JOYSTICK_KEYPAD:
+        break;
+    case JOYSTICK_LINUX:
+        joystick_update_linux();
+        break;
+    case JOYSTICK_WIN32:
+        joystick_update_sdl();
+        break;
+    case JOYSTICK_SDL:
+        joystick_update_sdl();
+        break;
+    }
+}
+
+void
+joystick_close()
+{
+    switch(g_joystick_type) {
+    case JOYSTICK_NONE:
+    case JOYSTICK_MOUSE:
+        return;
+        break;
+    case JOYSTICK_KEYPAD:
+        return;
+        break;
+    case JOYSTICK_LINUX:
+        joystick_close_linux();
+        break;
+    case JOYSTICK_WIN32:
+        joystick_close_win32();
+        break;
+    case JOYSTICK_SDL:
+        joystick_close_sdl();
+        break;
+    }
+}
+
+
+void
+joystick_update_mouse()
+{
+	int	val_x;
+	int	val_y;
+    
+	val_x = 0;
+	/* mous_phys_x is 0->560, convert that to 0-255 cyc */
+	/* so, mult by 117 then divide by 256 */
+	if(g_mouse_cur_x > BASE_MARGIN_LEFT) {
+		val_x = (g_mouse_cur_x - BASE_MARGIN_LEFT) * 117;
+		val_x = val_x >> 8;
+	}
+
+	/* mous_phys_y is 0->384, convert that to 0-255 cyc */
+	/* so, mult by 170 then divide by 256 (shift right by 8) */
+	val_y = 0;
+	if(g_mouse_cur_y > BASE_MARGIN_TOP) {
+		val_y = ((g_mouse_cur_y - BASE_MARGIN_TOP) * 170) >> 8;
+	}
+
+	if(val_x > 280) {
+		val_x = 280;
+	}
+	if(val_y > 280) {
+		val_y = 280;
+	}
+
+	g_paddle_val[0] = val_x;
+	g_paddle_val[1] = val_y;
+	g_paddle_val[2] = 255;
+	g_paddle_val[3] = 255;
+	g_paddle_button[2] = 1;
+	g_paddle_button[3] = 1;
+}
+
+int
+joystick_init_linux()
+{
+#ifndef HAVE_JOYSTICK_LINUX
+    printf("--Linux joystick not available\n");
+    return 0;
+#else
 	char	joy_name[MAX_JOY_NAME];
 	int	version;
 	int	fd;
@@ -51,7 +161,7 @@ joystick_init()
 		printf("Unable to open joystick dev file: %s, errno: %d\n",
 			g_joystick_dev, errno);
 		printf("Defaulting to mouse joystick\n");
-		return;
+		return 0;
 	}
 
 	strcpy(&joy_name[0], "Unknown Joystick");
@@ -74,13 +184,16 @@ joystick_init()
 	}
 
 	joystick_update();
+    return 1;
+#endif /* HAVE_JOYSTICK_LINUX */
 }
 
 /* joystick_update_linux() called from paddles.c.  Update g_paddle_val[] */
 /*  and g_paddle_button[] arrays with current information */
 void
-joystick_update()
+joystick_update_linux()
 {
+#ifdef HAVE_JOYSTICK_LINUX
 	struct js_event js;	/* the linux joystick event record */
 	int	val;
 	int	num;
@@ -111,19 +224,225 @@ joystick_update()
 			break;
 		}
 	}
-}
-#else	/* !__linux__ */
-
-/* stubs for the routines */
-void
-joystick_init()
-{
-	printf("No joy with joystick\n");
-}
-
-void
-joystick_update()
-{
-}
-
 #endif
+}
+
+void
+joystick_close_linux(void)
+{
+#ifdef HAVE_JOYSTICK_LINUX
+    close(g_joystick_fd);
+#endif
+}
+
+/* Joystick handling routines for WIN32 */
+int
+joystick_init_win32()
+{
+#ifndef HAVE_JOYSTICK_WIN32
+    printf("--Win32 joystick not available\n");
+    return 0;
+#else
+    int i;
+    JOYINFO info;
+    JOYCAPS joycap;
+
+    // Check that there is a joystick device
+    if (joyGetNumDevs()<=0) {
+        printf ("--No joystick hardware detected\n");
+        return 0;
+    }
+
+    // Check that at least joystick 1 or joystick 2 is available 
+    if (joyGetPos(JOYSTICKID1,&info) != JOYERR_NOERROR && 
+        joyGetPos(JOYSTICKID2,&info) != JOYERR_NOERROR) {
+        printf ("--No joystick attached\n");
+        return 0;
+    }
+
+    // Print out the joystick device name being emulated
+    if (joyGetDevCaps(JOYSTICKID1,&joycap,sizeof(joycap)) == JOYERR_NOERROR) {
+        printf ("--Joystick #1 = %s\n",joycap.szPname);
+    }
+    if (joyGetDevCaps(JOYSTICKID2,&joycap,sizeof(joycap)) == JOYERR_NOERROR) {
+        printf ("--Joystick #1 = %s\n",joycap.szPname);
+    }
+    
+    g_joystick_type = JOYSTICK_WIN32;
+    for(i = 0; i < 4; i++) {
+        g_paddle_val[i] = 280;
+        g_paddle_button[i] = 1;
+    }
+
+    joystick_update();
+    return 1;
+#endif
+}
+
+void
+joystick_update_win32()
+{
+#ifdef HAVE_JOYSTICK_WIN32
+    JOYCAPS joycap;
+    JOYINFO info;
+
+    if (joyGetDevCaps(JOYSTICKID1,&joycap,sizeof(joycap)) == JOYERR_NOERROR &&
+        joyGetPos(JOYSTICKID1,&info) == JOYERR_NOERROR) {
+        g_paddle_val[0] = (info.wXpos-joycap.wXmin)*280/
+                          (joycap.wXmax - joycap.wXmin);
+        g_paddle_val[1] = (info.wYpos-joycap.wYmin)*280/
+                          (joycap.wYmax - joycap.wYmin);
+        g_paddle_button[0] = ((info.wButtons & JOY_BUTTON1) > 0) ? 1:0;
+        g_paddle_button[1] = ((info.wButtons & JOY_BUTTON2) > 0) ? 1:0;
+    }
+    if (joyGetDevCaps(JOYSTICKID2,&joycap,sizeof(joycap)) == JOYERR_NOERROR &&
+        joyGetPos(JOYSTICKID2,&info) == JOYERR_NOERROR) {
+        g_paddle_val[2] = (info.wXpos-joycap.wXmin)*280/
+                          (joycap.wXmax - joycap.wXmin);
+        g_paddle_val[3] = (info.wYpos-joycap.wYmin)*280/
+                          (joycap.wYmax - joycap.wYmin);
+        g_paddle_button[2] = ((info.wButtons & JOY_BUTTON1) > 0) ? 1:0;
+        g_paddle_button[3] = ((info.wButtons & JOY_BUTTON2) > 0) ? 1:0;
+    }
+#endif
+}
+
+void
+joystick_update_button_win32()
+{
+#ifdef HAVE_JOYSTICK_WIN32        
+    JOYINFOEX info;
+    info.dwSize=sizeof(JOYINFOEX);
+    info.dwFlags=JOY_RETURNBUTTONS;
+    if (joyGetPosEx(JOYSTICKID1,&info) == JOYERR_NOERROR) {
+        g_paddle_button[0] = ((info.dwButtons & JOY_BUTTON1) > 0) ? 1:0;
+        g_paddle_button[1] = ((info.dwButtons & JOY_BUTTON2) > 0) ? 1:0;
+    }
+    if (joyGetPosEx(JOYSTICKID2,&info) == JOYERR_NOERROR) {
+        g_paddle_button[2] = ((info.dwButtons & JOY_BUTTON1) > 0) ? 1:0;
+        g_paddle_button[3] = ((info.dwButtons & JOY_BUTTON2) > 0) ? 1:0;
+    }
+#endif
+}
+
+void
+joystick_close_win32()
+{
+}
+
+
+
+int
+joystick_init_sdl()
+{
+#ifndef HAVE_JOYSTICK_SDL
+    printf("--SDL joystick not available\n");
+    return 0;
+#else
+    int i;
+
+    SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+    /* Check that there is a joystick device */
+    if (SDL_NumJoysticks()<=0) {
+        printf ("--No joystick hardware detected\n");
+        SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+        return 0;
+    }
+
+    joy0=SDL_JoystickOpen(0);
+    
+    if(joy0) {
+        printf("Opened Joystick 0\n");
+        printf("Name: %s\n", SDL_JoystickName(0));
+        printf("Number of Axes: %d\n", SDL_JoystickNumAxes(joy0));
+        printf("Number of Buttons: %d\n", SDL_JoystickNumButtons(joy0));
+        printf("Number of Balls: %d\n", SDL_JoystickNumBalls(joy0));
+    }
+    else
+        printf("Couldn't open Joystick 0\n");
+  
+    joy1=SDL_JoystickOpen(1);
+    
+    if(joy1) {
+        printf("Opened Joystick 1\n");
+        printf("Name: %s\n", SDL_JoystickName(1));
+        printf("Number of Axes: %d\n", SDL_JoystickNumAxes(joy1));
+        printf("Number of Buttons: %d\n", SDL_JoystickNumButtons(joy1));
+        printf("Number of Balls: %d\n", SDL_JoystickNumBalls(joy1));
+    }
+    else
+        printf("Couldn't open Joystick 1\n");
+  
+   
+    g_joystick_type = JOYSTICK_SDL;
+    for(i = 0; i < 4; i++) {
+        g_paddle_val[i] = 280;
+        g_paddle_button[i] = 1;
+    }
+
+    joystick_update();
+    return 1;
+#endif /* HAVE_JOYSTICK_SDL */
+}
+
+void
+joystick_update_sdl()
+{
+#ifdef HAVE_SDL
+    SDL_JoystickUpdate();
+    if (joy0) {
+        g_paddle_val[0] = ((int)SDL_JoystickGetAxis(joy0, 0) + 32768)
+            * 280 / 65535;
+        g_paddle_val[1] = ((int)SDL_JoystickGetAxis(joy0, 1) + 32768)
+            * 280 / 65535;
+        g_paddle_button[0] = SDL_JoystickGetButton(joy0, 0);
+        g_paddle_button[1] = SDL_JoystickGetButton(joy0, 1);
+    }
+    if (joy1) {
+        g_paddle_val[2] = ((int)SDL_JoystickGetAxis(joy1, 0) + 32768)
+            * 280 / 65535;
+        g_paddle_val[3] = ((int)SDL_JoystickGetAxis(joy1, 1) + 32768)
+            * 280 / 65535;
+        g_paddle_button[2] = SDL_JoystickGetButton(joy1, 0);
+        g_paddle_button[3] = SDL_JoystickGetButton(joy1, 1);
+    }
+#endif
+}
+
+/* not used, but here just in case... */
+void
+joystick_close_sdl()
+{
+#ifdef HAVE_SDL
+    if (joy0 && SDL_JoystickOpened(0)) {
+        SDL_JoystickClose(joy0);
+    }
+    joy0 = 0;
+    if (joy1 && SDL_JoystickOpened(0)) {
+        SDL_JoystickClose(joy1);
+    }
+    joy1 = 0;
+    SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+#endif
+}
+
+int
+get_joystick_type(void)
+{
+    return g_joystick_type;
+}
+
+int
+set_joystick_type(int val)
+{
+    int oldval = g_joystick_type;
+    g_joystick_type = val;
+    joystick_close();
+    if(!joystick_init()) {
+        joystick_close();
+        g_joystick_type = oldval;
+        joystick_init();
+        return 0;
+    }
+    return 1;
+}

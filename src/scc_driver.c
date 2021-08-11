@@ -13,6 +13,9 @@
 
 const char rcsid_scc_driver_h[] = "@(#)$Header: scc_driver.h,v 1.4 99/05/03 22:02:38 kentd Exp $";
 
+#include "sim65816.h"
+#include "scc.h"
+
 /* This file contains the Unix socket calls */
 
 #if defined(HPUX) || defined(__linux__) || defined(SOLARIS)

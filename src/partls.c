@@ -1,7 +1,8 @@
 
-#include "defc.h"
 #include <fcntl.h>
 #include <unistd.h>
+#include "sim65816.h"
+#include "iwm.h"
 
 extern int errno;
 
@@ -60,7 +61,7 @@ main(int argc, char **argv)
 	}
 
 
-	fd = open(argv[last_arg], O_RDONLY, 0x1b6);
+	fd = open(argv[last_arg], O_RDONLY | O_BINARY, 0x1b6);
 	if(fd < 0) {
 		printf("open %s, ret: %d, errno:%d\n", argv[last_arg],fd,errno);
 		exit(1);

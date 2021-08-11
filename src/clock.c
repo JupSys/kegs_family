@@ -13,13 +13,23 @@
 
 const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.19 99/12/20 23:33:06 kentd Exp $";
 
-#include "defc.h"
-#include <time.h>
+#if defined(WIN32)
+#include <windows.h>
+#include <mmsystem.h>
+#else
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#endif
+#include <time.h>
 
-extern int Verbose;
-extern int g_vbl_count;
-extern int g_rom_version;
+#include "sim65816.h"
+#include "clock.h"
+#include "dis.h"
+
+static void update_cur_time(void);
+static void clock_update_if_needed(void);
+static void do_clock_data(void);
 
 #define CLK_IDLE		1
 #define CLK_TIME		2
@@ -35,22 +45,27 @@ word32	c033_data = 0;
 word32	c034_val = 0;
 
 int	bram_fd = -1;
-byte	bram[256];
+static byte	bram[256];
 word32	g_clk_cur_time = 0xa0000000;
 int	g_clk_next_vbl_update = 0;
 
 double
 get_dtime()
 {
-	struct timeval tp1;
 	double	dtime;
+#ifndef WIN32
 	double	dsec;
 	double	dusec;
+#endif
 
 	/* Routine used to return actual Unix time as a double */
 	/* No routine cares about the absolute value, only deltas--maybe */
 	/*  take advantage of that in future to increase usec accuracy */
 
+#if defined(WIN32)
+    dtime = GetTickCount()/(1000.0); 
+#else  /* !WIN32 */
+	struct timeval tp1;
 #ifdef SOLARIS
 	gettimeofday(&tp1, (void *)0);
 #else
@@ -61,6 +76,7 @@ get_dtime()
 	dusec = (double)tp1.tv_usec;
 
 	dtime = dsec + (dusec / (1000.0 * 1000.0));
+#endif /* !WIN32 */
 
 	return dtime;
 }
@@ -68,8 +84,12 @@ get_dtime()
 int
 micro_sleep(double dtime)
 {
+#if !defined(WIN32)
 	struct timeval Timer;
+    fd_set fdr;
 	int	ret;
+    int soc;
+#endif
 
 	if(dtime <= 0.0) {
 		return 0;
@@ -83,13 +103,22 @@ micro_sleep(double dtime)
 	printf("usleep: %f\n", dtime);
 #endif
 
+#if defined(WIN32)
+    Sleep(dtime*1000);
+#else
+    soc=socket(AF_INET,SOCK_STREAM,0);
 	Timer.tv_sec = 0;
 	Timer.tv_usec = (dtime * 1000000.0);
-	if( (ret = select(0, 0, 0, 0, &Timer)) < 0) {
+	/* if( (ret = select(0, 0, 0, 0, &Timer)) < 0) { */
+    FD_ZERO(&fdr);
+    FD_SET(soc,&fdr);
+	if( (ret = select(0, &fdr, 0, 0, &Timer)) < 0) {
 		fprintf(stderr, "micro_sleep (select) ret: %d, errno: %d\n",
 			ret, errno);
 		return -1;
 	}
+    close(soc);
+#endif
 	return 0;
 }
 

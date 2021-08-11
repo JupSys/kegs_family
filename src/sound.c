@@ -13,25 +13,28 @@
 
 const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.89 2000/09/24 00:56:31 kentd Exp $";
 
-#include "defc.h"
-
+#include "sim65816.h"
 #define INCLUDE_RCSID_C
 #include "sound.h"
 #undef INCLUDE_RCSID_C
-
-#if 0
-# define DO_DOC_LOG
-#endif
-
-extern int Verbose;
-extern int g_use_shmem;
-extern word32 g_vbl_count;
-extern int g_preferred_rate;
+#include "sounddriver.h"
+#include "dis.h"
 
 
-extern double g_last_vbl_dcycs;
-
-extern int errno;
+static void show_doc_log(void);
+static void open_sound_file(void);
+static void check_for_range(word32 *addr, int num_samps, int offset);
+static void send_sound_to_file(word32 *addr, int shm_pos, int num_samps);
+static void show_c030_samps(int *outptr, int num);
+static void sound_play(double dsamps);
+static void doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps);
+static void add_sound_irq(int osc);
+static void remove_sound_irq(int osc, int must);
+static void start_sound(int osc, double eff_dsamps, double dsamps);
+static void wave_end_estimate(int osc, double eff_dsamps, double dsamps);
+static void remove_sound_event(int osc);
+static void doc_write_ctl_reg(int osc, int val, double dsamps);
+static void doc_recalc_sound_parms(int osc, double eff_dcycs, double dsamps);
 
 void U_STACK_TRACE();
 
@@ -49,18 +52,6 @@ int	g_doc_saved_ctl = 0;
 int	g_queued_samps = 0;
 int	g_queued_nonsamps = 0;
 int	g_num_osc_interrupting = 0;
-
-#ifdef HPUX
-int	g_audio_enable = -1;
-#else
-# if defined(__linux__) || defined(OSS)
-/* default to off for now */
-int	g_audio_enable = 0;
-# else
-/* Default to sound off */
-int	g_audio_enable = 0;
-# endif
-#endif
 
 Doc_reg g_doc_regs[32];
 
@@ -88,8 +79,6 @@ int g_num_c030_fsamps = 0;
 
 #define DOC_SCAN_RATE	(DCYCS_28_MHZ/32.0)
 
-int	g_pipe_fd[2] = { -1, -1 };
-int	g_pipe2_fd[2] = { -1, -1 };
 word32	*g_sound_shm_addr = 0;
 int	g_sound_shm_pos = 0;
 
@@ -108,12 +97,6 @@ Doc_log g_doc_log[LEN_DOC_LOG];
 int	g_doc_log_pos = 0;
 
 
-#ifdef DO_DOC_LOG
-# define DOC_LOG(a,b,c,d)	doc_log_rout(a,b,c,d)
-#else
-# define DOC_LOG(a,b,c,d)
-#endif
-
 #define UPDATE_G_DCYCS_PER_DOC_UPDATE(osc_en)				\
 	g_dcycs_per_doc_update = (double)((osc_en + 2) * DCYCS_1_MHZ) /	\
 		DOC_SCAN_RATE;						\
@@ -123,6 +106,7 @@ int	g_doc_log_pos = 0;
 #define SND_PTR_SHIFT		14
 #define SND_PTR_SHIFT_DBL	((double)(1 << SND_PTR_SHIFT))
 
+#if 0
 void
 doc_log_rout(char *msg, int osc, double dsamps, int etc)
 {
@@ -146,8 +130,7 @@ doc_log_rout(char *msg, int osc, double dsamps, int etc)
 
 	g_doc_log_pos = pos;
 }
-
-extern double g_cur_dcycs;
+#endif
 
 void
 show_doc_log(void)
@@ -207,15 +190,11 @@ show_doc_log(void)
 }
 
 void
-sound_init()
+sound_init(int devtype)
 {
 	Doc_reg	*rptr;
-	word32	*shmaddr;
-	int	tmp;
-	int	shmid;
-	int	ret;
-	int	pid;
 	int	i;
+    long audio_rate;
 
 	for(i = 0; i < 32; i++) {
 		rptr = &(g_doc_regs[i]);
@@ -240,100 +219,19 @@ sound_init()
 		rptr->last_samp_val = 0;
         }
 
-	if(!g_use_shmem) {
-		if(g_audio_enable < 0) {
-			printf("Defaulting audio off for slow X display\n");
-			g_audio_enable = 0;
-		}
-	}
-
-	if(g_audio_enable == 0) {
-		set_audio_rate(g_preferred_rate);
-		return;
-	}
-
-	shmid = shmget(IPC_PRIVATE, SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE,
-							IPC_CREAT | 0777);
-	if(shmid < 0) {
-		printf("sound_init: shmget ret: %d, errno: %d\n", shmid,
-			errno);
-		exit(2);
-	}
-
-	shmaddr = shmat(shmid, 0, 0);
-	tmp = (int)PTR2WORD(shmaddr);
-	if(tmp == -1) {
-		printf("sound_init: shmat ret: %p, errno: %d\n", shmaddr,
-			errno);
-		exit(3);
-	}
-
-	ret = shmctl(shmid, IPC_RMID, 0);
-	if(ret < 0) {
-		printf("sound_init: shmctl ret: %d, errno: %d\n", ret, errno);
-		exit(4);
-	}
-
-	g_sound_shm_addr = shmaddr;
-
-	/* prepare pipe so parent can signal child each other */
-	/*  pipe[0] = read side, pipe[1] = write end */
-	ret = pipe(&g_pipe_fd[0]);
-	if(ret < 0) {
-		printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
-		exit(5);
-	}
-	ret = pipe(&g_pipe2_fd[0]);
-	if(ret < 0) {
-		printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
-		exit(5);
-	}
-
-	pid = fork();
-	switch(pid) {
-	case 0:
-		/* child */
-		/* close stdin and write-side of pipe */
-		close(0);
-		/* Close other fds to make sure X window fd is closed */
-		for(i = 3; i < 100; i++) {
-			if((i != g_pipe_fd[0]) && (i != g_pipe2_fd[1])) {
-				close(i);
-			}
-		}
-		close(g_pipe_fd[1]);		/*make sure write pipe closed*/
-		close(g_pipe2_fd[0]);		/*make sure read pipe closed*/
-		child_sound_loop(g_pipe_fd[0], g_pipe2_fd[1], g_sound_shm_addr);
-		exit(0);
-	case -1:
-		/* error */
-		printf("sound_init: fork ret: -1, errno: %d\n", errno);
-		exit(6);
-	default:
-		/* parent */
-		/* close read-side of pipe1, and the write side of pipe2 */
-		close(g_pipe_fd[0]);
-		close(g_pipe2_fd[1]);
-		doc_printf("Child is pid: %d\n", pid);
-		parent_sound_get_sample_rate(g_pipe2_fd[0]);
-	}
-
+    audio_rate = sound_init_device(devtype);
+    printf("sound_init: audio_rate = %ld\n",audio_rate);
+    if(audio_rate) {
+        set_audio_rate(audio_rate);
+    }
+    else {
+        printf("sound_init: couldn't initialize driver %d\n", devtype);
+        printf("sound_init: disabling audio\n");
+        sound_shutdown();
+        set_audio_rate(g_preferred_rate);
+    }
 }
 
-void
-parent_sound_get_sample_rate(int read_fd)
-{
-	word32	tmp;
-	int	ret;
-
-	ret = read(read_fd, &tmp, 4);
-	if(ret != 4) {
-		printf("parent dying, could not get sample rate from child\n");
-		exit(1);
-	}
-	close(read_fd);
-	set_audio_rate(tmp);
-}
 
 void
 set_audio_rate(int rate)
@@ -367,14 +265,6 @@ sound_reset(double dcycs)
 
 	g_doc_num_osc_en = 1;
 	UPDATE_G_DCYCS_PER_DOC_UPDATE(1);
-}
-
-void
-sound_shutdown()
-{
-	if((g_audio_enable != 0) && g_pipe_fd[1] != 0) {
-		close(g_pipe_fd[1]);
-	}
 }
 
 
@@ -444,6 +334,7 @@ open_sound_file()
 	g_send_file_bytes = 0;
 }
 
+#if 0
 void
 close_sound_file()
 {
@@ -453,6 +344,7 @@ close_sound_file()
 
 	g_sound_file_fd = -1;
 }
+#endif
 
 void
 check_for_range(word32 *addr, int num_samps, int offset)
@@ -534,38 +426,14 @@ send_sound_to_file(word32 *addr, int shm_pos, int num_samps)
 
 }
 
-void
-send_sound(int fd, int real_samps, int size)
-{
-	word32	tmp;
-	int	ret;
 
-	if(g_audio_enable == 0) {
-		printf("Entered send_sound but audio off!\n");
-		exit(2);
-	}
-
-	if(real_samps) {
-		tmp = size + 0xa2000000;
-	} else {
-		tmp = size + 0xa1000000;
-	}
-	DOC_LOG("send_sound", -1, g_last_sound_play_dsamp,
-						(real_samps << 30) + size);
-
-	/* Although this looks like a big/little-endian issue, since the */
-	/*  child is also reading an int, it just works with no byte swap */
-	ret = write(fd, &tmp, 4);
-	if(ret != 4) {
-		halt_printf("send_sound, wr ret: %d, errno: %d\n", ret, errno);
-	}
-}
-
+#if 0
 void
 show_c030_state()
 {
 	show_c030_samps(&(g_samp_buf[0]), 100);
 }
+#endif
 
 void
 show_c030_samps(int *outptr, int num)
@@ -933,7 +801,7 @@ sound_play(double dsamps)
 	printf("samps_left: %d, num_samps: %d\n", samps_left, num_samps);
 #endif
 
-	if(g_audio_enable != 0) {
+	if(sound_enabled()) {
 
 		if(snd_buf_init) {
 			/* convert sound buf */
@@ -987,7 +855,7 @@ sound_play(double dsamps)
 	
 			if(g_queued_nonsamps) {
 				/* force out old 0 samps */
-				send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
+				sound_write(0, g_queued_nonsamps);
 				g_queued_nonsamps = 0;
 			}
 	
@@ -1011,7 +879,7 @@ sound_play(double dsamps)
 	
 			if(g_queued_samps) {
 				/* force out old non-0 samps */
-				send_sound(g_pipe_fd[1], 1, g_queued_samps);
+				sound_write(1, g_queued_samps);
 				g_queued_samps = 0;
 			}
 	
@@ -1027,14 +895,14 @@ sound_play(double dsamps)
 
 	g_fvoices += ((float)(samps_played) * (float)(g_drecip_audio_rate));
 
-	if(g_audio_enable != 0) {
+	if(sound_enabled()) {
 		if(g_queued_samps >= (g_audio_rate/32)) {
-			send_sound(g_pipe_fd[1], 1, g_queued_samps);
+			sound_write(1, g_queued_samps);
 			g_queued_samps = 0;
 		}
 
 		if(g_queued_nonsamps >= (g_audio_rate/32)) {
-			send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
+			sound_write(0, g_queued_nonsamps);
 			g_queued_nonsamps = 0;
 		}
 	}

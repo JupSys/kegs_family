@@ -14,36 +14,41 @@
 const char rcsid_dis_c[] = "@(#)$Header: dis.c,v 1.78 2000/09/24 00:54:32 kentd Exp $";
 
 #include <stdio.h>
-#include "defc.h"
 #include <stdarg.h>
+#include <assert.h>
 
+#include "sim65816.h"
+#include "video.h"
+#include "moremem.h"
+#include "adb.h"
+#include "sound.h"
+#include "smartport.h"
+#include "engine.h"
+#include "scc.h"
 #include "disas.h"
+#include "dis.h"
+
+static int get_num(void);
+static word32 dis_get_memory_ptr(word32 addr);
+static void show_one_toolset(FILE *toolfile, int toolnum, word32 addr);
+static void show_toolset_tables(word32 a2bank, word32 addr);
+static void do_gen_test(int got_num, int base_seed);
+static void set_bp(word32 addr);
+static void show_bp(void);
+static void delete_bp(word32 addr);
+static void do_blank(void);
+static void do_step(void);
+static void xam_mem(int count);
+static void show_hex_mem(int startbank, word32 start, int endbank, word32 end, int count);
+static int read_line(char *buf, int len);
+static void do_debug_list(void);
+static void do_debug_unix(void);
+static void show_line(FILE *outfile, word32 kaddr, word32 operand, int size, char *string);
 
 #define LINE_SIZE 160
 
-extern byte *g_memory_ptr;
-extern byte *g_slow_memory_ptr;
-extern byte *g_rom_fc_ff_ptr;
-extern byte *g_rom_cards_ptr;
-extern word32 g_mem_size_base, g_mem_size_exp;
-extern int halt_sim;
-extern int enter_debug;
-extern int g_show_screen;
-extern int statereg;
-extern word32 stop_run_at;
-extern int stop_on_c03x;
-extern int Verbose;
-extern int Halt_on;
-extern int g_rom_version;
-
-extern int g_testing_enabled;
-
 int	g_num_breakpoints = 0;
 word32	g_breakpts[MAX_BREAK_POINTS];
-
-extern int g_irq_pending;
-
-extern Engine_reg engine;
 
 #define W_BUF_LEN	128
 char w_buff[W_BUF_LEN];
@@ -115,7 +120,7 @@ do_debug_intfc()
 	done = 0;
 	stop_run_at = -1;
 
-	x_auto_repeat_on(0);
+	video_auto_repeat_on(0);
 
 	while(!done) {
 		printf("> "); fflush(stdout);
@@ -229,9 +234,11 @@ do_debug_intfc()
 				show_bankptrs_bank0rdwr();
 				smartport_error();
 				break;
+#if 0
 			case 'C':
 				show_xcolor_array();
 				break;
+#endif
 			case 'P':
 				show_pc_log();
 				break;
@@ -874,13 +881,6 @@ do_debug_unix()
 	a1 = a1 + ret;
 }
 
-void
-do_debug_load()
-{
-	printf("Sorry, can't load now\n");
-}
-
-
 int
 do_dis(FILE *outfile, word32 kpc, int accsize, int xsize,
 	int op_provided, word32 instr)
@@ -1183,3 +1183,14 @@ halt_printf(const char *fmt, ...)
 
 	set_halt(1);
 }
+
+int
+enter_debugger(int val)
+{
+    assert(val == 1);
+    halt_printf("Entering Debugger\n");
+    video_auto_repeat_on(0);
+    fflush(stdout);
+    return 1;
+}
+

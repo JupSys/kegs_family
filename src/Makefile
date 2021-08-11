@@ -1,24 +1,32 @@
-
 # KEGS Makefile--set all options in the "vars" file!
-
-OBJECTS1 = adb.o clock.o dis.o joystick_driver.o paddles.o scc.o iwm.o moremem.o sim65816.o smartport.o sound.o video.o xdriver.o sound_driver.o
-PROJROOT = .
 
 include vars
 
-all: specials $(NAME)$(SUFFIX) partls to_pro dc2raw
+VERSION = 0.61
+OBJECTS1 = adb.o clock.o dis.o joystick_driver.o paddles.o scc.o scc_driver.o iwm.o moremem.o sim65816.o smartport.o sound.o video.o video_driver.o video_driver_x11.o video_driver_win32.o video_driver_sdl.o config_sdl.o config.o sound_driver.o functions.o
+PROJROOT = .
+
+SPECIALS = $(EXTRA_SPECIALS) 8inst_c 16inst_c size_c
+
+.PHONY : all clean depend dist specials_clean
+
+all: $(NAME)$(SUFFIX) partls to_pro dc2raw
 
 clean: specials_clean
 	rm -f *.o kegs
 
-specials: $(EXTRA_SPECIALS) 8inst_c 16inst_c size_c
+depend:
+	makedepend $(OPTS) $(XOPTS) $(OBJECTS1:.o=.c)
+
+dist:
+	cd ../..; tar cf - `cat kegs-$(VERSION)/FILELIST | sed -e s@^@kegs-$(VERSION)/@` |gzip -c > kegs-$(VERSION).tar.gz
 
 specials_clean:
-	rm -f $(EXTRA_SPECIALS) 8inst_c 16inst_c size_c size_s Alib.h
+	rm -f $(SPECIALS) size_s Alib.h
 
 
-$(NAME)$(SUFFIX): $(OBJECTS) compile_time.o specials
-	$(LD) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(XLIBS) $(EXTRA_LIBS) -lm
+$(NAME)$(SUFFIX): $(SPECIALS) $(OBJECTS) compile_time.o
+	$(LD) $(LDOPTS) $(OBJECTS) compile_time.o $(LDFLAGS) -o $(NAME)$(SUFFIX) $(XLIBS) $(EXTRA_LIBS)
 
 8inst_s: instable.h
 	$(PERL) $(PROJROOT)/make_inst s 8 instable.h > 8inst_s
@@ -53,10 +61,10 @@ engine_s.o: 8inst_s 8size 16inst_s 16size
 engine_c.o: 8inst_c 16inst_c
 
 .s.o:
-	$(AS) -c $(OPTS) -I. $*.s
+	$(AS) -c $(OPTS) $*.s
 
 .c.o:
-	$(CC) $(CCOPTS) $(XOPTS) -c $(OPTS) -I. $*.c
+	$(CC) $(CCOPTS) $(XOPTS) -c $(OPTS) $*.c
 
 partls: partls.c
 	$(CC) $(CCOPTS) $(OPTS) -o partls$(SUFFIX) partls.c
@@ -70,22 +78,3 @@ to_pro: prodos.h prodos_protos.h to_pro.c
 compile_time.o: $(OBJECTS)
 
 # DO NOT DELETE
-
-adb.o: adb.h defc.h defcomm.h iwm.h protos.h
-clock.o: defc.h defcomm.h iwm.h protos.h 
-dis.o:   defc.h defcomm.h iwm.h protos.h disas.h
-scc.o: defc.h defcomm.h iwm.h protos.h scc_driver.h
-iwm.o: defc.h defcomm.h iwm.h protos.h iwm_35_525.h
-joystick_driver.o: defc.h defcomm.h iwm.h protos.h
-moremem.o: defc.h defcomm.h iwm.h protos.h
-paddles.o: defc.h defcomm.h iwm.h protos.h
-sim65816.o:   defc.h defcomm.h iwm.h protos.h
-smartport.o: defc.h defcomm.h iwm.h protos.h
-sound.o: defc.h defcomm.h iwm.h protos.h sound.h 
-sound_driver.o: defc.h defcomm.h iwm.h protos.h sound.h
-video.o:   defc.h defcomm.h iwm.h protos.h superhires.h
-xdriver.o:  defc.h defcomm.h iwm.h protos.h protos_xdriver.h
-engine_s.o: defs.h defcomm.h op_routs.h defs_instr.h 8inst_s 16inst_s 8size
-engine_s.o: 16size size_s
-engine_c.o: defc.h defcomm.h op_routs.h defs_instr.h 8inst_c 16inst_c size_c
-engine_c.o: protos.h iwm.h protos_engine_c.h

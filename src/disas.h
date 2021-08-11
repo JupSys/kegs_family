@@ -13,6 +13,12 @@
 
 const char rcsid_disas_h[] = "@(#)$Header: disas.h,v 1.8 96/10/27 01:23:49 kentd Exp $";
 
+#ifdef WIN32
+#define _LONG LONG
+#undef LONG
+#define LONG KEGS_LONG
+#endif
+
 enum {
 	ABS = 1,
 	ABSX,
@@ -211,3 +217,9 @@ const word32 disas_types[256] = {
 	ABSX+0x200, LONGX+0x300,		/* fe-ff */
 };
 	
+#if 0
+#ifdef WIN32
+#define LONG _LONG
+#undef KEGS_LONG
+#endif
+#endif

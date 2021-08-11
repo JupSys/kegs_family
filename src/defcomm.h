@@ -11,9 +11,8 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-#ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:17 kentd Exp $";
-#endif
+#ifndef KEGS_DEFCOMM_H
+#define KEGS_DEFCOMM_H
 
 #define USE_XIMAGE_CHANGED
 
@@ -27,12 +26,6 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:
 #define SLOW_MEM_CH_SIZE	(0x10000 >> CHANGE_SHIFT)
 
 #define MAXNUM_HEX_PER_LINE	32
-
-/* Different Joystick defines */
-#define JOYSTICK_MOUSE		1
-#define JOYSTICK_LINUX		2
-#define JOYSTICK_KEYPAD		3
-
 
 #define HALT_EVENT	0x10
 
@@ -163,45 +156,4 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:
 #define ALL_STAT_FLASH_STATE		(1 << (BIT_ALL_STAT_FLASH_STATE))
 #define ALL_STAT_A2VID_PALETTE		(0xf << (BIT_ALL_STAT_A2VID_PALETTE))
 
-#define BORDER_WIDTH		32
-
-#define EFF_BORDER_WIDTH	(BORDER_WIDTH + (640-560))
-
-#define BASE_MARGIN_TOP		32
-#define BASE_MARGIN_BOTTOM	30
-#define BASE_MARGIN_LEFT	BORDER_WIDTH
-#define BASE_MARGIN_RIGHT	BORDER_WIDTH
-
-#define A2_BORDER_TOP		0
-#define A2_BORDER_BOTTOM	0
-#define A2_BORDER_LEFT		0
-#define A2_BORDER_RIGHT		0
-#define A2_WINDOW_WIDTH		(640 + A2_BORDER_LEFT + A2_BORDER_RIGHT)
-#define A2_WINDOW_HEIGHT	(400 + A2_BORDER_TOP + A2_BORDER_BOTTOM)
-
-#if 0
-#define A2_DATA_OFF		(A2_BORDER_TOP*A2_WINDOW_WIDTH + A2_BORDER_LEFT)
-#endif
-
-#define X_A2_WINDOW_WIDTH	(A2_WINDOW_WIDTH + BASE_MARGIN_LEFT + \
-							BASE_MARGIN_RIGHT)
-#define X_A2_WINDOW_HEIGHT	(A2_WINDOW_HEIGHT + BASE_MARGIN_TOP + \
-							BASE_MARGIN_BOTTOM)
-
-#define STATUS_WINDOW_HEIGHT	(7*13)
-
-#define BASE_WINDOW_WIDTH	(X_A2_WINDOW_WIDTH)
-#define BASE_WINDOW_HEIGHT	(X_A2_WINDOW_HEIGHT + STATUS_WINDOW_HEIGHT)
-
-
-#define A2_BORDER_COLOR_NUM	0xfe
-
-#if 0
-#define A2_TEXT_COLOR_ALT_NUM	0x01
-#define A2_BG_COLOR_ALT_NUM	0x00
-#define A2_TEXT_COLOR_PRIM_NUM	0x02
-#define A2_BG_COLOR_PRIM_NUM	0x00
-#define A2_TEXT_COLOR_FLASH_NUM	0x0c
-#define A2_BG_COLOR_FLASH_NUM	0x08
-#endif
-
+#endif /* KEGS_DEFCOMM_H */

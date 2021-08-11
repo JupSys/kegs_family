@@ -13,8 +13,22 @@
 
 const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.40 2000/09/24 01:32:18 kentd Exp $";
 
-#include "defc.h"
-#include "protos_engine_c.h"
+#include "sim65816.h"
+#include "dis.h"
+#include "video.h"
+#include "engine.h"
+
+static void check_breakpoints(word32 addr);
+static word32 get_memory8_io_stub(word32 addr, byte *stat, double *fcycs_ptr, double fplus_x_m1);
+static word32 get_memory16_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr, Fplus *fplus_ptr);
+static word32 get_memory24_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr, Fplus *fplus_ptr);
+static void set_memory8_io_stub(word32 addr, word32 val, byte *stat, double *fcycs_ptr, double fplus_x_m1);
+static void set_memory16_pieces_stub(word32 addr, word32 val, double *fcycs_ptr, Fplus *fplus_ptr);
+static void set_memory24_pieces_stub(word32 addr, word32 val, double *fcycs_ptr, Fplus *fplus_ptr);
+static word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
+static word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
+static word32 get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr);
+
 
 #if 0
 # define LOG_PC
@@ -27,26 +41,6 @@ const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.40 2000/09/24 01:32
 #ifndef FCYCS_PTR_FCYCLES_ROUND_SLOW
 # define FCYCS_PTR_FCYCLES_ROUND_SLOW
 #endif
-
-extern int halt_sim;
-extern double g_fcycles_stop;
-extern int g_wait_pending;
-extern int g_irq_pending;
-extern int g_testing;
-extern int g_num_brk;
-extern int g_num_cop;
-extern byte *g_slow_memory_ptr;
-extern byte *g_memory_ptr;
-extern byte *g_rom_fc_ff_ptr;
-extern byte *g_rom_cards_ptr;
-extern byte *g_dummy_memory1_ptr;
-
-extern int g_num_breakpoints;
-extern word32 g_breakpts[];
-
-extern Pc_log *log_pc_ptr;
-extern Pc_log *log_pc_start_ptr;
-extern Pc_log *log_pc_end_ptr;
 
 int size_tab[] = {
 #include "size_c"
@@ -107,9 +101,6 @@ int bogus[] = {
 	if((old_psr ^ psr) & 0x20) {				\
 		goto recalc_accsize;				\
 	}
-
-extern Page_info page_info_rd_wr[];
-extern word32 slow_mem_changed[];
 
 #define GET_MEMORY8(addr,dest)					\
 	addr_latch = (addr);					\
@@ -555,6 +546,7 @@ set_memory16_c(word32 addr, word32 val, int cycs)
 	set_memory_c(addr + 1, val >> 8, 0);
 }
 
+#if 0
 void
 set_memory24_c(word32 addr, word32 val, int cycs)
 {
@@ -562,6 +554,7 @@ set_memory24_c(word32 addr, word32 val, int cycs)
 	set_memory_c(addr + 1, val >> 8, 0);
 	set_memory_c(addr + 2, val >> 16, 0);
 }
+#endif
 
 word32
 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub)
@@ -688,12 +681,6 @@ fixed_memory_ptrs_init()
 		(word32)&(page_info_rd_wr[0]),
 		(word32)&(page_info_rd_wr[PAGE_INFO_PAD_SIZE+0x1ffff].rd_wr));
 #endif
-}
-
-word32
-get_itimer()
-{
-	return 0;
 }
 
 void

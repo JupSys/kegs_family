@@ -13,11 +13,48 @@
 
 const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.306 2000/10/03 12:17:55 kentd Exp $";
 
+#if defined(WIN32)
+#include <windows.h>
+#endif
+
 #include <math.h>
 
 #define INCLUDE_RCSID_C
-#include "defc.h"
+#include "sim65816.h"
 #undef INCLUDE_RCSID_C
+#include "sim65816.h"
+#include "moremem.h"
+#include "video.h"
+#include "videodriver.h"
+#include "sound.h"
+#include "sounddriver.h"
+#include "iwm.h"
+#include "dis.h"
+#include "paddles.h"
+#include "smartport.h"
+#include "adb.h"
+#include "joystick.h"
+#include "engine.h"
+#include "clock.h"
+#include "scc.h"
+
+static void show_regs_act(Engine_reg *eptr);
+static void check_engine_asm_defines(void);
+static void memory_ptr_init(void);
+static void initialize_events(void);
+static void check_for_one_event_type(int type);
+static void add_event_entry(double dcycs, int type);
+static double remove_event_entry(int type);
+static void add_event_vbl(void);
+static void take_irq(int is_it_brk);
+static void update_60hz(double dcycs, double dtime_now);
+static void do_vbl_int(void);
+static void do_scan_int(double dcycs, int line);
+static void check_scan_line_int(double dcycs, int cur_video_line);
+static void init_reg(void);
+static void handle_action(word32 ret);
+static void do_break(word32 ret);
+static void do_cop(word32 ret);
 
 const char *g_kegs_default_paths[] = { "", "./", "~/", "/usr/local/lib/",
 	"/usr/local/kegs/", "/usr/local/lib/kegs/", "/usr/share/kegs/",
@@ -35,63 +72,17 @@ const char *g_kegs_default_paths[] = { "", "./", "~/", "/usr/local/lib/",
 #define EV_VBL_INT	5
 #define EV_SCC		6
 
-extern int g_stepping;
-
-extern int statereg;
-extern int g_cur_a2_stat;
-
-extern int wrdefram;
-extern int int_crom[8];
-
-extern int shadow_text;
-
-extern int shadow_reg;
-extern int speed_fast;
-extern word32 g_slot_motor_detect;
-
-extern int g_c023_val;
-extern int c023_1sec_int_irq_pending;
-extern int c023_scan_int_irq_pending;
-extern int c041_en_25sec_ints;
-extern int c041_en_vbl_ints;
-extern int g_c046_val;
-extern int c046_25sec_irq_pend;
-extern int c046_vbl_irq_pending;
-
-extern int g_engine_c_mode;
-extern int defs_instr_start_8;
-extern int defs_instr_start_16;
-extern int defs_instr_end_8;
-extern int defs_instr_end_16;
-extern int op_routs_start;
-extern int op_routs_end;
-
-extern int updated_mod_latch;
-extern int capslock_key_down;
 
 Engine_reg engine;
-extern word32 table8[];
-extern word32 table16[];
-
-extern byte doc_ram[];
-
-extern int g_iwm_motor_on;
-extern int g_fast_disk_emul;
-extern int g_slow_525_emul_wr;
-extern int g_apple35_sel;
-
-extern int g_audio_enable;
-extern int g_preferred_rate;
 
 void U_STACK_TRACE();
 
 double	g_fcycles_stop = 0.0;
 int	halt_sim = 0;
-int	enter_debug = 0;
+int enter_debug = 0;
 int	g_rom_version = 0;
 int	g_halt_on_bad_read = 0;
 int	g_ignore_bad_acc = 0;
-int	g_use_alib = 0;
 
 #if 0
 const double g_drecip_cycles_in_16ms = (1.0/(DCYCS_IN_16MS));
@@ -135,8 +126,6 @@ int Halt_on = 0;
 word32 g_mem_size_base = 256*1024;	/* size of motherboard memory */
 word32 g_mem_size_exp = 4*1024*1024;	/* size of expansion RAM card */
 
-extern word32 slow_mem_changed[];
-
 byte *g_slow_memory_ptr = 0;
 byte *g_memory_ptr = 0;
 byte *g_dummy_memory1_ptr = 0;
@@ -156,6 +145,11 @@ Pc_log pc_log_array[PC_LOG_LEN + 2];
 Pc_log	*log_pc_ptr = &(pc_log_array[0]);
 Pc_log	*log_pc_start_ptr = &(pc_log_array[0]);
 Pc_log	*log_pc_end_ptr = &(pc_log_array[PC_LOG_LEN]);
+
+#define TOOLBOX_LOG_LEN		64
+
+int g_toolbox_log_pos = 0;
+word32 g_toolbox_log_array[TOOLBOX_LOG_LEN][8];
 
 
 void
@@ -223,11 +217,7 @@ show_pc_log()
 }
 
 
-#define TOOLBOX_LOG_LEN		64
-
-int g_toolbox_log_pos = 0;
-word32 g_toolbox_log_array[TOOLBOX_LOG_LEN][8];
-
+#if 0
 word32
 toolbox_debug_4byte(word32 addr)
 {
@@ -270,6 +260,7 @@ toolbox_debug_c(word32 xreg, word32 stack, double *cyc_ptr)
 
 	g_toolbox_log_pos = pos;
 }
+#endif
 
 void
 show_toolbox_log()
@@ -549,16 +540,12 @@ show_regs()
 void
 my_exit(int ret)
 {
-	end_screen();
+    sound_shutdown();
+	video_shutdown();
+    joystick_close();
 	printf("exiting\n");
 	exit(ret);
 }
-
-
-int screen_index[] = {
-		0x000, 0x080, 0x100, 0x180, 0x200, 0x280, 0x300, 0x380,
-		0x028, 0x0a8, 0x128, 0x1a8, 0x228, 0x2a8, 0x328, 0x3a8,
-		0x050, 0x0d0, 0x150, 0x1d0, 0x250, 0x2d0, 0x350, 0x3d0 };
 
 
 void
@@ -679,11 +666,7 @@ memory_ptr_init()
 		(double)mem_size/(1024.0*1024.0));
 }
 
-extern int g_screen_redraw_skip_amt;
-extern int g_use_shmem;
-extern int g_use_dhr140;
-
-char g_display_env[512];
+static char g_display_env[512];
 int	g_force_depth = -1;
 int	g_screen_depth = 8;
 
@@ -694,6 +677,8 @@ main(int argc, char **argv)
 	int	diff;
 	int	tmp1;
 	int	i;
+    int audio_devtype = SOUND_DEFAULT;
+    int video_devtype = VIDEO_DEFAULT;
 
 	/* parse args */
 	for(i = 1; i < argc; i++) {
@@ -706,12 +691,6 @@ main(int argc, char **argv)
 		} else if(!strcmp("-test", argv[i])) {
 			printf("Allowing testing\n");
 			g_testing_enabled = 1;
-		} else if(!strcmp("-hpdev", argv[i])) {
-			printf("Using /dev/audio\n");
-			g_use_alib = 0;
-		} else if(!strcmp("-alib", argv[i])) {
-			printf("Using Aserver audio server\n");
-			g_use_alib = 1;
 		} else if(!strcmp("-24", argv[i])) {
 			printf("Using 24-bit visual\n");
 			g_force_depth = 24;
@@ -721,6 +700,9 @@ main(int argc, char **argv)
 		} else if(!strcmp("-15", argv[i])) {
 			printf("Using 15-bit visual\n");
 			g_force_depth = 15;
+		} else if(!strcmp("-8", argv[i])) {
+			printf("Using 8-bit visual\n");
+			g_force_depth = 8;
 		} else if(!strcmp("-mem", argv[i])) {
 			if((i+1) >= argc) {
 				printf("Missing argument\n");
@@ -744,8 +726,17 @@ main(int argc, char **argv)
 				exit(1);
 			}
 			tmp1 = strtol(argv[i+1], 0, 0);
-			printf("Using %d as audio enable val\n", tmp1);
-			g_audio_enable = tmp1;
+			printf("Using %d as audio device type\n", tmp1);
+			audio_devtype = tmp1;
+			i++;
+		} else if(!strcmp("-video", argv[i])) {
+			if((i+1) >= argc) {
+				printf("Missing argument\n");
+				exit(1);
+			}
+			tmp1 = strtol(argv[i+1], 0, 0);
+			printf("Using %d as video device type\n", tmp1);
+			video_devtype = tmp1;
 			i++;
 		} else if(!strcmp("-arate", argv[i])) {
 			if((i+1) >= argc) {
@@ -778,10 +769,15 @@ main(int argc, char **argv)
 #endif
 		} else if(!strcmp("-noshm", argv[i])) {
 			printf("Not using X shared memory\n");
-			g_use_shmem = 0;
+			g_video_fast = 0;
 		} else if(!strcmp("-joystick", argv[i])) {
-			printf("Trying to use joystick\n");
-			joystick_init();
+			if((i+1) >= argc) {
+				printf("Missing argument\n");
+				exit(1);
+			}
+			tmp1 = strtol(argv[i+1], 0, 0);
+			printf("Using %d as joystick type\n", tmp1);
+			g_joystick_type = tmp1;
 		} else if(!strcmp("-dhr140", argv[i])) {
 			printf("Using simple dhires color map\n");
 			g_use_dhr140 = 1;
@@ -790,6 +786,9 @@ main(int argc, char **argv)
 			exit(3);
 		}
 	}
+    printf("OK\n");
+    fprintf(stderr,"ERR\n");
+    fprintf(stdout,"OK2\n");
 
 	check_engine_asm_defines();
 	fixed_memory_ptrs_init();
@@ -829,10 +828,10 @@ main(int argc, char **argv)
 
 	initialize_events();
 
-	video_init();
+    joystick_init();
+	video_init(video_devtype);
 
-	sleep(1);
-	sound_init();
+	sound_init(audio_devtype);
 
 	iwm_init();
 	scc_init();
@@ -846,7 +845,9 @@ main(int argc, char **argv)
 	/* If we get here, we hit a breakpoint, call debug intfc */
 	do_debug_intfc();
 
-	end_screen();
+    sound_shutdown();
+	video_shutdown();
+    joystick_close();
 
 	return 0;
 }
@@ -1000,8 +1001,6 @@ add_event_entry(double dcycs, int type)
 	}
 }
 
-extern int g_doc_saved_ctl;
-
 double
 remove_event_entry(int type)
 {
@@ -1084,11 +1083,13 @@ remove_event_doc(int osc)
 	return remove_event_entry(EV_DOC_INT + (osc << 8));
 }
 
+#if 0
 double
 remove_event_scc(int type)
 {
 	return remove_event_entry(EV_SCC + (type << 8));
 }
+#endif
 
 void
 show_all_events()
@@ -1243,6 +1244,15 @@ run_prog()
 
 		now_dtime = get_dtime();
 
+        /* XXX patch from kegs32. useful? */
+        /*
+        if (now_dtime < prev_dtime) {
+            printf ("Wrap around time\n");
+            prev_dtime = prev_dtime-(~(int)0);
+        }
+        */
+        /* XXX */
+
 		g_cur_sim_dtime += (now_dtime - prev_dtime);
 
 		dcycs = g_last_vbl_dcycs + (double)(engine.fcycles);
@@ -1350,8 +1360,8 @@ run_prog()
 	if(!g_testing) {
 		printf("leaving run_prog, halt_sim:%d\n", halt_sim);
 	}
-
-	x_auto_repeat_on(0);
+    set_warp_pointer(0);
+	video_auto_repeat_on(0);
 }
 
 void
@@ -1485,33 +1495,6 @@ show_dtime_array()
 	}
 }
 
-extern word32 g_cycs_in_40col;
-extern word32 g_cycs_in_xredraw;
-extern word32 g_cycs_in_check_input;
-extern word32 g_cycs_in_refresh_line;
-extern word32 g_cycs_in_refresh_ximage;
-extern word32 g_cycs_in_io_read;
-extern word32 g_cycs_in_sound1;
-extern word32 g_cycs_in_sound2;
-extern word32 g_cycs_in_sound3;
-extern word32 g_cycs_in_sound4;
-extern word32 g_cycs_in_start_sound;
-extern word32 g_cycs_in_est_sound;
-extern word32 g_refresh_bytes_xfer;
-
-extern int g_num_snd_plays;
-extern int g_num_doc_events;
-extern int g_num_start_sounds;
-extern int g_num_scan_osc;
-extern int g_num_recalc_snd_parms;
-extern float g_fvoices;
-
-extern int g_doc_vol;
-extern int g_a2vid_palette;
-
-extern int g_status_refresh_needed;
-
-
 void
 update_60hz(double dcycs, double dtime_now)
 {
@@ -1604,7 +1587,7 @@ update_60hz(double dcycs, double dtime_now)
 			g_refresh_bytes_xfer,
 			g_cycs_in_xredraw >> 20, g_cycs_in_xredraw & 0xfffff,
 			g_cycs_in_check_input, g_cycs_in_refresh_line,
-			g_cycs_in_refresh_ximage);
+			g_cycs_in_refresh_video_image);
 		update_status_line(1, status_buf);
 
 		sprintf(status_buf, "Ints:%3d I/O:%4dK BRK:%3d COP:%2d "
@@ -1651,7 +1634,7 @@ update_60hz(double dcycs, double dtime_now)
 		g_cycs_in_xredraw = 0;
 		g_cycs_in_check_input = 0;
 		g_cycs_in_refresh_line = 0;
-		g_cycs_in_refresh_ximage = 0;
+		g_cycs_in_refresh_video_image = 0;
 		g_cycs_in_io_read = 0;
 		g_cycs_in_sound1 = 0;
 		g_cycs_in_sound2 = 0;
@@ -2019,6 +2002,7 @@ do_mvn(word32 banks)
 }
 #endif
 
+#if 0
 void
 do_wdm()
 {
@@ -2042,4 +2026,17 @@ size_fail(int val, word32 v1, word32 v2)
 {
 	halt_printf("Size failure, val: %08x, %08x %08x\n", val, v1, v2);
 }
+#endif
 
+int
+get_limit_speed()
+{
+    return g_limit_speed;
+}
+
+int
+set_limit_speed(int rate)
+{
+    g_limit_speed = rate;
+    return 1;
+}

@@ -1,4 +1,3 @@
-
 #ifdef INCLUDE_IWM_RCSID_C
 const char rcsdif_iwm_35_525_h[] = "@(#)$Header: iwm_35_525.h,v 1.8 99/09/06 20:49:43 kentd Exp $";
 #endif

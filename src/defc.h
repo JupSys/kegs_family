@@ -11,9 +11,8 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-#ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.76 2000/09/24 00:53:43 kentd Exp $";
-#endif
+#ifndef KEGS_DEFC_H
+#define KEGS_DEFC_H
 
 #include "defcomm.h"
 
@@ -22,7 +21,11 @@ const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.76 2000/09/24 00:53:43 kent
 typedef unsigned char byte;
 typedef unsigned short word16;
 typedef unsigned int word32;
+#ifdef _MSC_VER
+typedef unsigned __int64 word64;
+#else
 typedef unsigned long long word64;
+#endif
 
 void U_STACK_TRACE();
 
@@ -55,11 +58,13 @@ void U_STACK_TRACE();
 #ifdef __NeXT__
 # include <libc.h>
 #endif
-#include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#if !defined(WIN32)
+#include <unistd.h>
 #include <sys/ioctl.h>
+#endif
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -219,5 +224,4 @@ extern int errno;
 # define GET_ITIMER(dest)	dest = 0;
 #endif
 
-#include "iwm.h"
-#include "protos.h"
+#endif /* KEGS_DEFC_H */

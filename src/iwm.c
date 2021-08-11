@@ -13,12 +13,57 @@
 
 const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.99 2000/09/24 01:01:46 kentd Exp $";
 
-#include "defc.h"
+#include "sim65816.h"
+#include "moremem.h"
+#include "video.h"
+#include "smartport.h"
+#include "engine.h"
+#include "iwm.h"
+#include "dis.h"
 
-extern int Verbose;
-extern int g_vbl_count;
-extern int speed_fast;
-extern word32 g_slot_motor_detect;
+static void iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525);
+static void iwm_flush_disk_to_unix(Disk *dsk);
+static void iwm_touch_switches(int loc, double dcycs);
+static void iwm_move_to_track(Disk *dsk, int new_track);
+static void iwm525_phase_change(int drive, int phase);
+static int iwm_read_status35(double dcycs);
+static void iwm_do_action35(double dcycs);
+static int iwm_read_enable2(double dcycs);
+static int iwm_read_enable2_handshake(double dcycs);
+static void iwm_write_enable2(int val, double dcycs);
+static int iwm_read_data(Disk *dsk, int fast_disk_emul, double dcycs);
+static void iwm_write_data(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
+static int iwm_read_data_35(Disk *dsk, int fast_disk_emul, double dcycs);
+static void iwm_write_data_35(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
+static int iwm_read_data_525(Disk *dsk, int fast_disk_emul, double dcycs);
+static void iwm_write_data_525(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
+static void sector_to_partial_nib(byte *in, byte *nib_ptr);
+static int disk_unnib_4x4(Disk *dsk);
+static int iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf);
+static int iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf);
+static int disk_track_to_unix(Disk *dsk, int qtr_track, byte *outbuf);
+static void show_hex_data(byte *buf, int count);
+static void disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size);
+static void disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len, int nib_len);
+static void iwm_nibblize_track_nib525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
+static void iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
+static void iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track);
+static void disk_4x4_nib_out(Disk *dsk, word32 val);
+static void disk_nib_out(Disk *dsk, byte val, int size);
+static void disk_nib_end_track(Disk *dsk);
+static void iwm_show_a_track(Track *trk);
+static void maybe_parse_disk_conf_file(void);
+static void insert_disk(Disk *dsk, char *name, int virtual_image, int size);
+static void eject_named_disk(Disk *dsk, char *name);
+static void eject_if_untouched(Disk *dsk);
+static void eject_disk(Disk *dsk);
+static void kegs_file_copy(char *orig_name, char *new_name);
+static void eject_disk_by_num(int slot, int drive);
+/* prototypes for IWM special routs */
+static int iwm_read_data_35(Disk *dsk, int fast_disk_emul, double dcycs);
+static int iwm_read_data_525(Disk *dsk, int fast_disk_emul, double dcycs);
+static void iwm_write_data_35(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
+static void iwm_write_data_525(Disk *dsk, word32 val, int fast_disk_emul,double dcycs);
 
 #define NIB_LEN_525	0x1900		/* 51072 bits per track */
 #define NIBS_FROM_ADDR_TO_DATA		20
@@ -27,22 +72,22 @@ extern word32 g_slot_motor_detect;
 #define DSK_TYPE_PRODOS			1
 #define DSK_TYPE_NIB			2
 
-char g_kegs_conf_name[256];
+static char g_kegs_conf_name[256];
 
-const char *g_kegs_conf_names[] = { "kegs_conf", "disk_conf", ".kegs_conf", 0 };
+static const char *g_kegs_conf_names[] = { "kegs_conf", "disk_conf", ".kegs_conf", 0 };
 
-const byte phys_to_dos_sec[] = {
+static const byte phys_to_dos_sec[] = {
 	0x00, 0x07, 0x0e, 0x06,  0x0d, 0x05, 0x0c, 0x04,
 	0x0b, 0x03, 0x0a, 0x02,  0x09, 0x01, 0x08, 0x0f
 };
 
-const byte phys_to_prodos_sec[] = {
+static const byte phys_to_prodos_sec[] = {
 	0x00, 0x08, 0x01, 0x09,  0x02, 0x0a, 0x03, 0x0b,
 	0x04, 0x0c, 0x05, 0x0d,  0x06, 0x0e, 0x07, 0x0f
 };
 
 
-const byte to_disk_byte[] = {
+static const byte to_disk_byte[] = {
 	0x96, 0x97, 0x9a, 0x9b,  0x9d, 0x9e, 0x9f, 0xa6,
 	0xa7, 0xab, 0xac, 0xad,  0xae, 0xaf, 0xb2, 0xb3,
 /* 0x10 */
@@ -56,7 +101,7 @@ const byte to_disk_byte[] = {
 	0xf7, 0xf9, 0xfa, 0xfb,  0xfc, 0xfd, 0xfe, 0xff
 };
 
-int	g_track_bytes_35[] = {
+static int	g_track_bytes_35[] = {
 	0x200*12,
 	0x200*11,
 	0x200*10,
@@ -64,7 +109,7 @@ int	g_track_bytes_35[] = {
 	0x200*8
 };
 
-int	g_track_nibs_35[] = {
+static int	g_track_nibs_35[] = {
 	816*12,
 	816*11,
 	816*10,
@@ -76,13 +121,13 @@ int	g_track_nibs_35[] = {
 
 int	g_fast_disk_emul = 1;
 int	g_slow_525_emul_wr = 0;
-double	g_dcycs_end_emul_wr = 0.0;
-int	g_fast_disk_unnib = 0;
-int	g_iwm_fake_fast = 0;
+static double	g_dcycs_end_emul_wr = 0.0;
+static int	g_fast_disk_unnib = 0;
+static int	g_iwm_fake_fast = 0;
 
 
-int	from_disk_byte[256];
-int	from_disk_byte_valid = 0;
+static int	from_disk_byte[256];
+static int	from_disk_byte_valid = 0;
 
 Iwm	iwm;
 
@@ -90,17 +135,12 @@ int	g_apple35_sel = 0;
 int	head_35 = 0;
 int	g_iwm_motor_on = 0;
 
-int	g_check_nibblization = 0;
+static int	g_check_nibblization = 0;
 
-time_t	g_disk_conf_mtime = 0;
-int	g_reparse_delay = 0;
+static time_t	g_disk_conf_mtime = 0;
+static int	g_reparse_delay = 0;
 int	g_highest_smartport_unit = -1;
 
-/* prototypes for IWM special routs */
-int iwm_read_data_35(Disk *dsk, int fast_disk_emul, double dcycs);
-int iwm_read_data_525(Disk *dsk, int fast_disk_emul, double dcycs);
-void iwm_write_data_35(Disk *dsk, word32 val, int fast_disk_emul, double dcycs);
-void iwm_write_data_525(Disk *dsk, word32 val, int fast_disk_emul,double dcycs);
 
 void
 iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525)
@@ -570,7 +610,9 @@ iwm525_phase_change(int drive, int phase)
 
 	qtr_track += delta;
 	if(qtr_track < 0) {
+#if 0
 		printf("GRIND...GRIND...GRIND\n");
+#endif
 		qtr_track = 0;
 		last_phase = 0;
 	}
@@ -1941,9 +1983,9 @@ void
 iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 {
 	int	phys_to_log_sec[16];
-	word32	buf_c00[0x100];
-	word32	buf_d00[0x100];
-	word32	buf_e00[0x100];
+	word32	buf_c00[0x100]={0};
+	word32	buf_d00[0x100]={0};
+	word32	buf_e00[0x100]={0};
 	byte	*buf;
 	word32	*word_ptr;
 	word32	val;
@@ -2616,7 +2658,7 @@ insert_disk(Disk *dsk, char *name, int virtual_image, int size)
 	}
 
 	/* first, see if file exists.  If it doesn't just return */
-	dsk->fd = open(tmp_buf, O_RDONLY, 0x1b6);
+	dsk->fd = open(tmp_buf, O_RDONLY | O_BINARY, 0x1b6);
 	if(dsk->fd < 0) {
 		printf("Disk image %s does not exist!\n", tmp_buf);
 		return;
@@ -2894,14 +2936,14 @@ kegs_file_copy(char *orig_name, char *new_name)
 	int	len;
 	int	ret;
 
-	fd_in = open(orig_name, O_RDONLY, 0x1b6);
+	fd_in = open(orig_name, O_RDONLY | O_BINARY, 0x1b6);
 	if(fd_in < 0) {
 		printf("kegs_file_copy: open %s failed: %d %d\n",
 			orig_name, fd_in, errno);
 		exit(1);
 	}
 
-	fd_out = open(new_name, O_WRONLY | O_TRUNC | O_CREAT, 0x1b6);
+	fd_out = open(new_name, O_WRONLY | O_BINARY | O_TRUNC | O_CREAT, 0x1b6);
 	if(fd_out < 0) {
 		printf("kegs_file_copy: open %s failed: %d %d\n",
 			orig_name, fd_out, errno);
@@ -2978,4 +3020,17 @@ eject_disk_by_num(int slot, int drive)
 	/* and make sure it gets reparsed */
 	g_reparse_delay = 0;
 	g_iwm_vbl_count = 0;
+}
+
+int
+get_fast_disk_emul()
+{
+    return g_fast_disk_emul;
+}
+
+int
+set_fast_disk_emul(int val)
+{
+    g_fast_disk_emul = val;
+    return 1;
 }

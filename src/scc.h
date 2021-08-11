@@ -15,8 +15,15 @@
 const char rcsid_scc_h[] = "@(#)$Header: scc.h,v 1.4 99/04/05 00:10:32 kentd Exp $";
 #endif
 
+#ifndef KEGS_SCC_H
+#define KEGS_SCC_H
+
+#if defined(WIN32)
+#include <winsock.h>
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
+#endif
 
 /* my scc port 0 == channel A, port 1 = channel B */
 
@@ -64,3 +71,28 @@ STRUCT(Scc) {
 	int	tx_event_pending;
 };
 
+extern Scc	scc_stat[2];
+
+void scc_init(void);
+void scc_reset(void);
+void scc_update(double dcycs);
+void do_scc_event(int type, double dcycs);
+
+void show_scc_state(void);
+void show_scc_log(void);
+
+word32 scc_read_reg(int port, double dcycs);
+void scc_write_reg(int port, word32 val, double dcycs);
+
+word32 scc_read_data(int port, double dcycs);
+void scc_write_data(int port, word32 val, double dcycs);
+
+void scc_add_to_readbuf(int port, word32 val, double dcycs);
+
+/* scc_driver.c */
+int scc_socket_init(int port);
+void scc_accept_socket(int port);
+void scc_try_fill_readbuf(int port, double dcycs);
+void scc_try_to_empty_writebuf(int port);
+
+#endif /* KEGS_SCC_H */

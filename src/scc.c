@@ -13,15 +13,30 @@
 
 const char rcsid_scc_c[] = "@(#)$Header: scc.c,v 1.29 99/10/31 21:06:38 kentd Exp $";
 
-#include "defc.h"
-
-extern int Verbose;
-extern double g_cur_dcycs;
+#include "sim65816.h"
 
 /* my scc port 0 == channel A = slot 1 */
 /*        port 1 == channel B = slot 2 */
 
 #include "scc.h"
+#include "dis.h"
+
+static void scc_hard_reset_port(int port);
+static void scc_reset_port(int port);
+static void scc_regen_clocks(int port);
+static void scc_log(int regnum, word32 val, double dcycs);
+static void scc_maybe_br_event(int port, double dcycs);
+static void scc_evaluate_ints(int port);
+static void scc_maybe_rx_event(int port, double dcycs);
+static void scc_maybe_rx_int(int port, double dcycs);
+static void scc_clr_rx_int(int port);
+static void scc_handle_tx_event(int port, double dcycs);
+static void scc_maybe_tx_event(int port, double dcycs);
+static void scc_clr_tx_int(int port);
+static void scc_set_zerocnt_int(int port);
+static void scc_clr_zerocnt_int(int port);
+static void scc_add_to_writebuf(int port, word32 val, double dcycs);
+
 #define SCC_R14_DPLL_SOURCE_BRG		0x100
 #define SCC_R14_FM_MODE			0x200
 
@@ -944,4 +959,3 @@ scc_write_data(int port, word32 val, double dcycs)
 	scc_maybe_tx_event(port, dcycs);
 }
 
-#include "scc_driver.h"

@@ -15,14 +15,30 @@
 const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.7 99/10/31 01:13:38 kentd Exp $";
 #endif
 
-#include <sys/ipc.h>
-#include <sys/shm.h>
+#ifndef KEGS_SOUND_H
+#define KEGS_SOUND_H
+
 
 #define SOUND_SHM_SAMP_SIZE		(8*1024)
+
+#define SOUND_NONE 0
+#define SOUND_NATIVE 1
+#define SOUND_SDL 2
+#define SOUND_ALIB 3
 
 #define SAMPLE_SIZE		2
 #define NUM_CHANNELS		2
 #define SAMPLE_CHAN_SIZE	(SAMPLE_SIZE * NUM_CHANNELS)
+#if 0
+# define DO_DOC_LOG
+#endif
+
+#ifdef DO_DOC_LOG
+# define DOC_LOG(a,b,c,d)	doc_log_rout(a,b,c,d)
+#else
+# define DOC_LOG(a,b,c,d)
+#endif
+
 
 STRUCT(Doc_reg) {
 	double	dsamp_ev;
@@ -46,3 +62,44 @@ STRUCT(Doc_reg) {
 	word32	last_samp_val;
 };
 
+extern int g_audio_enable;
+extern word32 doc_ptr;
+extern int g_send_sound_to_file;
+extern byte doc_ram[0x10000 + 16];
+extern int g_doc_vol;
+extern word32	*g_sound_shm_addr;
+extern int	g_sound_shm_pos;
+extern double g_last_sound_play_dsamp;
+
+extern word32 g_cycs_in_sound1;
+extern word32 g_cycs_in_sound2;
+extern word32 g_cycs_in_sound3;
+extern word32 g_cycs_in_sound4;
+extern word32 g_cycs_in_start_sound;
+extern word32 g_cycs_in_est_sound;
+
+extern float g_fvoices;
+extern int g_num_snd_plays;
+extern int g_num_doc_events;
+extern int g_num_start_sounds;
+extern int g_num_scan_osc;
+extern int g_num_recalc_snd_parms;
+extern int g_doc_saved_ctl;
+extern int g_audio_rate;
+
+void doc_show_ensoniq_state(int osc);
+int doc_read_c030(double dcycs);
+int doc_read_c03c(double dcycs);
+int doc_read_c03d(double dcycs);
+void doc_write_c03c(int val, double dcycs);
+void doc_write_c03d(int val, double dcycs);
+void doc_write_c03e(int val);
+void doc_write_c03f(int val);
+void sound_init(int);
+void sound_reset(double dcycs);
+void sound_update(double dcycs);
+void doc_handle_event(int osc, double dcycs);
+void set_audio_rate(int rate);
+
+
+#endif /* KEGS_SOUND_H */

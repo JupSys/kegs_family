@@ -11,7 +11,7 @@
 /*	HP has nothing to do with this software.		*/
 /****************************************************************/
 
-#include "defc.h"
+#include "sim65816.h"
 #include <ctype.h>
 
 #include "prodos.h"
@@ -84,7 +84,7 @@ main(int argc, char **argv)
 
 	for(i = 0; i < num_files; i++) {
 		name = files[i];
-		in = open(name, O_RDONLY);
+		in = open(name, O_RDONLY | O_BINARY);
 		if(in < 0) {
 			fprintf(stderr, "opening %s returned %d, errno: %d\n",
 				name, in, errno);
@@ -248,7 +248,7 @@ allocate_memdisk(char *out_name, int size)
 	ProDisk	*disk;
 	int	out;
 
-	out = open(out_name, O_RDWR | O_CREAT | O_TRUNC, 0x1b6);
+	out = open(out_name, O_RDWR | O_BINARY | O_CREAT | O_TRUNC, 0x1b6);
 	if(out < 0) {
 		fprintf(stderr, "opening %s returned %d, errno: %d\n",
 			out_name, out, errno);
