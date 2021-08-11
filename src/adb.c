@@ -573,7 +573,7 @@ adb_set_new_mode(word32 val)
 		printf("Disabling keyboard/mouse:%02x!\n", val);
 	}
 
-	if(val & 0xe2) {
+	if(val & 0xa2) {
 		halt_printf("ADB set mode: %02x!\n", val);
 		adb_error();
 	}
@@ -1270,8 +1270,11 @@ adb_key_event(int a2code, int is_up)
 	ascii = a2_key_to_ascii[a2code][0];
 	if(CAPS_LOCK_DOWN && (ascii >= 'a' && ascii <= 'z')) {
 		pos = 1;
+        if (SHIFT_DOWN && g_adb_mode&0x40) {
+            pos =0;
+        }
 	} else if(SHIFT_DOWN) {
-		pos = 1;
+        pos = 1;
 	}
 
 	if(CTRL_DOWN) {

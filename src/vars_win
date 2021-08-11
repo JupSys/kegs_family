@@ -1,0 +1,21 @@
+OBJECTS = $(OBJECTS1) engine_c.o
+CC = gcc
+CCOPTS = -O2 -fomit-frame-pointer -mpentium -fno-strength-reduce -DNDEBUG
+'CCOPTS = -g 
+'OPTS =  -DNDEBUG -DKEGS_LITTLE_ENDIAN
+OPTS =  -DKEGS_LITTLE_ENDIAN
+SUFFIX =
+NAME = kegs32
+LDFLAGS =
+LDOPTS = 
+'LD = $(CC) -mwindows 
+LD = $(CC) 
+EXTRA_LIBS = -lwinmm -lgdi32 -ldsound -lmingw32 -lwsock32 -lddraw -ldxguid
+EXTRA_SPECIALS =
+
+AS = cc
+PERL = perl
+
+XOPTS = 
+XLIBS = 
+

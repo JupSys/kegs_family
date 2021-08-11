@@ -15,12 +15,14 @@
 const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.7 99/10/31 01:13:38 kentd Exp $";
 #endif
 
+#ifndef _WIN32
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#endif
 
-#define SOUND_SHM_SAMP_SIZE		(8*1024)
+#define SOUND_SHM_SAMP_SIZE	(8*1024)
 
-#define SAMPLE_SIZE		2
+#define SAMPLE_SIZE		    2
 #define NUM_CHANNELS		2
 #define SAMPLE_CHAN_SIZE	(SAMPLE_SIZE * NUM_CHANNELS)
 

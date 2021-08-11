@@ -1,0 +1,53 @@
+KEGS32 is console-based program based on the Kent Dickey's KEGS for UNIX. 
+KEGS32 is designed to works in WIN32 platform. This is a straight port
+of KEGS and do not have fancy GUI in the current version. This version
+is at preliminary stage. It currently doesn't supports full-screen and
+joystick
+
+What are the keys for Open-Apple, Close-Apple and Reset button?
+---------------------------------------------------------------
+
+In KEGS32, the keymaps is as follows
+
+Open-Apple  =  F3, Alt
+Close-Apple =  F2, Windows-Key
+Escape      =  F1
+Break       =  RESET
+Toggle fast disk emulation = F7
+Hide mouse cursor = F8
+
+How to turn off the audio of KEGS32
+----------------------------------
+You can turn on the audio by issueing kegs32 -audio 0
+
+How to compile
+--------------
+KEGS32 is developed using MINGW32. It should also compile in Visual C++ with
+minor modifications.  The following changes are made to the original 
+distribution of KEGS 0.60. 
+
+defc.h    
+clock.h  
+scc.h     
+sound.h
+sound.c
+sound_driver.c
+adb.c    -- Fixes a bug for shift-capslock option in the control panel.
+sim65816.c
+windriver.c -- New addition
+protos_windriver.h -- New Addition
+Makefile.win -- New Addition
+vars_win -- New Addition
+
+In order to compile,
+
+1)  copy vars_win to vars
+2)  copy Makefile.win to Makefile and
+3)  run make
+
+
+Bug Reports/ Suggestions / Fixes
+--------------------------------
+If you have any problems/questions/etc., just let me know at
+
+akilgard@yahoo.com, 

@@ -14,8 +14,17 @@
 const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.19 99/12/20 23:33:06 kentd Exp $";
 
 #include "defc.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+#include <mmsystem.h>
 #include <time.h>
+
+#ifndef _WIN32
 #include <sys/time.h>
+#endif
 
 extern int Verbose;
 extern int g_vbl_count;
@@ -51,17 +60,23 @@ get_dtime()
 	/* No routine cares about the absolute value, only deltas--maybe */
 	/*  take advantage of that in future to increase usec accuracy */
 
+#ifndef _WIN32
 #ifdef SOLARIS
 	gettimeofday(&tp1, (void *)0);
-#else
+#else 
 	gettimeofday(&tp1, (struct timezone *)0);
 #endif
-
+#endif
+    
+#ifndef _WIN32   
 	dsec = (double)tp1.tv_sec;
 	dusec = (double)tp1.tv_usec;
 
 	dtime = dsec + (dusec / (1000.0 * 1000.0));
-
+#else
+    dtime = GetTickCount()/(1000.0); 
+#endif
+     
 	return dtime;
 }
 
@@ -70,6 +85,8 @@ micro_sleep(double dtime)
 {
 	struct timeval Timer;
 	int	ret;
+    int soc;
+    fd_set fdr;
 
 	if(dtime <= 0.0) {
 		return 0;
@@ -79,10 +96,11 @@ micro_sleep(double dtime)
 		return -1;
 	}
 
-#if 0
+#if 0 
 	printf("usleep: %f\n", dtime);
 #endif
 
+#ifndef _WIN32
 	Timer.tv_sec = 0;
 	Timer.tv_usec = (dtime * 1000000.0);
 	if( (ret = select(0, 0, 0, 0, &Timer)) < 0) {
@@ -90,6 +108,10 @@ micro_sleep(double dtime)
 			ret, errno);
 		return -1;
 	}
+#else
+    Sleep(dtime*1000);
+#endif
+
 	return 0;
 }
 

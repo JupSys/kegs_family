@@ -15,8 +15,9 @@
 const char rcsid_scc_h[] = "@(#)$Header: scc.h,v 1.4 99/04/05 00:10:32 kentd Exp $";
 #endif
 
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include <winsock.h>
+//#include <sys/socket.h>
+//#include <netinet/in.h>
 
 /* my scc port 0 == channel A, port 1 = channel B */
 

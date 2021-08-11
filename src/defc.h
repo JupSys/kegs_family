@@ -14,7 +14,6 @@
 #ifdef INCLUDE_RCSID_C
 const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.76 2000/09/24 00:53:43 kentd Exp $";
 #endif
-
 #include "defcomm.h"
 
 #define STRUCT(a) typedef struct _ ## a a; struct _ ## a
@@ -22,6 +21,7 @@ const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.76 2000/09/24 00:53:43 kent
 typedef unsigned char byte;
 typedef unsigned short word16;
 typedef unsigned int word32;
+//typedef unsigned long long word64;
 typedef unsigned long long word64;
 
 void U_STACK_TRACE();
@@ -55,11 +55,13 @@ void U_STACK_TRACE();
 #ifdef __NeXT__
 # include <libc.h>
 #endif
-#include <unistd.h>
+
+#define W_OK 2
+//#include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/ioctl.h>
+//#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -151,7 +153,7 @@ STRUCT(Page_info) {
 #define clear_halt() \
 	clr_halt_act()
 
-extern int errno;
+//extern int errno;
 
 #define GET_PAGE_INFO_RD(page) \
 	(page_info_rd_wr[page].rd_wr)

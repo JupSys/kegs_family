@@ -23,6 +23,13 @@ const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.89 2000/09/24 00:56:31 ke
 # define DO_DOC_LOG
 #endif
 
+#ifdef _WIN32
+#include <windows.h>
+extern unsigned int __stdcall child_sound_loop_win32(void *);
+word32 g_soundSize;
+int    cond_read_flag=0;
+#endif
+
 extern int Verbose;
 extern int g_use_shmem;
 extern word32 g_vbl_count;
@@ -56,10 +63,13 @@ int	g_audio_enable = -1;
 # if defined(__linux__) || defined(OSS)
 /* default to off for now */
 int	g_audio_enable = 0;
-# else
-/* Default to sound off */
+#else
+# ifdef _WIN32
+int	g_audio_enable = 1;
+#else
 int	g_audio_enable = 0;
-# endif
+#endif
+#endif
 #endif
 
 Doc_reg g_doc_regs[32];
@@ -217,6 +227,10 @@ sound_init()
 	int	pid;
 	int	i;
 
+    #ifdef _WIN32
+    unsigned long tid;
+    #endif
+
 	for(i = 0; i < 32; i++) {
 		rptr = &(g_doc_regs[i]);
 		rptr->dsamp_ev = 0.0;
@@ -240,13 +254,14 @@ sound_init()
 		rptr->last_samp_val = 0;
         }
 
+#ifndef _WIN32    
 	if(!g_use_shmem) {
 		if(g_audio_enable < 0) {
 			printf("Defaulting audio off for slow X display\n");
 			g_audio_enable = 0;
 		}
 	}
-
+    
 	if(g_audio_enable == 0) {
 		set_audio_rate(g_preferred_rate);
 		return;
@@ -278,6 +293,7 @@ sound_init()
 
 	/* prepare pipe so parent can signal child each other */
 	/*  pipe[0] = read side, pipe[1] = write end */
+
 	ret = pipe(&g_pipe_fd[0]);
 	if(ret < 0) {
 		printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
@@ -292,32 +308,42 @@ sound_init()
 	pid = fork();
 	switch(pid) {
 	case 0:
-		/* child */
-		/* close stdin and write-side of pipe */
 		close(0);
-		/* Close other fds to make sure X window fd is closed */
 		for(i = 3; i < 100; i++) {
 			if((i != g_pipe_fd[0]) && (i != g_pipe2_fd[1])) {
 				close(i);
 			}
 		}
-		close(g_pipe_fd[1]);		/*make sure write pipe closed*/
-		close(g_pipe2_fd[0]);		/*make sure read pipe closed*/
+		close(g_pipe_fd[1]);		
+		close(g_pipe2_fd[0]);		
 		child_sound_loop(g_pipe_fd[0], g_pipe2_fd[1], g_sound_shm_addr);
 		exit(0);
 	case -1:
-		/* error */
 		printf("sound_init: fork ret: -1, errno: %d\n", errno);
 		exit(6);
 	default:
-		/* parent */
-		/* close read-side of pipe1, and the write side of pipe2 */
 		close(g_pipe_fd[0]);
 		close(g_pipe2_fd[1]);
 		doc_printf("Child is pid: %d\n", pid);
 		parent_sound_get_sample_rate(g_pipe2_fd[0]);
 	}
 
+#else
+    printf ("Sound shared memory size=%d\n", 
+            SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
+
+    shmaddr = malloc(SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
+    memset(shmaddr,0,SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
+	g_sound_shm_addr = shmaddr;
+    set_audio_rate(g_preferred_rate);
+    _beginthreadex(NULL,0,child_sound_loop_win32,shmaddr,0,&tid);
+    while (!cond_read_flag) {
+        Sleep(1);
+    }
+    cond_read_flag=1;
+	set_audio_rate(g_audio_rate);
+    printf ("Audio rate=%d\n",g_audio_rate);
+#endif
 }
 
 void
@@ -422,7 +448,7 @@ int	g_c030_state = 0;
 
 int	g_sound_file_num = 0;
 int	g_sound_file_fd = -1;
-int	g_send_sound_to_file = 0;
+int	g_send_sound_to_file = 0; 
 int	g_send_file_bytes = 0;
 
 void
@@ -552,13 +578,18 @@ send_sound(int fd, int real_samps, int size)
 	}
 	DOC_LOG("send_sound", -1, g_last_sound_play_dsamp,
 						(real_samps << 30) + size);
+    g_soundSize=tmp; 
 
-	/* Although this looks like a big/little-endian issue, since the */
-	/*  child is also reading an int, it just works with no byte swap */
-	ret = write(fd, &tmp, 4);
-	if(ret != 4) {
-		halt_printf("send_sound, wr ret: %d, errno: %d\n", ret, errno);
-	}
+    while (!cond_read_flag) {
+        Sleep(1);
+        //WaitForSingleObject(sound_event,INFINITE);
+        if (cond_read_flag) {
+            break;
+        }
+    }
+    cond_read_flag=0;
+    //send_sound_win32(tmp);
+    //PulseEvent(sound_event);
 }
 
 void

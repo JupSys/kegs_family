@@ -13,6 +13,10 @@
 
 const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.306 2000/10/03 12:17:55 kentd Exp $";
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <math.h>
 
 #define INCLUDE_RCSID_C
@@ -687,15 +691,23 @@ char g_display_env[512];
 int	g_force_depth = -1;
 int	g_screen_depth = 8;
 
+#ifndef _WIN32
 int
 main(int argc, char **argv)
+#else
+int APIENTRY WinMain (HINSTANCE curr,HINSTANCE prev, LPSTR cmd, int nShow)
+#endif
 {
+#ifdef _WIN32
+    int argc = __argc; char **argv=__argv;
+#endif
 	int	skip_amt;
 	int	diff;
 	int	tmp1;
 	int	i;
 
 	/* parse args */
+
 	for(i = 1; i < argc; i++) {
 		if(!strcmp("-badrd", argv[i])) {
 			printf("Halting on bad reads\n");
@@ -831,7 +843,10 @@ main(int argc, char **argv)
 
 	video_init();
 
+    #ifndef _WIN32
 	sleep(1);
+    #endif
+
 	sound_init();
 
 	iwm_init();
@@ -1243,6 +1258,11 @@ run_prog()
 
 		now_dtime = get_dtime();
 
+        if (now_dtime < prev_dtime) {
+            printf ("Wrap around time\n");
+            prev_dtime = prev_dtime-(~(DWORD)0);
+        }
+
 		g_cur_sim_dtime += (now_dtime - prev_dtime);
 
 		dcycs = g_last_vbl_dcycs + (double)(engine.fcycles);
@@ -1593,6 +1613,7 @@ update_60hz(double dcycs, double dtime_now)
 			total_mhz_ptr = total_mhz_buf;
 		}
 		cycs_int = (word32)dadj_cycles_1sec;
+        
 		sprintf(status_buf, "dcycs:%13.1f sim MHz:%s "
 			"Eff MHz:%s, c:%06x, sec:%1.3f vol:%02x pal:%x",
 			dcycs, sim_mhz_ptr, total_mhz_ptr, cycs_int,
