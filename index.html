@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+    "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+<link rel="stylesheet" type="text/css" href="../fd.css" />
+<title>KEGS/SDL Apple IIGS emulator</title>
+<meta name="keywords" content="Apple2, emulator, apple, GS, KEGS" />
+</head>
+<body>
+
+<h1>KEGS/SDL Apple IIGS emulator</h1>
+
+<h2>What is it?</h2>
+
+<p>Here is my holiday hack on the great KEGS Apple IIGS emulator, which consists of implementing an <a href="http://www.libsdl.org">SDL</a> driver for video, sound, keyboard, and joystick. This should make the emulator portable to many more OSes (incl. BeOS, MacOS, Linux, Win32).</p>
+
+<p>The code is based on the original KEGS, with modifications from the <a href="http://www.geocities.com/akilgard/kegs32/">KEGS32</a> port (current version includes modifications up to kegs32r2)</p>
+
+<p>I also tried to keep other display/sound/joystick drivers, and modified the
+code to get better driver abstraction. The resulting code can now switch
+_at_run-time_ between different drivers (there just had to be proper init/
+shutdown for each of these).</p>
+
+<p>Of course, I tried to integrate the Win32 code from KEGS32, though I didn't manage to
+make a compiled version that supports both SDL and Win32 (but SDL and X11 work, both on
+linux and cygwin for win32).  Maybe because I don't know how the Win32
+resources have to be compiled in the program.</p>
+
+<p>The problem with SDL is that it has no graphic tookit, so I had to implement
+menus myself, and I did it in a "control-openapple-escape" way (just type
+control-openapple-tab to get to the menu).  The implementation is SDL-specific
+right now, but it should be able to work with any video driver (I'm using the
+Apple II font!).</p>
+
+<p>I also cleaned up the code a lot (prototypes declaration, static variables
+and functions), and hem... I decided to call it 0.61 (since so many things
+have changed).</p>
+
+<h2>Screenshots</h2>
+<p>The only visible difference with the original KEGS is the KEGS control panel, which can be reached by typing control-openapple-tab, as seen on these screenshots: <a href="kegs1.jpg">1</a>, <a href="kegs2.jpg">2</a>, <a href="kegs3.jpg">3</a>.</p>
+<p>You can also notice that the status lines are now using the Apple II font (the basic SDL library has no font support). Using SDL, KEGS can now also run in fullscreen mode (either 640x480 or 640x400).</p>
+
+<h2>TODO</h2>
+
+<p>I would like to add the following:</p>
+<ul>
+<li> possibility to paste text to the emulator (on X11 and possibly Win32)</li>
+<li> disk swapping facility (probably OS-specific too, possibly drag'n'drop).</li>
+<li> support for keyboards other than QWERTY (like the infamous French keyboard).</li>
+    </ul>
+
+<h2>Download</h2>
+<p>Here is the resulting code, which I tried on linux, and on MSWindows with the
+<a href="http://www.cygwin.com/">Cygwin</a> compiler (I don't have VC++).</p>
+    <ul>
+      <li><a href="http://prdownloads.sourceforge.net/kegs-sdl/kegs-sdl-0.64.tar.gz?download">kegs-sdl-0.64.tar.gz</a> (<a href="CHANGES.txt">release notes</a>)</li>
+      <li><a href="http://prdownloads.sourceforge.net/kegs-sdl/kegs-0.63.tar.gz?download">kegs-0.63.tar.gz</a></li>
+      <li><a href="http://prdownloads.sourceforge.net/kegs-sdl/kegs-0.62-0.63.patch.gz?download">kegs-0.62-0.63.patch.gz</a></li>
+      <li><a href="http://prdownloads.sourceforge.net/kegs-sdl/kegs-0.61-0.62.patch.gz?download">kegs-0.61-0.62.patch.gz</a></li>
+    </ul>
+<p>There is a <a href="http://prdownloads.sourceforge.net/kegs-sdl/kegs-0.63-palettehack.patch.gz?download">patch for KEGS 0.63</a> that optimizes palette changes (which happen frequently in demos or games), but require a change in the SDL library. Please read carefully the instructions inside.</p>
+
+<p>If anyone manages to compile and run it on anything other than Linux, Unix or Cygwin, please <a href="../email.html">contact me</a>.</p>
+
+<h2>Links</h2>
+<ul>
+<li><a href="http://kegs.sourceforge.net/">KEGS</a>, the original emulator by Kent Dickney, which was once behind KEGS-SDL and KEGS-OSX in terms of functionnality, but Kent decided not to integrate most of our changes into his version.</li>
+<li><a href="https://www.emaculation.com/kegs32.htm">KEGS32</a>, a Win32-specific version of KEGS.</li>
+<li><a href="https://web.archive.org/web/20140316052104/http://www.casags.net/">CasaGS</a>, home of KEGS-OSX, the MacOS X port of KEGS-SDL (but not KEGS...).</li>
+    </ul>
+
+<h2>Sourceforge</h2>
+<ul>
+<li> <a href="http://sourceforge.net/projects/kegs-sdl/">Project page</a></li>
+<li> <a href="http://kegs-sdl.sourceforge.net/">Project site</a></li>
+</ul>
+
+<p><a href="http://sourceforge.net"> <img src="http://sourceforge.net/sflogo.php?group_id=65941&amp;type=5" width="210" height="62" border="0" alt="SourceForge Logo"></a> </p>
+</body>
+</html>
+
