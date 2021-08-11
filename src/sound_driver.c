@@ -32,12 +32,13 @@ extern int errno;
 #else
 #include <windows.h>
 #include <mmsystem.h>
+#include <tchar.h>
 #define NUM_BUFFERS 10 
-void CheckWaveError(char *,int);
+void CheckWaveError(TCHAR *,int);
 void child_sound_init_win32(void *);
 
 HWAVEOUT WaveHandle;
-WAVEHDR WaveHeader[NUM_BUFFERS];
+WAVEHDR  WaveHeader[NUM_BUFFERS];
 extern int g_pipe_fd[2];
 #endif
 
@@ -116,13 +117,13 @@ reliable_buf_write(word32 *shm_addr, int pos, int size)
         return ;
     }
 
-    memcpy(WaveHeader[wave_buf].lpData,ptr,size);
+    CopyMemory(WaveHeader[wave_buf].lpData,ptr,size);
     WaveHeader[wave_buf].dwBufferLength=size;
     WaveHeader[wave_buf].dwUser=TRUE;
 
     ret=waveOutWrite(WaveHandle,&WaveHeader[wave_buf],
                      sizeof(WaveHeader));
-    CheckWaveError("Writing wave out",ret);
+    CheckWaveError(TEXT("Writing wave out"),ret);
 
     g_bytes_written += (size);
     #endif
@@ -212,8 +213,8 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
             /* play sound here */
 
             if(sound_paused) {
-                printf("Unpausing sound, zb: %d\n",
-                    zeroes_buffered);
+                //printf("Unpausing sound, zb: %d\n",
+                //    zeroes_buffered);
                 sound_paused = 0;
             }
 
@@ -252,7 +253,7 @@ child_sound_loop(int read_fd, int write_fd, word32 *shm_addr)
                 reliable_zero_write(size);
 
                 if(zeroes_seen >= ZERO_PAUSE_NUM_SAMPS) {
-                    printf("Pausing sound\n");
+                    //printf("Pausing sound\n");
                     sound_paused = 1;
                 }
             }
@@ -562,13 +563,13 @@ child_sound_init_linux()
 #endif
 
 #ifdef _WIN32
-void CheckWaveError(char *s, int res) {
-    char message[256];
+void CheckWaveError(TCHAR *s, int res) {
+    TCHAR message[256];
     if (res == MMSYSERR_NOERROR) {
         return;
     }
     waveOutGetErrorText(res,message,sizeof(message));
-    printf ("%s: %s\n",s,message);
+    _tprintf (TEXT("%s: %s\n"),s,message);
     exit(1);
 }
 
@@ -642,12 +643,12 @@ void child_sound_init_win32(void *shmaddr) {
         WaveHeader[i].dwLoops=0L;
         res = waveOutPrepareHeader(WaveHandle,&WaveHeader[i],
                                    sizeof(WAVEHDR));
-        CheckWaveError("WaveOutPrepareHeader()",res);
+        CheckWaveError(TEXT("WaveOutPrepareHeader()"),res);
     }
 
     res = waveOutGetDevCaps((UINT)WaveHandle, &caps, sizeof(caps));
-    CheckWaveError("WaveOutGetDevCaps()",res);
-    printf("Using %s\n", caps.szPname);
+    CheckWaveError(TEXT("WaveOutGetDevCaps()"),res);
+    _tprintf(TEXT("Using %s\n"), caps.szPname);
     printf ("--Bits Per Sample = %d\n",WaveFmt.wBitsPerSample);
     printf ("--Channel = %d\n",WaveFmt.nChannels);
     printf ("--Sampling Rate = %d\n",WaveFmt.nSamplesPerSec);

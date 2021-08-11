@@ -18,6 +18,7 @@ const char rcsid_clock_c[] = "@(#)$Header: clock.c,v 1.19 99/12/20 23:33:06 kent
 #ifdef _WIN32
 #include <windows.h>
 #include <mmsystem.h>
+#include <io.h>
 #else
 #include <sys/time.h>
 #endif
@@ -72,7 +73,8 @@ get_dtime()
 
 	dtime = dsec + (dusec / (1000.0 * 1000.0));
 #else
-    dtime = GetTickCount()/(1000.0); 
+    //dtime = GetTickCount()/(1000.0); 
+    dtime = timeGetTime()/(1000.0); 
 #endif
      
 	return dtime;

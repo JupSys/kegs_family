@@ -198,6 +198,11 @@ joystick_update_button()
     JOYINFOEX info;
     info.dwSize=sizeof(JOYINFOEX);
     info.dwFlags=JOY_RETURNBUTTONS;
+
+    if (g_joystick_type != JOYSTICK_WIN32) {
+        return;
+    }
+
     if (joyGetPosEx(JOYSTICKID1,&info) == JOYERR_NOERROR) {
         g_paddle_button[0] = ((info.dwButtons & JOY_BUTTON1) > 0) ? 1:0;
         g_paddle_button[1] = ((info.dwButtons & JOY_BUTTON2) > 0) ? 1:0;

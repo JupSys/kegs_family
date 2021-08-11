@@ -1300,7 +1300,7 @@ io_read(word32 loc, double *cyc_ptr)
 		case 0x5b: /* 0xc05b */
 			if(g_zipgs_unlock >= 4) {
 				word64_tmp = (word64)dcycs;
-				tmp = (word64_tmp >> 9) & 1;
+				tmp = ((word64_tmp >> 9) & 1);
 				return (tmp << 7) + (g_zipgs_reg_c05b & 0x6f) +
 					(g_zipgs_disabled << 4);;
 			} else {

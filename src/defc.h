@@ -78,10 +78,17 @@ void U_STACK_TRACE();
 # include <sys/filio.h>
 #endif
 
+#ifdef _WIN32
+#include <io.h>
+#endif
+
 #ifndef O_BINARY
 /* work around some Windows junk */
 # define O_BINARY	0
 #endif
+
+
+
 
 STRUCT(Pc_log) {
 	double	dcycs;

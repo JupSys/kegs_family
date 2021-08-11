@@ -13,6 +13,7 @@
 //#define KEGS_DIRECTDRAW
 #define STRICT
 #define WIN32_LEAN_AND_MEAN
+#define DIRECTDRAW_VERSION 0x0300
 #include <windows.h>
 #include <shellapi.h>
 #include <windowsx.h>
@@ -21,6 +22,7 @@
 #include <commctrl.h>
 #include <Commdlg.h>
 #include <process.h>
+#include <tchar.h>
 #if defined(KEGS_DIRECTDRAW)
 #include <ddraw.h>
 #endif
@@ -35,6 +37,7 @@ extern int hires_colors[];
 extern word32 g_full_refresh_needed;
 extern word32 a2_screen_buffer_changed;
 extern int g_limit_speed;
+extern double g_desired_pmhz;
 extern int g_border_sides_refresh_needed;
 extern int g_border_special_refresh_needed;
 extern byte *a2_line_ptr[];
@@ -54,25 +57,28 @@ extern int g_doc_vol;
 extern char g_kegs_conf_name[256];
 extern int g_joystick_type;
 
+double desired_pmhz=1.0;
 int g_use_shmem=0;
 int    g_x_shift_control_state = 0;
 word32 g_cycs_in_xredraw = 0;
 word32 g_refresh_bytes_xfer = 0;
 int    g_num_a2_keycodes = 0;
-int g_fullscreen=0;
+int    g_fullscreen=0;
+int    g_interlace_mode=0;
 
 byte *data_text[2];
 byte *data_hires[2];
 byte *data_superhires;
 byte *data_border_special;
 byte *data_border_sides;
+byte *data_interlace;
 
 byte *dint_border_sides;
 byte *dint_border_special;
 byte *dint_main_win;
 
 #define MAX_STATUS_LINES    7
-#define X_LINE_LENGTH        88
+#define X_LINE_LENGTH       88
 #define STATUS_HEIGHT       ((BASE_MARGIN_TOP)+(A2_WINDOW_HEIGHT)+\
                             (BASE_MARGIN_BOTTOM)+\
                             (win_toolHeight.bottom-win_toolHeight.top)+\
@@ -84,20 +90,24 @@ DWORD   dwchary;
 char    g_status_buf[MAX_STATUS_LINES][X_LINE_LENGTH + 1];
 
 // Windows specific stuff
-HWND hwndMain;
-HWND hwndHidden;
-HDC  hcdc;
-HDC hdcRef;
+BOOL    isNT;
+HWND    hwndMain=NULL;
+HWND    hwndHidden=NULL;
+HDC     hcdc=NULL;
+HDC     hdcRef=NULL;
+HBRUSH  hbr=NULL;
+TCHAR   szToolText[256];
 RGBQUAD lores_palette[256];
 RGBQUAD a2v_palette[256];
 RGBQUAD shires_palette[256];
 RGBQUAD *win_palette;
 RGBQUAD dummy_color;
-HBITMAP ximage_text[2];
-HBITMAP ximage_hires[2];
-HBITMAP ximage_superhires;
-HBITMAP ximage_border_special;
-HBITMAP ximage_border_sides;
+HBITMAP ximage_text[2]={0};
+HBITMAP ximage_hires[2]={0};
+HBITMAP ximage_superhires=NULL;
+HBITMAP ximage_border_special=NULL;
+HBITMAP ximage_border_sides=NULL;
+HBITMAP ximage_interlace=NULL;
 int     win_pause=0;
 int     win_stat_debug=0;
 HMENU   win_menu=NULL;
@@ -107,6 +117,8 @@ RECT    win_rect_oldpos;
 RECT    win_toolHeight;
 RECT    win_statHeight;
 
+// Edit original window proc
+WNDPROC oldEditWndProc;
 
 #ifdef KEGS_DIRECTDRAW 
 LPDIRECTDRAW lpDD=NULL;
@@ -124,7 +136,7 @@ int a2_key_to_wsym[][3] = {
 //    { 0x60,    VK_F5,    0 },
 //    { 0x61,    VK_F6,    0 },
     { 0x7f,    VK_CANCEL, 0 },
-    { 0x32,    0xc0, 0 },        /* Key number 18? */
+    { 0x32,    0xc0,0 },        /* Key number 18? */
     { 0x12,    '1', 0 },
     { 0x13,    '2', 0 },
     { 0x14,    '3', 0 },
@@ -210,6 +222,221 @@ int a2_key_to_wsym[][3] = {
     { -1, -1, -1 }
 };
 
+void toggleInterlaceMode() {
+    g_interlace_mode = ! g_interlace_mode;
+	a2_screen_buffer_changed = -1;
+    g_full_refresh_needed = -1;
+    g_border_sides_refresh_needed = 1;
+    g_border_special_refresh_needed = 1;
+    g_status_refresh_needed = 1;
+}
+
+void displaySpeedStatus() {   
+    printf("Toggling g_limit_speed to %d\n",g_limit_speed);
+    switch(g_limit_speed) {
+    case 0:
+        if (g_desired_pmhz > 0 ){
+            printf ("...%.2fMHz\n",g_desired_pmhz);
+        } else {
+            printf("...as fast as possible!\n");
+        }
+        break;
+    case 1:
+        printf("...1.024MHz\n");
+        break;
+    case 2:
+        printf("...2.5MHz\n");
+        break;
+    }
+}
+
+void PopulateToolTip(LPTOOLTIPTEXT ptool) {
+    TCHAR buffer[] = TEXT("Unable to load resource");
+    memset(szToolText,0,sizeof(TCHAR)*80);
+    _tcscpy(buffer,szToolText);
+    LoadString(GetModuleHandle(NULL),ptool->hdr.idFrom, szToolText,80);
+    ptool->hinst=NULL;
+    ptool->lpszText = szToolText;
+}
+
+// Converts ANSI equivalent pathname to long pathname
+// The long pathname may contain UNICODE 
+void ConvertAnsiToUnicode(TCHAR *file, wchar_t *wfile) {
+    wchar_t buffer[2048]={0};
+    wchar_t temp[2048]={0};
+    wchar_t tfile[2048]={0};
+
+    WIN32_FIND_DATAW fdata;
+    HANDLE handle;
+    int i;
+    int flen;
+   
+    if (_tcslen(file)==0) return;
+
+    // Internally it works in UNICODE
+    // Convert ANSI to UNICODE as necessary
+    if (sizeof(TCHAR) < 2) {
+        mbstowcs(tfile,(char *)file,strlen((char *)file)); 
+    } else {
+        wcscpy(tfile,(wchar_t *)file);
+    }
+
+    // Ignore UNC paths
+    if (wcslen(tfile) >2) {
+        if (tfile[0]=='\\' && tfile[1]=='\\') {
+            memset(file,0,2048*sizeof(TCHAR)); 
+            if (sizeof(TCHAR) <2) {
+                wcstombs((char *)file,tfile,wcslen(tfile));
+            } else {
+                wcscpy((wchar_t *)file,wfile);
+            }
+            return;
+        }
+    }
+
+    while (1) {
+        memset(fdata.cFileName,0,sizeof(WCHAR)*MAX_PATH);
+        handle=FindFirstFileW(tfile,&fdata);
+        if (handle != INVALID_HANDLE_VALUE) {
+            FindClose(handle);
+        }
+
+        flen = wcslen(fdata.cFileName); 
+
+        // Here I assume that i can always get alternate filename
+        // when the filename contains unicode character greater than 255
+        for (i=0;i<flen;i++) {
+            if (fdata.cFileName[i]>127) {
+                flen=wcslen(fdata.cAlternateFileName);
+                break;
+            }
+        }
+
+        memset(temp,0,2048*2);
+
+        wcscat(temp,L"\\");
+        wcscat(temp,fdata.cFileName);
+        wcscat(temp,buffer);
+        wcscpy(buffer,temp);
+
+        tfile[wcslen(tfile)-flen-1]=0;
+        if (wcsrchr(tfile,'\\')==NULL) {
+            memset(temp,0,2048*2);
+            wcscpy(temp,tfile);
+            wcscat(temp,buffer);
+            memset(wfile,0,2048*2); 
+            wcscpy((wchar_t *)wfile,temp);
+            break;
+        }
+    }
+}
+
+// Converts unicode pathname to ANSI equivalent pathname
+// If cannot convert to ANSI file then convert to short file name
+void ConvertUnicodeToAnsi(wchar_t *wfile,TCHAR *file) {
+    char buffer[2048]={0};
+    char temp[2048]={0};
+    wchar_t tfile[2048]={0};
+
+    WIN32_FIND_DATAW fdata;
+    HANDLE handle;
+    int i;
+    int flen;
+    int flag=0;
+    
+    if (wcslen(wfile)==0) return;
+
+    wcscpy(tfile,wfile);
+
+    // Ignore UNC paths
+    if (wcslen(tfile) >2) {
+        if (tfile[0]=='\\' && tfile[1]=='\\') {
+            memset(file,0,2048*sizeof(TCHAR)); 
+            if (sizeof(TCHAR) <2) {
+                wcstombs((char *)file,tfile,wcslen(tfile));
+            } else {
+                wcscpy((wchar_t *)file,wfile);
+            }
+            return;
+        }
+    }
+
+    while (1) {
+        memset(fdata.cFileName,0,sizeof(WCHAR)*MAX_PATH);
+        handle=FindFirstFileW(tfile,&fdata);
+        if (handle != INVALID_HANDLE_VALUE) {
+            FindClose(handle);
+        }
+    
+        flen = wcslen(fdata.cFileName); 
+
+        // Here I assume that i can always get alternate filename
+        // when the filename contains unicode character greater than 255
+        for (i=0;i<flen;i++) {
+            if (fdata.cFileName[i]>127) {
+                flag=1;
+                break;
+            }
+        }
+
+        memset(temp,0,2048);
+    
+        if (!flag) {
+            wcstombs(temp,fdata.cFileName,flen);  
+            if (buffer[0]==0) {
+                strcat(buffer,temp);
+            } else {
+                strcat(temp,"\\");
+                strcat(temp,buffer);
+                strcpy(buffer,temp);
+            }
+        } else {
+    
+            if (wcslen(fdata.cAlternateFileName)==0) {
+                memset(file,0,2048*sizeof(TCHAR)); 
+                if (sizeof(TCHAR) <2) {
+                    wcstombs((char *)file,tfile,wcslen(tfile));
+                } else {
+                    wcscpy((wchar_t *)file,wfile);
+                }
+                return;
+            }
+    
+            // Here I assume that i can always get alternate filename
+            // when the filename contains unicode character greater than 255
+            wcstombs(temp,fdata.cAlternateFileName,
+                     wcslen(fdata.cAlternateFileName));  
+            if (buffer[0]==0) {
+                strcat(buffer,temp);
+            } else {
+                strcat(temp,"\\");
+                strcat(temp,buffer);
+                strcpy(buffer,temp);
+            }
+        }
+     
+        flag=0;
+        tfile[wcslen(tfile)-flen-1]=0;
+
+        if (wcsrchr(tfile,'\\')==NULL) {
+            memset(temp,0,2048);
+            wcstombs(temp,wfile,wcslen(tfile));
+            strcat(temp,"\\");
+            strcat(temp,buffer);
+           
+            memset(file,0,2048*sizeof(TCHAR)); 
+            if (sizeof(TCHAR)<2) {
+                strcpy((char *)file,temp);
+            } else {
+                memset(tfile,0,2048*sizeof(TCHAR));
+                mbstowcs(tfile,temp,strlen(temp));
+                wcscpy((wchar_t *)file,tfile);
+            }
+            break;
+        }
+    }
+}
+
 //
 // read kegs config into disk config dialog
 // entry. The Entry control ID are specially
@@ -218,9 +445,13 @@ int a2_key_to_wsym[][3] = {
 int
 read_disk_entry(HWND hDlg)
 {
-    char    buf[1024], buf2[1024];
+    wchar_t wbuf[2048]={0};
+    char    buf[2048]={0}, buf2[2048]={0};
+    TCHAR   tbuf[2048]={0};
+
     FILE    *fconf;
     char    *ptr;
+    char    *sptr;
     int    line, slot, drive;
     HWND hwnd;
 
@@ -230,7 +461,7 @@ read_disk_entry(HWND hDlg)
     }
     line = 0;
     while(1) {
-        ptr = fgets(buf, 1024, fconf);
+        ptr = fgets(buf, 2048, fconf);
         if(ptr == 0) {
             /* done */
             break;
@@ -245,8 +476,33 @@ read_disk_entry(HWND hDlg)
                hwnd = GetDlgItem(hDlg,10000+slot*10+drive );
                if (hwnd) {
                    buf2[0]='\0';
-                   sscanf(strstr(buf+4,"=")+1,"%s",buf2);
-                   SetWindowText(hwnd,buf2);
+                   sptr=strstr(buf+4,"=")+1; 
+                   // Trim out leading spaces
+                   while (*sptr && (*sptr) == ' ') sptr++;
+                   memcpy(buf2,sptr,strlen(sptr)-1);
+                   buf2[strlen(sptr)-1]=0;
+                   //sscanf(strstr(buf+4,"=")+1,"%s",buf2);
+                   if (isNT) {
+                       FILE *file;
+
+                       // Check whether the file could be opened
+                       file=fopen(buf2,"r");
+                       if (file) {
+                           fclose(file);
+                           if (sizeof(TCHAR) <2) {
+                               strcpy((char *)tbuf,buf2);
+                           } else {
+                               mbstowcs((wchar_t *)tbuf,buf2,
+                                        strlen(buf2));
+                           }
+                           ConvertAnsiToUnicode(tbuf,wbuf);
+                           SetWindowTextW(hwnd,wbuf);
+                       } else {
+                           SetWindowTextA(hwnd,buf2);
+                       }
+                   } else {    
+                       SetWindowTextA(hwnd,buf2);
+                   }
                }
            }
         }
@@ -257,10 +513,13 @@ read_disk_entry(HWND hDlg)
 int
 write_disk_entry(HWND hDlg)
 {
-    char    buf[1024];
+    char    buf[2048];
+    TCHAR   tbuf[2048];
+    wchar_t wbuf[2048];
     FILE    *fconf;
-    int    slot, drive;
+    int     slot, drive;
     HWND hwnd;
+    int     skipspace; 
 
     printf ("Writing disk configuration to %s\n",g_kegs_conf_name);
     fconf = fopen(g_kegs_conf_name, "wt");
@@ -272,10 +531,45 @@ write_disk_entry(HWND hDlg)
             if (slot<5) continue;
             hwnd = GetDlgItem(hDlg,10000+slot*10+drive);
             if (!hwnd) continue;
-            ZeroMemory(buf,1024);
-            GetWindowText(hwnd,buf,1024);
-            if (lstrlen(buf)>0) {
-                fprintf(fconf,"s%dd%d = %s\n",slot,drive,buf);   
+            ZeroMemory(buf,2048);
+            if (isNT) {
+                BOOL defaultCharUsed;
+                FILE *file;
+                memset(wbuf,0,2*2048);
+                memset(tbuf,0,sizeof(TCHAR)*2048);
+                GetWindowTextW(hwnd,wbuf,2048);
+
+                // Check whether wide characters can be localized
+                defaultCharUsed=FALSE; 
+                WideCharToMultiByte(CP_ACP,0,wbuf,wcslen(wbuf),
+                                    buf,2048,NULL,&defaultCharUsed);
+
+                if (defaultCharUsed == TRUE) { 
+                    // If not, use short filename
+                    file = _wfopen(wbuf,L"r");
+                    if (file) {
+                        fclose(file);
+                        ConvertUnicodeToAnsi(wbuf,tbuf);
+
+                        if (sizeof(TCHAR) <2) {
+                            strcpy(buf,(char *)tbuf);
+                        } else {
+                            wcstombs(buf,(wchar_t *)tbuf,
+                                          wcslen((wchar_t *)tbuf));
+                        }
+                    } else {
+                        wcstombs(buf,(wchar_t *)wbuf,wcslen((wchar_t *)wbuf));
+                    }
+                }
+        
+            } else {    
+                GetWindowTextA(hwnd,buf,2048);
+            }
+            if (lstrlenA(buf)>0) {
+                skipspace=0;
+                // Trim out leading spaces
+                while (*(buf+skipspace) && *(buf+skipspace)==' ') skipspace++;
+                fprintf(fconf,"s%dd%d = %s\n",slot,drive,buf+skipspace);   
             } else {
                 fprintf(fconf,"#s%dd%d = <nofile>\n",slot,drive);
             }
@@ -351,6 +645,7 @@ handle_vk_keys(UINT vk)
     int    style;
     int    adjx,adjy;
     RECT   wrect,rect;
+    DEVMODE dmScreenSettings;
 
     // Check the state for caps lock,shift and control
     // This checking must be done in the main window and not in the hidden
@@ -372,10 +667,39 @@ handle_vk_keys(UINT vk)
         win_toggle_mouse_cursor(hwndMain);
     }
 
+	if (vk == VK_F12) {
+		toggleInterlaceMode();
+	}
+
     // Set full screen 
     if (vk == VK_F11) {
         g_fullscreen = !g_fullscreen;
         if (g_fullscreen) {
+   
+            // Change Display Resolution
+		    memset(&dmScreenSettings,0,sizeof(dmScreenSettings));
+		    dmScreenSettings.dmSize=sizeof(dmScreenSettings);
+		    dmScreenSettings.dmPelsWidth	= 800;
+		    dmScreenSettings.dmPelsHeight	= 600;
+		    dmScreenSettings.dmBitsPerPel	= 24;	
+		    dmScreenSettings.dmFields=DM_BITSPERPEL|DM_PELSWIDTH|
+                                      DM_PELSHEIGHT;
+
+            if (ChangeDisplaySettings(&dmScreenSettings, 2)
+                !=DISP_CHANGE_SUCCESSFUL) {
+                // If 24-bit palette does not work, try 32-bit            
+		        dmScreenSettings.dmBitsPerPel	= 32;	
+                if (ChangeDisplaySettings(&dmScreenSettings, 2) 
+                    !=DISP_CHANGE_SUCCESSFUL) {
+                    printf ("-- Unable to switch to fullscreen mode\n");
+                    printf ("-- No 24-bit or 32-bit mode for 800x600\n");
+                    dmScreenSettings.dmBitsPerPel=-1;
+                } 
+            }
+
+            if (dmScreenSettings.dmBitsPerPel >0) {
+                ChangeDisplaySettings(&dmScreenSettings, 4); 
+            }
             GetWindowRect(hwndMain,&win_rect_oldpos);
             style=GetWindowLong(hwndMain,GWL_STYLE);
             style &= ~WS_CAPTION;
@@ -385,18 +709,20 @@ handle_vk_keys(UINT vk)
             ShowWindow(win_status,FALSE);
             ShowWindow(win_toolbar,FALSE);
            
-            SetWindowPos(hwndMain,HWND_TOPMOST,-4,-4,
-                         GetSystemMetrics(SM_CXSCREEN)+8,
-                         GetSystemMetrics(SM_CYSCREEN)+8,
+            SetWindowPos(hwndMain,HWND_TOPMOST,0,0,
+                         GetSystemMetrics(SM_CXSCREEN),
+                         GetSystemMetrics(SM_CYSCREEN),
                          SWP_SHOWWINDOW);
            
             PatBlt(hdcRef,
-                   -4,-4,
-                   GetSystemMetrics(SM_CXSCREEN)+8,
-                   GetSystemMetrics(SM_CYSCREEN)+8,
+                   0,0,
+                   GetSystemMetrics(SM_CXSCREEN),
+                   GetSystemMetrics(SM_CYSCREEN),
                    BLACKNESS
             );
-            
+
+			GdiFlush();
+
             if (g_warp_pointer) {
         		GetWindowRect(hwndMain,&rect);
 		        ClipCursor(&rect);
@@ -407,9 +733,13 @@ handle_vk_keys(UINT vk)
             g_border_sides_refresh_needed = 1;
             g_border_special_refresh_needed = 1;
             g_status_refresh_needed = 1;
-            x_refresh_ximage();
-            redraw_status_lines();
+            //x_refresh_ximage();
+            //redraw_status_lines();
         } else {
+
+            // Restore Display Resolution
+            ChangeDisplaySettings(NULL,0);
+
             style=GetWindowLong(hwndMain,GWL_STYLE);
             style |= WS_CAPTION;
             SetWindowLong(hwndMain,GWL_STYLE,style);
@@ -430,6 +760,7 @@ handle_vk_keys(UINT vk)
                  STATUS_HEIGHT+adjy,
                  SWP_SHOWWINDOW );
             ZeroMemory(&win_rect_oldpos,sizeof(RECT));
+
             if (g_warp_pointer) {
 		        GetWindowRect(hwndMain,&rect);
 		        ClipCursor(&rect);
@@ -625,25 +956,39 @@ void xdriver_end(void) {
         IDirectDraw_Release(lpDD);
     #endif
 
-    DeleteObject(ximage_text[0]);
+    if (ximage_text[0] != NULL)
+        DeleteObject(ximage_text[0]);
     ximage_text[0]=NULL;
-    DeleteObject(ximage_text[1]);
+    if (ximage_text[1] != NULL)
+        DeleteObject(ximage_text[1]);
     ximage_text[1]=NULL;
-    DeleteObject(ximage_hires[0]);
+    if (ximage_hires[0] != NULL)
+        DeleteObject(ximage_hires[0]);
     ximage_hires[0]=NULL;
-    DeleteObject(ximage_hires[1]);
+    if (ximage_hires[1] != NULL)
+        DeleteObject(ximage_hires[1]);
     ximage_hires[1]=NULL;
-    DeleteObject(ximage_superhires);
+    if (ximage_superhires != NULL)
+        DeleteObject(ximage_superhires);
     ximage_superhires=NULL;
-    DeleteObject(ximage_border_special);
+    if (ximage_border_special != NULL)
+        DeleteObject(ximage_border_special);
     ximage_border_special=NULL;
-    DeleteObject(ximage_border_sides);
+    if (ximage_border_sides != NULL)
+        DeleteObject(ximage_border_sides);
     ximage_border_sides=NULL;
+    if (ximage_interlace != NULL)
+        DeleteObject(ximage_interlace);
+    ximage_interlace=NULL;
 
-    DeleteDC(hcdc);
+    if (hbr != NULL) {
+        DeleteObject(hbr);
+        hbr=NULL;
+    }
+
+	if (hcdc != NULL) 
+		DeleteDC(hcdc);
     hcdc=NULL;
-
-    WSACleanup();
 }
 
 void win_centroid (int *centerx, int *centery) {
@@ -672,13 +1017,14 @@ void win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
                         int destx,int desty, int width,int height) {
     HBITMAP hbmOld;
     HBITMAP holdbm=NULL;
-    HDC hdcBack;
+    HDC     hdcBack;
+    HBRUSH  oldhbr;
     POINT p;
     RECT  rcRectSrc,rect;
     int   centerx,centery;
     int hr;
 
-    if (hwndMain == NULL)
+    if (hwndMain == NULL || hdc == NULL || hcdc == NULL)
         return;
 
     if (width==0 || height == 0) {
@@ -687,19 +1033,28 @@ void win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
 
     centerx=centery=0;
     win_centroid(&centerx,&centery);
-    p.x = 0; p.y = 0;
-    ClientToScreen(hwndMain, &p);
     hbmOld = SelectObject(hcdc,hbm);
-    SetDIBColorTable(hcdc,0,256,(RGBQUAD *)win_palette);
+
+	if (win_palette) {
+		SetDIBColorTable(hcdc,0,256,(RGBQUAD *)win_palette);
+	}
 
     if (!g_fullscreen) {
         centery+=(win_toolHeight.bottom-win_toolHeight.top);
     }
 
     #if !defined(KEGS_DIRECTDRAW)
-    BitBlt(hdc,destx+centerx,desty+centery,
-           width,height,hcdc,srcx,srcy,SRCCOPY);
- 
+
+	if (g_interlace_mode) {
+		oldhbr=SelectBrush(hdc,hbr);
+		BitBlt(hdc,destx+centerx,desty+centery,
+		       width,height,hcdc,srcx,srcy,MERGECOPY);
+		SelectBrush(hdc,oldhbr);
+	} else {
+		BitBlt(hdc,destx+centerx,desty+centery,
+		       width,height,hcdc,srcx,srcy,SRCCOPY);
+	}
+    
     #else 
     if ((hr=IDirectDrawSurface_GetDC(backsurf,&hdcBack)) != DD_OK) {
         printf ("Error blitting surface (back_surf) %x\n",hr);
@@ -707,25 +1062,28 @@ void win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
         return;
     }
 
-   
-    BitBlt(hdcBack,destx+centerx,desty+centery,width,height,hcdc,srcx,srcy,
-           SRCCOPY);
+    BitBlt(hdcBack,destx,desty,width,height,hcdc,srcx,srcy,SRCCOPY);
     IDirectDrawSurface_ReleaseDC(backsurf,hdcBack);
 
-    SetRect(&rect,p.x+destx+centerx,p.y+desty+centery,
-            p.x+destx+width+centerx,p.y+desty+height+centery);
-    SetRect(&rcRectSrc,destx+centerx,desty+centery,
-            destx+width+centerx,desty+height+centery);
+    SetRect(&rcRectSrc,destx,desty,destx+width,desty+height);
     hr=IDirectDrawSurface_Restore(primsurf);
     if (hr != DD_OK) {
         printf ("Error restoring surface (prim_surf) %x\n",hr);
         exit(0);
     }
 
+    p.x = 0; p.y = 0;
+    ClientToScreen(hwndMain, &p);
+    SetRect(&rect,p.x+destx+centerx,p.y+desty+centery,
+            p.x+destx+width+centerx,p.y+desty+height+centery);
     hr=IDirectDrawSurface_Blt(primsurf, 
                               &rect,backsurf,&rcRectSrc,DDBLT_WAIT, NULL);
     if (hr != DD_OK) {
         printf ("Error blitting surface (prim_surf) %x\n",hr);
+        printf ("Primary rect (%ld %ld -- %ld %ld)\n",
+                rect.top,rect.left,rect.bottom,rect.right);
+        printf ("Back surf rect (%ld %ld -- %ld %ld)\n",
+                rcRectSrc.top,rcRectSrc.left,rcRectSrc.bottom,rcRectSrc.right);
         exit(0);
     }
 
@@ -733,27 +1091,51 @@ void win_refresh_image (HDC hdc,HBITMAP hbm, int srcx, int srcy,
     
     SelectObject(hcdc,hbmOld);
     holdbm=hbm;
-
 }
 
-BOOL A2W_OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)  {
+void initWindow(HWND hwnd) {
     RECT rect;
     RECT wrect;
-    int  adjx,adjy;
+	
+	int  adjx,adjy;
     ZeroMemory(&win_rect_oldpos,sizeof(RECT));
     GetClientRect(hwnd,&rect);
     GetWindowRect(hwnd,&wrect);
     adjx=(wrect.right-wrect.left)-(rect.right-rect.left);
     adjy=(wrect.bottom-wrect.top)-(rect.bottom-rect.top);
+
+    SetWindowPos(hwnd,NULL,0,0,BASE_WINDOW_WIDTH+adjx,
+                 //BASE_WINDOW_HEIGHT+adjy,
+                 STATUS_HEIGHT+adjy,
+                 SWP_NOACTIVATE | SWP_NOZORDER);
+
+    SendMessage(win_status,WM_SIZE,0,0);
+}
+
+/*
+BOOL A2W_OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)  {
+
+    RECT rect;
+    RECT wrect;
+    
+	int  adjx,adjy;
+    ZeroMemory(&win_rect_oldpos,sizeof(RECT));
+    GetClientRect(hwnd,&rect);
+    GetWindowRect(hwnd,&wrect);
+    adjx=(wrect.right-wrect.left)-(rect.right-rect.left);
+    adjy=(wrect.bottom-wrect.top)-(rect.bottom-rect.top);
+
     SetWindowPos(hwnd,NULL,0,0,BASE_WINDOW_WIDTH+adjx,
                  //BASE_WINDOW_HEIGHT+adjy,
                  BASE_MARGIN_TOP+A2_WINDOW_HEIGHT+BASE_MARGIN_BOTTOM+adjy+48,
-                 SWP_NOMOVE | SWP_NOZORDER | SWP_SHOWWINDOW );
+                 SWP_SHOWWINDOW );
+  
     return TRUE;
 }
+*/
 
 void A2W_OnKeyChar(HWND hwnd, UINT vk, BOOL fDown, int cRepeat, UINT flags) {
-        handle_keysym(vk,fDown,cRepeat,flags);
+    handle_keysym(vk,fDown,cRepeat,flags);
 }
 
 void A2W_OnDestroy(HWND hwnd) {
@@ -768,8 +1150,13 @@ BOOL A2W_OnEraseBkgnd(HWND hwnd, HDC hdc)  {
     RECT wrect;
     int  adjx,adjy;
     int  centerx,centery;
+
     if (ximage_superhires == NULL) {
         return FALSE;   
+    }
+
+    if (win_toolbar == NULL || win_status == NULL || win_palette == NULL) {
+        return FALSE;
     }
 
     if (!g_fullscreen) {
@@ -799,7 +1186,7 @@ BOOL A2W_OnEraseBkgnd(HWND hwnd, HDC hdc)  {
               );
         PatBlt(hdcRef,
                0,0,
-               BASE_WINDOW_WIDTH, 
+               centerx, 
                (wrect.bottom-wrect.top),
                BLACKNESS
               );
@@ -824,6 +1211,8 @@ BOOL A2W_OnEraseBkgnd(HWND hwnd, HDC hdc)  {
 
     }
 
+	GdiFlush();
+
     a2_screen_buffer_changed = -1;
     g_full_refresh_needed = -1;
     g_border_sides_refresh_needed = 1;
@@ -834,33 +1223,110 @@ BOOL A2W_OnEraseBkgnd(HWND hwnd, HDC hdc)  {
     return TRUE;
 }
 
+void CenterDialog (HWND hDlg) {
+    RECT rc, rcDlg,rcOwner;
+    HWND hwndOwner;
+
+    if ((hwndOwner = GetParent(hDlg)) == NULL) {
+        hwndOwner = GetDesktopWindow();
+    }
+
+    GetWindowRect(hwndOwner,&rcOwner);
+    GetWindowRect(hDlg,&rcDlg);
+    CopyRect(&rc,&rcOwner);
+    OffsetRect(&rcDlg,-rcDlg.left,-rcDlg.top);
+    OffsetRect(&rc,-rc.left,-rc.top);
+    OffsetRect(&rc,-rcDlg.right,-rcDlg.bottom);
+
+    SetWindowPos(hDlg,hwndMain,rcOwner.left+(rc.right/2),
+                 rcOwner.top+(rc.bottom/2), 0,0,
+                 SWP_SHOWWINDOW | SWP_NOSIZE );
+}
+
 // Message handler for about box.
 LRESULT CALLBACK A2W_Dlg_About_Dialog(HWND hDlg, UINT message, WPARAM wParam, 
                                       LPARAM lParam)
 {
-    RECT rc, rcDlg,rcOwner;
-    HWND hwndOwner;
-
     switch (message) {
     case WM_INITDIALOG:
-          if ((hwndOwner = GetParent(hDlg)) == NULL) {
-            hwndOwner = GetDesktopWindow();
-          }
-
-          GetWindowRect(hwndOwner,&rcOwner);
-          GetWindowRect(hDlg,&rcDlg);
-          CopyRect(&rc,&rcOwner);
-          OffsetRect(&rcDlg,-rcDlg.left,-rcDlg.top);
-          OffsetRect(&rc,-rc.left,-rc.top);
-          OffsetRect(&rc,-rcDlg.right,-rcDlg.bottom);
-
-          SetWindowPos(hDlg,hwndMain,rcOwner.left+(rc.right/2),
-                       rcOwner.top+(rc.bottom/2), 0,0,
-                       SWP_SHOWWINDOW | SWP_NOSIZE );
+          CenterDialog(hDlg);
           return TRUE;
     case WM_COMMAND:
        switch (LOWORD(wParam)) {
        case IDOK:
+           EndDialog(hDlg, LOWORD(wParam));
+           return TRUE;
+       case IDCANCEL:
+           EndDialog(hDlg, LOWORD(wParam));
+           return FALSE;
+
+       }
+    }
+    return FALSE;
+}
+
+void setup_speed_dialog(HWND hDlg)
+{
+    int nID;
+    TCHAR buffer[2048];
+
+    nID=IDC_NORMAL;
+    if (g_limit_speed ==1 ) nID=IDC_SLOW;
+    else if (g_limit_speed==2) nID=IDC_NORMAL;
+    else if (g_limit_speed==0) {
+        nID=IDC_FASTEST;
+        if (g_desired_pmhz > 0.0) {
+            nID=IDC_CUSTOM;
+        }
+    }
+
+    SendMessage(GetDlgItem(hDlg,nID),BM_SETCHECK,(WPARAM) TRUE,(LPARAM) 0);
+    _stprintf(buffer,_T("%.2f"),desired_pmhz);
+    SetDlgItemText(hDlg,IDC_EDITCUSTOM,buffer);
+}
+
+void get_speed_dialog(HWND hDlg)
+{
+    TCHAR buffer[2048]={0};
+    double speed;
+
+    if (SendMessage(GetDlgItem(hDlg,IDC_SLOW),BM_GETCHECK,0,0) == BST_CHECKED) {
+        g_limit_speed = 1;
+    } else if (SendMessage(GetDlgItem(hDlg,IDC_NORMAL),BM_GETCHECK,0,0) == BST_CHECKED) {
+        g_limit_speed = 2;
+    } else if (SendMessage(GetDlgItem(hDlg,IDC_FASTEST),BM_GETCHECK,0,0) == BST_CHECKED) {
+        g_limit_speed = 0;
+        g_desired_pmhz= 0;
+    } else if (SendMessage(GetDlgItem(hDlg,IDC_CUSTOM),BM_GETCHECK,0,0) == BST_CHECKED) {
+        g_limit_speed = 0;
+        GetDlgItemText(hDlg,IDC_EDITCUSTOM,buffer,2048);
+        speed=0.0;
+        printf ("Speed=%s\n",buffer);
+        if (_stscanf(buffer,"%lf",&speed) > 0) {
+            if (speed >0) {
+               desired_pmhz=speed;
+            }
+        }
+        g_desired_pmhz=desired_pmhz;
+    }
+    displaySpeedStatus();
+}
+
+// Message handler for about box.
+LRESULT CALLBACK A2W_Dlg_Speed_Dialog(HWND hDlg, UINT message, WPARAM wParam, 
+                                      LPARAM lParam)
+{
+    switch (message) {
+    case WM_INITDIALOG:
+          CenterDialog(hDlg);
+          // Clean entry field (init)
+          SetWindowText(GetDlgItem(hDlg,IDC_EDITCUSTOM),_T(""));
+          setup_speed_dialog(hDlg);
+          return TRUE;
+    case WM_COMMAND:
+       switch (LOWORD(wParam)) {
+       case IDOK:
+           get_speed_dialog(hDlg);
            EndDialog(hDlg, LOWORD(wParam));
            return TRUE;
        case IDCANCEL:
@@ -871,46 +1337,83 @@ LRESULT CALLBACK A2W_Dlg_About_Dialog(HWND hDlg, UINT message, WPARAM wParam,
     return FALSE;
 }
 
+// Message handler for handling edit control
+// For dropping files
+LRESULT CALLBACK A2W_Dlg_Edit(HWND hwnd, UINT message, WPARAM wParam, 
+                              LPARAM lParam) {
+    switch (message) {
+    case WM_DROPFILES:
+        {    
+            wchar_t wbuffer[2048]={0};
+            TCHAR buffer[2048]={0};
+            HDROP hdrop = (HDROP) wParam;
+            memset(buffer,0,2048*sizeof(TCHAR));
+            
+            if (isNT) {
+                DragQueryFileW(hdrop,0,wbuffer,2048);
+                SetWindowTextW(hwnd,wbuffer);
+                DragFinish(hdrop);
+                return 0;
+            } else {
+                DragQueryFile(hdrop,0,buffer,2048);
+            }
+            SetWindowText(hwnd,buffer);
+            DragFinish(hdrop);
+            return 0;
+        }
+    default:
+        return CallWindowProc(oldEditWndProc,hwnd,message,wParam,lParam);
+    }
+}
+
 // Message handler for disk config.
 LRESULT CALLBACK A2W_Dlg_Disk(HWND hDlg, UINT message, WPARAM wParam, 
                               LPARAM lParam)
 {
-    RECT rc, rcDlg,rcOwner;
-    HWND hwndOwner;
+    typedef LONG(CALLBACK *SETWL)(HWND,int,LONG);
+
+    SETWL SetWL=NULL;
 
     switch (message) {
     case WM_INITDIALOG:
-          if ((hwndOwner = GetParent(hDlg)) == NULL) {
-            hwndOwner = GetDesktopWindow();
-          }
+          CenterDialog(hDlg);
 
-          GetWindowRect(hwndOwner,&rcOwner);
-          GetWindowRect(hDlg,&rcDlg);
-          CopyRect(&rc,&rcOwner);
-          OffsetRect(&rcDlg,-rcDlg.left,-rcDlg.top);
-          OffsetRect(&rc,-rc.left,-rc.top);
-          OffsetRect(&rc,-rcDlg.right,-rcDlg.bottom);
-          SetWindowPos(hDlg,hwndMain,rcOwner.left+(rc.right/2),
-                       rcOwner.top+(rc.bottom/2), 0,0,
-                       SWP_SHOWWINDOW | SWP_NOSIZE );
+          // Subclass the edit-control
+          SetWL=SetWindowLong;
+          if (isNT) {
+              SetWL=SetWindowLongW;
+          } 
+          oldEditWndProc=(WNDPROC) SetWL(GetDlgItem(hDlg,IDC_EDIT_S5D1),
+                                         GWL_WNDPROC,(LONG)A2W_Dlg_Edit);
+          SetWL(GetDlgItem(hDlg,IDC_EDIT_S5D2),GWL_WNDPROC,
+               (LONG)A2W_Dlg_Edit);
+          SetWL(GetDlgItem(hDlg,IDC_EDIT_S6D1),GWL_WNDPROC,
+               (LONG)A2W_Dlg_Edit);
+          SetWL(GetDlgItem(hDlg,IDC_EDIT_S6D2),GWL_WNDPROC,
+               (LONG)A2W_Dlg_Edit);
+          SetWL(GetDlgItem(hDlg,IDC_EDIT_S7D1),GWL_WNDPROC,
+               (LONG)A2W_Dlg_Edit);
+          SetWL(GetDlgItem(hDlg,IDC_EDIT_S7D2),GWL_WNDPROC,
+               (LONG)A2W_Dlg_Edit);
 
           // Clean entry field (init)
-          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S5D1),"");
-          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S5D2),"");
-          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S6D1),"");
-          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S6D2),"");
-          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S7D1),"");
-          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S7D2),"");
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S5D1),_T(""));
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S5D2),_T(""));
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S6D1),_T(""));
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S6D2),_T(""));
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S7D1),_T(""));
+          SetWindowText(GetDlgItem(hDlg,IDC_EDIT_S7D2),_T(""));
           read_disk_entry(hDlg);
           return TRUE;
     case WM_COMMAND:
        switch (LOWORD(wParam)) {
        case IDOK:
            if (write_disk_entry(hDlg)) {
-               MessageBox(hDlg,"Failed to save disk configuration.\n"
-                   "Please check or restore from backup.\n"
-                   "Aborting Operation.\nYou can quit by pressing Cancel.",
-                   "Disk configuration save failure",
+               MessageBox(hDlg,
+                   _T("Failed to save disk configuration.\n"
+                     "Please check or restore from backup.\n"
+                     "Aborting Operation.\nYou can quit by pressing Cancel."),
+                   _T("Disk configuration save failure"),
                    MB_OK|MB_ICONEXCLAMATION);
                break;
            }
@@ -926,23 +1429,48 @@ LRESULT CALLBACK A2W_Dlg_Disk(HWND hDlg, UINT message, WPARAM wParam,
        case IDC_BTN_S7D1:
        case IDC_BTN_S7D2:
            {
-               OPENFILENAME opfn;
-               char filename[1024];
-               filename[0]=0;
-               ZeroMemory(&opfn,sizeof(opfn));
-               opfn.lStructSize=sizeof(opfn);
-               opfn.hwndOwner=hDlg;
-               opfn.lpstrFilter="2mg format (*.2mg)\0*.2mg\0"
-                                "Prodos order format (*.po)\0*.po\0"
-                                "Dos order format (*.dsk)\0*.dsk\0"
-                                "\0\0";
-               opfn.lpstrFile=filename;
-               opfn.nMaxFile=1024;
-               opfn.Flags=OFN_EXPLORER | OFN_FILEMUSTEXIST | 
-                          OFN_HIDEREADONLY | OFN_NOCHANGEDIR ;
-               if (GetOpenFileName(&opfn)) {
-                   SetWindowText(GetDlgItem(hDlg,LOWORD(wParam-1000)),
-                                 filename);
+               
+               TCHAR filename[2048]={0};
+             
+               if (isNT) {
+                   WCHAR wfile[2048]={0}; 
+                   OPENFILENAMEW opfn;
+                   ZeroMemory(&opfn,sizeof(opfn));
+                   opfn.lStructSize=sizeof(opfn);
+                   opfn.hwndOwner=hDlg;
+                   opfn.lpstrFilter=  L"2mg format (*.2mg)\0*.2mg\0"
+                                      L"Prodos order format (*.po)\0*.po\0"
+                                      L"Dos order format (*.dsk)\0*.dsk\0"
+                                      L"All Files (*.*)\0*.*\0"
+                                      L"\0\0";
+                   opfn.lpstrFile=wfile;
+                   opfn.nMaxFile=2048;
+                   opfn.Flags=OFN_EXPLORER | OFN_FILEMUSTEXIST | 
+                              OFN_HIDEREADONLY | OFN_NOCHANGEDIR ;
+                   if (GetOpenFileNameW(&opfn)) {
+                        SetWindowTextW(GetDlgItem(hDlg,
+                                       LOWORD(wParam-1000)),
+                                       wfile);
+                   }    
+
+               } else {
+                   OPENFILENAME opfn;
+                   ZeroMemory(&opfn,sizeof(opfn));
+                   opfn.lStructSize=sizeof(opfn);
+                   opfn.hwndOwner=hDlg;
+                   opfn.lpstrFilter=_T("2mg format (*.2mg)\0*.2mg\0"
+                                       "Prodos order format (*.po)\0*.po\0"
+                                       "Dos order format (*.dsk)\0*.dsk\0"
+                                       "All Files (*.*)\0*.*\0"
+                                       "\0\0");
+                   opfn.lpstrFile=filename;
+                   opfn.nMaxFile=2048;
+                   opfn.Flags=OFN_EXPLORER | OFN_FILEMUSTEXIST | 
+                              OFN_HIDEREADONLY | OFN_NOCHANGEDIR ;
+                   if (GetOpenFileName(&opfn)) {
+                       SetWindowText(GetDlgItem(hDlg,LOWORD(wParam-1000)),
+                                     filename);
+                   }    
                }
 
            }
@@ -963,6 +1491,22 @@ void A2W_OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify) {
                      (DLGPROC)A2W_Dlg_About_Dialog,0);
       win_pause=0;
       break;
+   case ID_HELP_KEY:
+      win_pause=1;
+      DialogBoxParam(GetModuleHandle(NULL), 
+                     (LPCTSTR)IDD_KEGS32_KEY,
+                     hwnd, 
+                     (DLGPROC)A2W_Dlg_About_Dialog,0);
+      win_pause=0;
+      break;
+   case ID_FILE_SPEED:
+      win_pause=1;
+      DialogBoxParam(GetModuleHandle(NULL), 
+                     (LPCTSTR)IDD_SPEEDDIALOG,
+                     hwnd, 
+                     (DLGPROC)A2W_Dlg_Speed_Dialog,0);
+      win_pause=0;
+      break;
    case ID_FILE_JOYSTICK:
        if (g_joystick_type == JOYSTICK_MOUSE) {
             joystick_init();
@@ -978,10 +1522,18 @@ void A2W_OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify) {
        break;
    case ID_FILE_DISK:
       win_pause=1; 
-      DialogBoxParam(GetModuleHandle(NULL), 
-                     (LPCTSTR)IDD_DLG_DISKCONF,
-                     hwnd, 
-                     (DLGPROC)A2W_Dlg_Disk,0);
+      if (isNT) {
+          DialogBoxParamW(GetModuleHandle(NULL), 
+                          (LPCWSTR)IDD_DLG_DISKCONF,
+                          hwnd, 
+                          (DLGPROC)A2W_Dlg_Disk,0);
+      } else {
+          DialogBoxParam(GetModuleHandle(NULL), 
+                         (LPCTSTR)IDD_DLG_DISKCONF,
+                         hwnd, 
+                         (DLGPROC)A2W_Dlg_Disk,0);
+      }
+
       win_pause=0;
       break;
    case ID_FILE_EXIT:
@@ -1024,6 +1576,19 @@ void A2W_OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify) {
    case ID_FILE_FULLSCREEN:
 	  handle_vk_keys(VK_F11);
 	  break;
+   case ID_SPEED_1MHZ:
+      g_limit_speed = 1;
+      displaySpeedStatus();
+      break;
+   case ID_SPEED_2MHZ:
+      g_limit_speed = 2;
+      displaySpeedStatus();
+      break;
+   case ID_SPEED_FMHZ:
+      g_limit_speed = 0;
+      g_desired_pmhz=0.0;
+      displaySpeedStatus();
+      break;
    }
 }
 
@@ -1069,18 +1634,17 @@ void A2W_OnRButtonDown(HWND hwnd, BOOL fDClick, int x, int y, UINT keyFlags) {
         g_limit_speed = 0;
     }
 
-    printf("Toggling g_limit_speed to %d\n",g_limit_speed);
-    switch(g_limit_speed) {
-    case 0:
-        printf("...as fast as possible!\n");
-        break;
-    case 1:
-        printf("...1.024MHz\n");
-        break;
-    case 2:
-        printf("...2.5MHz\n");
-        break;
-    }
+    displaySpeedStatus();
+
+}
+
+void A2W_ActivateApp(HWND hwnd, BOOL activate,DWORD tid) {
+
+	if (!activate) {
+		if (g_warp_pointer) {
+			win_toggle_mouse_cursor(hwndMain);
+		}
+	}
 }
 
 LRESULT CALLBACK A2WndProcHidden(HWND hwnd,UINT uMsg,WPARAM wParam,  
@@ -1093,7 +1657,7 @@ LRESULT CALLBACK A2WndProcHidden(HWND hwnd,UINT uMsg,WPARAM wParam,
         printf ("UP:%x %x\n",wParam,lParam);
     }
 	*/
-    
+     
     switch (uMsg) 
     {
         HANDLE_MSG(hwnd,WM_MOUSEMOVE,A2W_OnMouseMove);
@@ -1104,32 +1668,47 @@ LRESULT CALLBACK A2WndProcHidden(HWND hwnd,UINT uMsg,WPARAM wParam,
         HANDLE_MSG(hwnd,WM_LBUTTONDOWN,A2W_OnLButtonDown);
         HANDLE_MSG(hwnd,WM_LBUTTONUP,A2W_OnLButtonUp);
     } 
+    
     return DefWindowProc(hwnd, uMsg, wParam, lParam); 
 }
 
 LRESULT CALLBACK A2WndProc(HWND hwnd,UINT uMsg,WPARAM wParam,  
                            LPARAM lParam) {
+
     switch (uMsg) 
-    {  
+    { 
+        case WM_NOTIFY:
+        {
+            LPTOOLTIPTEXT ptool;
+            ptool=(LPTOOLTIPTEXT) lParam;
+            if (ptool->hdr.code == TTN_NEEDTEXT) {
+                PopulateToolTip(ptool);
+                return 0;
+            }
+        } 
         case WM_KEYDOWN:
-           handle_vk_keys(wParam);
+            handle_vk_keys(wParam);
         case WM_MOUSEMOVE:
         case WM_KEYUP:
         case WM_SYSKEYUP:
         case WM_SYSKEYDOWN:
         case WM_LBUTTONDOWN:
-        case WM_LBUTTONUP:
+        case WM_LBUTTONUP: 
+        {
             if (hwndHidden != NULL) {
                 PostMessage(hwndHidden,uMsg,wParam,lParam);
             }
             return 0;
+        }
 		
-        HANDLE_MSG(hwnd,WM_CREATE,A2W_OnCreate); 
+		HANDLE_MSG(hwnd,WM_ACTIVATEAPP,A2W_ActivateApp);
+        //HANDLE_MSG(hwnd,WM_CREATE,A2W_OnCreate); 
         HANDLE_MSG(hwnd,WM_DESTROY,A2W_OnDestroy);
         HANDLE_MSG(hwnd,WM_ERASEBKGND,A2W_OnEraseBkgnd);
         HANDLE_MSG(hwnd,WM_RBUTTONDOWN,A2W_OnRButtonDown);
         HANDLE_MSG(hwnd,WM_COMMAND,A2W_OnCommand);
-    } 
+    }
+  
     return DefWindowProc(hwnd, uMsg, wParam, lParam); 
 }
 
@@ -1156,7 +1735,7 @@ BOOL initDirectDraw()
     memset( &ddsd, 0, sizeof(ddsd) );
     ddsd.dwSize = sizeof( ddsd );
     ddsd.dwFlags = DDSD_CAPS;
-    ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
+    ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE | DDSCAPS_VIDEOMEMORY;
 
     ddrval = IDirectDraw_CreateSurface(lpDD,&ddsd, &primsurf, NULL );
     if (FAILED(ddrval))
@@ -1201,11 +1780,11 @@ BOOL initDirectDraw()
     memset( &ddsd, 0, sizeof(ddsd) );
     ddsd.dwSize = sizeof( ddsd );
     ddsd.dwFlags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH;
-    ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN;
+    ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY;
     ddsd.dwWidth =  BASE_WINDOW_WIDTH;
     ddsd.dwHeight = BASE_MARGIN_TOP+A2_WINDOW_HEIGHT+BASE_MARGIN_BOTTOM;
-    ddsd.dwWidth =  GetSystemMetrics(SM_CXSCREEN);
-    ddsd.dwHeight = GetSystemMetrics(SM_CYSCREEN);
+    //ddsd.dwWidth =  GetSystemMetrics(SM_CXSCREEN);
+    //ddsd.dwHeight = GetSystemMetrics(SM_CYSCREEN);
     // create the backbuffer separately
     ddrval = IDirectDraw_CreateSurface(lpDD,&ddsd, &backsurf, NULL );
     if (FAILED(ddrval))
@@ -1224,6 +1803,14 @@ void dev_video_init(void) {
     unsigned int tid;
     int waitVar=0;
     WNDCLASS wc; 
+    OSVERSIONINFO osVersion;
+
+    // Check the windows version
+    osVersion.dwOSVersionInfoSize=sizeof(OSVERSIONINFO);
+    GetVersionEx(&osVersion);
+    if (osVersion.dwPlatformId >=2 && osVersion.dwMajorVersion >=4) {
+        isNT=1;
+    }
 
     _beginthreadex(NULL,0,dev_video_init_ex,(void *)&waitVar,0,&tid);
 
@@ -1242,32 +1829,36 @@ void dev_video_init(void) {
     wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW); 
     wc.hbrBackground = GetStockObject(WHITE_BRUSH); 
     wc.lpszMenuName =  NULL;
-    wc.lpszClassName = "Kegs32 Hidden Window"; 
+    wc.lpszClassName = _T("Kegs32 Hidden Window"); 
     if (!RegisterClass(&wc)) {
         printf ("Register window failed\n");
         return; 
     }
     hwndHidden = CreateWindow(
-        "Kegs32 Hidden Window", 
-        "Kegs32 Hidden Window", 
+        _T("Kegs32 Hidden Window"), 
+        _T("Kegs32 Hidden Window"), 
         WS_OVERLAPPED,
         CW_USEDEFAULT, CW_USEDEFAULT, 
         CW_USEDEFAULT, CW_USEDEFAULT, NULL,NULL,GetModuleHandle(NULL),NULL); 
    
+    if (AttachThreadInput(GetCurrentThreadId(),tid,TRUE) == 0) {
+        printf ("Unable to attach thread input\n");
+    }
+
 }
+
 unsigned int __stdcall dev_video_init_ex(void *param) {
-    int i;
+    int    i,j;
     int    keycode;
     int    tmp_array[0x80];
-    int *waitVar=(int *)param;
-    MSG msg;
+    int    *waitVar=(int *)param;
+    MSG    msg;
     HACCEL hAccel;
+    word32 *ptr;
 
     WNDCLASS wc; 
     LPBITMAPINFOHEADER pDib;
     TEXTMETRIC tm;  
-    WORD wVersionRequested;
-    WSADATA wsaData;
     int iStatusWidths[] = {60, 100,200,300, -1};
 
     // Create key-codes
@@ -1295,14 +1886,6 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     // Initialize Common Controls;
     InitCommonControls();
 
-    // Initialize Winsock
-    wVersionRequested = MAKEWORD(1, 1);
-
-    if (WSAStartup(wVersionRequested, &wsaData)) {
-        printf ("Unable to initialize winsock\n");
-        exit(0);
-    }
-
     // Create a window
     wc.style = 0; 
     wc.lpfnWndProc = (WNDPROC) A2WndProc; 
@@ -1314,7 +1897,7 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     wc.hCursor = LoadCursor((HINSTANCE) NULL, IDC_ARROW); 
     wc.hbrBackground = GetStockObject(WHITE_BRUSH); 
     wc.lpszMenuName =  MAKEINTRESOURCE(IDC_KEGS32);
-    wc.lpszClassName = "Kegs32"; 
+    wc.lpszClassName = _T("Kegs32"); 
 
     printf ("Registering Window\n");
     if (!RegisterClass(&wc)) {
@@ -1323,15 +1906,14 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     } 
  
     // Create the main window. 
- 
-    printf ("Creating Window\n");
+
+	printf ("Creating Window\n");
     hwndMain = CreateWindow(
-        "Kegs32", 
-        "Kegs32 - GS Emulator", 
-        WS_OVERLAPPEDWINDOW&(~(WS_MAXIMIZEBOX | WS_SIZEBOX)), 
-        //WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 
-        CW_USEDEFAULT, CW_USEDEFAULT, NULL,NULL,GetModuleHandle(NULL),NULL); 
+       _T("Kegs32"), 
+       _T("Kegs32 - GS Emulator"), 
+       WS_OVERLAPPEDWINDOW&(~(WS_MAXIMIZEBOX | WS_SIZEBOX)), 
+       CW_USEDEFAULT,CW_USEDEFAULT, 
+       CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,GetModuleHandle(NULL),NULL);
       
     // If the main window cannot be created, terminate 
     // the application. 
@@ -1342,30 +1924,50 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     }
 
     // Loading Accelerators
-    hAccel=LoadAccelerators(GetModuleHandle(NULL),MAKEINTRESOURCE(IDR_ACCEL));
+    
+    hAccel=LoadAccelerators(GetModuleHandle(NULL),
+                            MAKEINTRESOURCE(IDR_ACCEL));
 
     // Create Toolbar	
     win_toolbar = CreateWindowEx(0, TOOLBARCLASSNAME, NULL,
-                  WS_CHILD | WS_VISIBLE | TBSTYLE_TOOLTIPS, 0, 0, 0, 0,
-                  hwndMain, (HMENU)IDR_TOOLBAR, GetModuleHandle(NULL), NULL);
+                  WS_CHILD | WS_VISIBLE |  CCS_ADJUSTABLE | TBSTYLE_TOOLTIPS,
+                  0, 0, 0, 0,
+                  hwndMain,(HMENU)IDC_KEGS32, GetModuleHandle(NULL), NULL);
     SendMessage(win_toolbar,TB_BUTTONSTRUCTSIZE,(WPARAM)sizeof(TBBUTTON),0);
   
     {
         TBADDBITMAP tbab;
-        TBBUTTON tbb[1];
+        TBBUTTON tbb[5];
+        HWND hwndToolTip;
+        int i,j;
+        int idCmd[]={ID_FILE_DISK,-1,
+                     ID_SPEED_1MHZ,ID_SPEED_2MHZ,ID_SPEED_FMHZ};
+
+        ZeroMemory(tbb, sizeof(tbb));
+
+        for (i=0,j=0;i<sizeof(tbb)/sizeof(TBBUTTON);i++) {
+            if (idCmd[i] <0) {
+                tbb[i].fsStyle = TBSTYLE_SEP;
+            } else {
+                tbb[i].iBitmap = j;
+                tbb[i].idCommand = idCmd[i];
+                tbb[i].fsState = TBSTATE_ENABLED;
+                tbb[i].fsStyle = TBSTYLE_BUTTON;
+                j++;
+            }
+        }
 
         tbab.hInst = GetModuleHandle(NULL);
-        tbab.nID = IDR_TOOLBAR;
-        SendMessage(win_toolbar, TB_ADDBITMAP, 0, (LPARAM)&tbab);
-    
-        ZeroMemory(tbb, sizeof(tbb));
-        tbb[0].iBitmap = 0;
-        tbb[0].fsState = TBSTATE_ENABLED;
-        tbb[0].fsStyle = TBSTYLE_BUTTON;
-        tbb[0].idCommand = ID_FILE_DISK;
-
-        SendMessage(win_toolbar, TB_ADDBUTTONS, 1, (LPARAM)tbb);
+        tbab.nID = IDC_KEGS32;
+        SendMessage(win_toolbar, TB_ADDBITMAP,j, (LPARAM)&tbab);
+        SendMessage(win_toolbar, TB_ADDBUTTONS,i, (LPARAM)&tbb);
 		GetWindowRect(win_toolbar,&win_toolHeight);
+
+        // Activate the tooltip
+        hwndToolTip = (HWND) SendMessage(win_toolbar,TB_GETTOOLTIPS,0L,0L);
+        if (hwndToolTip) {
+            SendMessage(hwndToolTip,TTM_ACTIVATE,TRUE,0L);
+        }
     }
   
     // Create Status
@@ -1377,7 +1979,7 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
 
     SendMessage(win_toolbar,TB_AUTOSIZE,0,0);
     SendMessage(win_status,WM_SIZE,0,0);
- 
+
     #if defined(KEGS_DIRECTDRAW) 
     if (!initDirectDraw()) {
         printf ("Unable to initialize Direct Draw\n");
@@ -1424,15 +2026,34 @@ unsigned int __stdcall dev_video_init_ex(void *param) {
     pDib->biHeight = - (X_A2_WINDOW_HEIGHT - A2_WINDOW_HEIGHT + 2*8);
     ximage_border_special=CreateDIBSection(hdcRef,(BITMAPINFO *)pDib,
                                            DIB_RGB_COLORS,
-                                          (VOID **)&data_border_special,
-                                          NULL,0);
+                                           (VOID **)&data_border_special,
+                                           NULL,0);
+    pDib->biWidth    = 8;
+    pDib->biHeight   = 8;
+	pDib->biBitCount = 32;
+    ximage_interlace=CreateDIBSection(hdcRef,(BITMAPINFO *)pDib,
+                                      DIB_RGB_COLORS,
+                                      (VOID **)&data_interlace,
+                                      NULL,0);
     GlobalFree(pDib);
 
+    // Initialize interlace pattern
+	ptr = (word32 *) &(data_interlace[0]);
+
+	for (j=0;j<8;j+=2) {
+		for (i=0;i<8;i++) {
+			ptr[i+j*8]=RGB(255,255,255);
+		}
+    }
+
+	hbr=CreatePatternBrush(ximage_interlace);
+    
+    initWindow(hwndMain);
     ShowWindow(hwndMain, SW_SHOWDEFAULT); 
     UpdateWindow(hwndMain); 
     *waitVar=1;
 
-    while (GetMessage(&msg,hwndMain,0,0)>0) {
+    while (GetMessage(&msg,NULL,0,0)>0) {
         if (!(TranslateAccelerator(hwndMain,hAccel,&msg)))
             TranslateMessage(&msg); 
         DispatchMessage(&msg); 
@@ -1452,12 +2073,16 @@ void redraw_border(void) {
 void check_input_events(void) {
     MSG msg;
    
-    // Try to update joystick buttons 
-    joystick_update_button(); 
-
     while (win_pause) {
+        // Flush out all events
+        if (PeekMessage(&msg,NULL,0,0,PM_NOREMOVE)) {
+            GetMessage(&msg,NULL,0,0);
+        }
         Sleep(1);
     }
+
+    // Try to update joystick buttons 
+    joystick_update_button(); 
 
     if (PeekMessage(&msg,hwndHidden,0,0,PM_NOREMOVE)) {
         do {
@@ -1498,7 +2123,7 @@ void redraw_status_lines(void) {
     
     int line=0;
     char *buf;
-    char buffer[255]; 
+    TCHAR buffer[255]; 
     int height=dwchary;
     int centerx,centery;
 
@@ -1510,43 +2135,56 @@ void redraw_status_lines(void) {
     if (win_stat_debug) {
         for(line = 0; line < MAX_STATUS_LINES; line++) {
             buf = &(g_status_buf[line][0]);
-            TextOut(hdcRef, 0+centerx, X_A2_WINDOW_HEIGHT+
-                    height*line+centery,buf, strlen(buf));
+            TextOutA(hdcRef, 0+centerx, X_A2_WINDOW_HEIGHT+
+                     height*line+centery,buf, strlen(buf));
         }
     }
 	
     if (win_status !=NULL && !g_fullscreen) {
-        SendMessage(win_status, SB_SETTEXT,0,(LPARAM)"KEGS 0.60");
-        sprintf(buffer,"Vol:%d",g_doc_vol);
+        SendMessage(win_status, SB_SETTEXT,0,(LPARAM)_T("KEGS 0.60"));
+        _stprintf(buffer,_T("Vol:%d"),g_doc_vol);
         SendMessage(win_status, SB_SETTEXT,1,(LPARAM)buffer);
         buf=strstr(g_status_buf[0],"sim MHz:");
         
         if (buf) {
-            memset(buffer,0,255);
-            strncpy(buffer,buf,strchr(buf+8,' ')-buf);
-            SendMessage(win_status, SB_SETTEXT,2,(LPARAM) buffer);
+            memset(buffer,0,255*sizeof(TCHAR));
+            if (sizeof(TCHAR) <2) {
+                strncpy((char *)buffer,buf,strchr(buf+8,' ')-buf);
+            } else {
+                mbstowcs((wchar_t *)buffer,buf,strchr(buf+8,' ')-buf);
+            }
+            SendMessageA(win_status, SB_SETTEXT,2,(LPARAM) buffer);
         } else {
-            SendMessage(win_status, SB_SETTEXT,2,(LPARAM) "sim MHz:???");
+            SendMessageA(win_status,SB_SETTEXT,2,(LPARAM)_T("sim MHz:???"));
         }
 		
         buf=strstr(g_status_buf[0],"Eff MHz:");
         if (buf) {
-            memset(buffer,0,255);
-            strncpy(buffer,buf,strchr(buf+8,',')-buf);           
-            SendMessage(win_status, SB_SETTEXT,3,(LPARAM) buffer);
+            memset(buffer,0,255*sizeof(TCHAR));
+            if (sizeof(TCHAR) <2) {
+                strncpy((char *)buffer,buf,strchr(buf+8,',')-buf);           
+            } else {
+                mbstowcs((wchar_t *)buffer,buf,strchr(buf+8,',')-buf);
+            }
+            SendMessageA(win_status, SB_SETTEXT,3,(LPARAM) buffer);
         } else {
-            SendMessage(win_status, SB_SETTEXT,3,(LPARAM) "Eff MHz:???");
+            SendMessageA(win_status,SB_SETTEXT,3,(LPARAM)_T("Eff MHz:???"));
         }
         
         buf=strstr(g_status_buf[5],"fast");
         if (buf) {
-            memset(buffer,0,255);
-            strncpy(buffer,g_status_buf[5],buf-&(g_status_buf[5][0]));
-            SendMessage(win_status, SB_SETTEXT,4,(LPARAM) buffer);
+            memset(buffer,0,255*sizeof(TCHAR));
+            if (sizeof(TCHAR) <2) {
+                strncpy((char *)buffer,g_status_buf[5],
+                        buf-&(g_status_buf[5][0]));
+            } else {
+                mbstowcs((wchar_t *)buffer,g_status_buf[5],
+                         buf-&(g_status_buf[5][0]));
+            }
+            SendMessageA(win_status, SB_SETTEXT,4,(LPARAM) buffer);
         } else {
            
         }
-
     }
    
 }

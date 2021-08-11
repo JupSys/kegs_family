@@ -23,10 +23,14 @@ const char rcsid_sim65816_c[] = "@(#)$Header: sim65816.c,v 1.306 2000/10/03 12:1
 #include "defc.h"
 #undef INCLUDE_RCSID_C
 
+#ifdef _WIN32
+const char *g_kegs_default_paths[] = { "", "./"};
+#else
 const char *g_kegs_default_paths[] = { "", "./", "~/", "/usr/local/lib/",
 	"/usr/local/kegs/", "/usr/local/lib/kegs/", "/usr/share/kegs/",
 	"/usr/share/", "/var/lib/", "/usr/lib/", "/lib/", "/etc/",
 	"/etc/kegs/", 0 };
+#endif
 
 #define MAX_EVENTS	64
 
@@ -89,6 +93,7 @@ extern int g_preferred_rate;
 
 void U_STACK_TRACE();
 
+double	g_desired_pmhz = -1.0;
 double	g_fcycles_stop = 0.0;
 int	halt_sim = 0;
 int	enter_debug = 0;
@@ -1172,7 +1177,6 @@ run_prog()
 	int	fast;
 	int	this_type;
 
-
 	fflush(stdout);
 
 	g_cur_sim_dtime = 0.0;
@@ -1212,7 +1216,16 @@ run_prog()
 		iwm_25 = (motor_on && apple35_sel) && !g_fast_disk_emul;
 		if(fast && (!iwm_1 && !iwm_25) && (limit_speed == 0)) {
 			/* unlimited speed */
-			fspeed_mult = g_projected_pmhz;
+            if (g_desired_pmhz>0 && g_desired_pmhz < g_projected_pmhz) {
+                fspeed_mult = g_desired_pmhz;
+                g_recip_projected_pmhz_unl.plus_1 = 1.0*(1.0/fspeed_mult);
+	            g_recip_projected_pmhz_unl.plus_2 = 2.0*(1.0/fspeed_mult);
+	            g_recip_projected_pmhz_unl.plus_3 = 3.0*(1.0/fspeed_mult);
+	            g_recip_projected_pmhz_unl.plus_x_minus_1=1.01-
+                    (1.0/fspeed_mult);
+            } else {
+			    fspeed_mult = g_projected_pmhz;
+            }
 			fplus_ptr = &g_recip_projected_pmhz_unl;
 		} else if(fast && (iwm_25 || (!iwm_1 && limit_speed == 2)) ) {
 			fspeed_mult = 2.5;
@@ -1334,7 +1347,6 @@ run_prog()
 			}
 
 			this_event = g_event_start.next;
-
 		}
 
 		if(g_event_start.next == 0) {
@@ -1358,6 +1370,11 @@ run_prog()
 		if(g_stepping) {
 			break;
 		}
+
+#ifdef WIN32
+        Sleep(0);
+#endif
+        
 	}
 
 	if(!g_testing) {

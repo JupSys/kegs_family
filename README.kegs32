@@ -1,12 +1,23 @@
 KEGS32 is console-based program based on the Kent Dickey's KEGS for UNIX. 
-KEGS32 is designed to works in WIN32 platform. This is a straight port
-of KEGS and do not have fancy GUI in the current version. This version
-is at preliminary stage. It currently doesn't supports full-screen and
-joystick
+KEGS32 is designed to works in WIN32 platform. 
+
+It currently supports full-screen, joystick and scanline/interlace video mode.
+
+Changes in KEGS32 0.60 third release
+------------------------------------
+-- Fixed problem with long filename in disk configuration and added support
+   for Unicode filename
+-- Disable audio automatically when no sound card is found
+-- Support Drag and drop in disk image loader
+-- Support Visual Themes of Windows XP
+-- Support variable speed control other than 1, 2.5 Mhz
+-- Scanline/Interlace video mode via F12 key. The scanline mode could be
+   slow depending on your graphic card. 
+-- Fullscreen now switch to 800x600 if possible
 
 Changes in KEGS32 0.60 second release
 -------------------------------------
--- Added joystick support (Need tester, I dont have a joystick with me)
+-- Added joystick support 
 -- Revamped GUI look (Addded disk image loader)
 -- Cleanup sound.c and sound_driver.c code 
 -- Almost fullscreen support (VK_F11 key)
@@ -26,7 +37,7 @@ Hide mouse cursor = F8
 
 How to turn off the audio of KEGS32
 ----------------------------------
-You can turn on the audio by issuing kegs32 -audio 0
+You can turn off the audio by issuing kegs32 -audio 0
 
 How to compile
 --------------
@@ -47,15 +58,19 @@ protos_windriver.h -- New Addition
 Makefile.win -- New Addition
 vars_win -- New Addition
 
-In order to compile,
+In order to compile using Mingw32,
 
 1)  copy vars_win to vars
 2)  copy Makefile.win to Makefile and
 3)  run make
 
+For VC6,
+
+1)  Open the kegs.dsw project file
+2)  Click on the build button of Visual Studio
+
 
 Bug Reports/ Suggestions / Fixes
 --------------------------------
-If you have any problems/questions/etc., just let me know at
-
-akilgard@yahoo.com, 
+If you have any problems/questions/etc., just let me know at 
+akilgard@yahoo.com (except where to get the GS roms or other images).
