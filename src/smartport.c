@@ -1,4 +1,4 @@
-const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.42 2021-06-30 02:05:41+00 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.46 2021-08-17 00:02:08+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -109,7 +109,7 @@ do_c70d(word32 arg0)
 	int	param_cnt, block, status_code, ctl_code, stat_val, ret, ext;
 	int	i;
 
-	set_memory_c(0x7f8, 0xc7);
+	set_memory_c(0x7f8, 0xc7, 1);
 
 	if((engine.psr & 0x100) == 0) {
 		disk_printf("c70d %02x called in native mode!\n", arg0);
@@ -178,11 +178,11 @@ do_c70d(word32 arg0)
 		if(unit == 0 && status_code == 0) {
 			/* Smartport driver status */
 			/* see technotes/smpt/tn-smpt-002 */
-			set_memory_c(status_ptr, g_highest_smartport_unit+1);
-			set_memory_c(status_ptr+1, 0xff);	// intrpt stat
-			set_memory16_c(status_ptr+2, 0x0002);	/* vendor id */
-			set_memory16_c(status_ptr+4, 0x1000);	/* version */
-			set_memory16_c(status_ptr+6, 0x0000);
+			set_memory_c(status_ptr, g_highest_smartport_unit+1, 1);
+			set_memory_c(status_ptr+1, 0xff, 1);	// intrpt stat
+			set_memory16_c(status_ptr+2, 0x0002, 1); // vendor id
+			set_memory16_c(status_ptr+4, 0x1000, 1); // version
+			set_memory16_c(status_ptr+6, 0x0000, 1);
 
 			engine.xreg = 8;
 			engine.yreg = 0;
@@ -201,12 +201,12 @@ do_c70d(word32 arg0)
 				dsize = g_iwm.smartport[unit-1].dimage_size;
 				dsize = (dsize+511) / 512;
 			}
-			set_memory_c(status_ptr, stat_val);
+			set_memory_c(status_ptr, stat_val, 1);
 			set_memory24_c(status_ptr + 1, (word32)dsize);
 			engine.xreg = 4;
 			if(cmd & 0x40) {
 				set_memory_c(status_ptr + 4,
-							(dsize >> 24) & 0xff);
+						(dsize >> 24) & 0xff, 1);
 				engine.xreg = 5;
 			}
 			engine.yreg = 0;
@@ -230,25 +230,25 @@ do_c70d(word32 arg0)
 				disk_printf("extended for stat_code 3!\n");
 			}
 			/* DIB for unit 1 */
-			set_memory_c(status_ptr, stat_val);
+			set_memory_c(status_ptr, stat_val, 1);
 			set_memory24_c(status_ptr + 1, (word32)dsize);
 			if(cmd & 0x40) {
 				set_memory_c(status_ptr + 4,
-							(dsize >> 24) & 0xff);
+						(dsize >> 24) & 0xff, 1);
 				status_ptr++;
 			}
-			set_memory_c(status_ptr + 4, 4);
+			set_memory_c(status_ptr + 4, 4, 1);
 			for(i = 5; i < 21; i++) {
-				set_memory_c(status_ptr + i, 0x20);
+				set_memory_c(status_ptr + i, 0x20, 1);
 			}
-			set_memory_c(status_ptr + 5, 'K');
-			set_memory_c(status_ptr + 6, 'E');
-			set_memory_c(status_ptr + 7, 'G');
-			set_memory_c(status_ptr + 8, 'S');
+			set_memory_c(status_ptr + 5, 'K', 1);
+			set_memory_c(status_ptr + 6, 'E', 1);
+			set_memory_c(status_ptr + 7, 'G', 1);
+			set_memory_c(status_ptr + 8, 'S', 1);
 
 			/* hard disk supporting extended calls */
-			set_memory16_c(status_ptr + 21, 0xa002);
-			set_memory16_c(status_ptr + 23, 0x0000);
+			set_memory16_c(status_ptr + 21, 0xa002, 1);
+			set_memory16_c(status_ptr + 23, 0x0000, 1);
 
 			if(cmd & 0x40) {
 				engine.xreg = 26;
@@ -450,7 +450,7 @@ do_c70a(word32 arg0)
 	word32	prodos_unit;
 	int	ret;
 
-	set_memory_c(0x7f8, 0xc7);
+	set_memory_c(0x7f8, 0xc7, 1);
 
 	cmd = get_memory_c((engine.direct + 0x42) & 0xffff);
 	prodos_unit = get_memory_c((engine.direct + 0x43) & 0xffff);
@@ -583,7 +583,7 @@ do_read_c7(int unit_num, word32 buf, word32 blk)
 
 	for(i = 0; i < 0x200; i += 2) {
 		val = (local_buf[i+1] << 8) + local_buf[i];
-		set_memory16_c(buf + i, val);
+		set_memory16_c(buf + i, val, 0);
 	}
 
 	return 0;
@@ -618,7 +618,7 @@ do_write_c7(int unit_num, word32 buf, word32 blk)
 		local_buf[i] = get_memory_c(buf + i);
 	}
 
-	if(dsk->write_prot || dsk->raw_data) {
+	if(dsk->write_prot || (dsk->raw_data && !dsk->dynapro_info_ptr)) {
 		printf("Write, but %s is write protected!\n", dsk->name_ptr);
 		return 0x2b;
 	}
@@ -628,24 +628,30 @@ do_write_c7(int unit_num, word32 buf, word32 blk)
 		return 0x00;
 	}
 
-	dret = lseek(fd, dimage_start + blk*0x200ULL, SEEK_SET);
-	if(dret != (dimage_start + blk*0x200ULL)) {
-		halt_printf("lseek returned %08llx, errno: %d\n", dret, errno);
-		smartport_error();
-		return 0x27;
-	}
+	if(dsk->dynapro_info_ptr) {
+		dynapro_write(dsk, &local_buf[0], blk*0x200UL, 0x200);
+	} else {
+		dret = lseek(fd, dimage_start + blk*0x200ULL, SEEK_SET);
+		if(dret != (dimage_start + blk*0x200ULL)) {
+			halt_printf("lseek returned %08llx, errno: %d\n", dret,
+								errno);
+			smartport_error();
+			return 0x27;
+		}
 
-	if(dret >= (dimage_start + dimage_size)) {
-		halt_printf("Tried to write to %08llx\n", dret);
-		smartport_error();
-		return 0x27;
-	}
+		if(dret >= (dimage_start + dimage_size)) {
+			halt_printf("Tried to write to %08llx\n", dret);
+			smartport_error();
+			return 0x27;
+		}
 
-	len = (int)write(fd, &local_buf[0], 0x200);
-	if(len != 0x200) {
-		halt_printf("write ret %08x bytes, errno: %d\n", len, errno);
-		smartport_error();
-		return 0x27;
+		len = (int)write(fd, &local_buf[0], 0x200);
+		if(len != 0x200) {
+			halt_printf("write ret %08x bytes, errno: %d\n", len,
+									errno);
+			smartport_error();
+			return 0x27;
+		}
 	}
 
 	g_io_amt += 0x200;
@@ -678,7 +684,7 @@ do_format_c7(int unit_num)
 		return 0x28;
 	}
 
-	if(dsk->write_prot || dsk->raw_data) {
+	if(dsk->write_prot || (dsk->raw_data && !dsk->dynapro_info_ptr)) {
 		printf("Format, but %s is write protected!\n", dsk->name_ptr);
 		return 0x2b;
 	}
@@ -692,11 +698,14 @@ do_format_c7(int unit_num)
 		local_buf[i] = 0;
 	}
 
-	dret = lseek(fd, dimage_start, SEEK_SET);
-	if(dret != dimage_start) {
-		halt_printf("lseek returned %08llx, errno: %d\n", dret, errno);
-		smartport_error();
-		return 0x27;
+	if(!dsk->dynapro_info_ptr) {
+		dret = lseek(fd, dimage_start, SEEK_SET);
+		if(dret != dimage_start) {
+			halt_printf("lseek returned %08llx, errno: %d\n", dret,
+									errno);
+			smartport_error();
+			return 0x27;
+		}
 	}
 
 	dsum = 0;
@@ -704,7 +713,12 @@ do_format_c7(int unit_num)
 
 	while(dsum < dtotal) {
 		max = (int)MY_MIN(0x10000, dtotal - dsum);
-		len = (int)write(fd, &local_buf[0], max);
+		if(dsk->dynapro_info_ptr) {
+			dynapro_write(dsk, &local_buf[0], dsum, max);
+			len = max;
+		} else {
+			len = (int)write(fd, &local_buf[0], max);
+		}
 		if(len != max) {
 			halt_printf("write ret %08x, errno:%d\n", len, errno);
 			smartport_error();
@@ -716,7 +730,6 @@ do_format_c7(int unit_num)
 	return 0;
 }
 
-
 void
 do_c700(word32 ret)
 {
@@ -724,16 +737,16 @@ do_c700(word32 ret)
 
 	ret = do_read_c7(0, 0x800, 0);
 
-	set_memory_c(0x7f8, 7);
-	set_memory16_c(0x42, 0x7001);
-	set_memory16_c(0x44, 0x0800);
-	set_memory16_c(0x46, 0x0000);
+	set_memory_c(0x7f8, 7, 1);
+	set_memory16_c(0x42, 0x7001, 1);
+	set_memory16_c(0x44, 0x0800, 1);
+	set_memory16_c(0x46, 0x0000, 1);
 	engine.xreg = 0x70;
 	engine.kpc = 0x801;
 
 	if(ret != 0) {
 		printf("Failure reading boot disk in s7d1!\n");
-		engine.kpc = 0xff59;	/* Jump to monitor, fix $36-$39 */
+		engine.kpc = 0xc500;		// Try to boot slot 5
 	}
 }
 

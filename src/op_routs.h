@@ -1,8 +1,8 @@
-// $KmKId: op_routs.h,v 1.44 2021-06-14 01:13:57+00 kentd Exp $
+// $KmKId: op_routs.h,v 1.45 2021-08-17 00:08:26+00 kentd Exp $
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/

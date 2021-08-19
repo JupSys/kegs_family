@@ -1,4 +1,4 @@
-const char rcsid_mockingboard_c[] = "@(#)$KmKId: mockingboard.c,v 1.21 2021-06-30 02:05:50+00 kentd Exp $";
+const char rcsid_mockingboard_c[] = "@(#)$KmKId: mockingboard.c,v 1.22 2021-07-03 19:15:20+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -357,7 +357,7 @@ mock_6522_read(int pair_num, word32 loc, double dcycs)
 		break;
 	case 0xa:		// SR
 		val = mos6522ptr->sr;
-		halt_printf("Reading SR %d %02x\n", pair_num, val);
+		//halt_printf("Reading SR %d %02x\n", pair_num, val);
 		break;
 	case 0xb:		// ACR
 		val = mos6522ptr->acr;

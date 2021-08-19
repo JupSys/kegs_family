@@ -1,8 +1,8 @@
-// "@(#)$KmKId: engine.h,v 1.5 2021-04-05 18:18:58+00 kentd Exp $"
+// "@(#)$KmKId: engine.h,v 1.6 2021-08-17 00:08:36+00 kentd Exp $"
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/

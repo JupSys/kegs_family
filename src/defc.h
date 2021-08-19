@@ -1,5 +1,5 @@
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.125 2021-06-13 19:00:10+00 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.126 2021-07-14 00:14:12+00 kentd Exp $";
 #endif
 
 /************************************************************************/
@@ -16,7 +16,7 @@ const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.125 2021-06-13 19:00:10+00 k
 
 #include "defcomm.h"
 
-#define STRUCT(a) typedef struct _ ## a a; struct _ ## a
+#define STRUCT(a) typedef struct a ## _st a; struct a ## _st
 
 typedef unsigned char byte;
 typedef unsigned short word16;

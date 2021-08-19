@@ -1,4 +1,4 @@
-const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.37 2021-06-30 02:05:02+00 kentd Exp $";
+const char rcsid_debugger_c[] = "@(#)$KmKId: debugger.c,v 1.38 2021-08-17 00:05:25+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -1244,7 +1244,7 @@ do_blank(int mode, int old_mode)
 		/* video_update_through_line(262); */
 		break;
 	case ':':
-		set_memory_c(((g_a3bank << 16) + g_a3), g_a2);
+		set_memory_c(((g_a3bank << 16) + g_a3), g_a2, 0);
 		g_a3++;
 		mode = old_mode;
 		break;
@@ -1378,7 +1378,7 @@ dis_do_memmove()
 						g_a1, g_a2, g_a4bank, g_a4);
 	while(g_a1 <= (g_a2 & 0xffff)) {
 		val = get_memory_c((g_a1bank << 16) + g_a1);
-		set_memory_c((g_a4bank << 16) + g_a4, val);
+		set_memory_c((g_a4bank << 16) + g_a4, val, 0);
 		g_a1++;
 		g_a4++;
 	}

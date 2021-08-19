@@ -1,4 +1,4 @@
-const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.270 2021-06-30 02:06:02+00 kentd Exp $";
+const char rcsid_moremem_c[] = "@(#)$KmKId: moremem.c,v 1.272 2021-08-17 00:01:39+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -679,6 +679,8 @@ set_statereg(double dcycs, int val)
 {
 	int	xor;
 
+	dbg_log_info(dcycs, val, g_c068_statereg, 0x68);
+
 	xor = val ^ g_c068_statereg;
 	g_c068_statereg = val;
 	if(xor == 0) {
@@ -1080,6 +1082,17 @@ show_addr(byte *ptr)
 	}
 }
 
+word32
+moremem_fix_vector_pull(word32 addr)
+{
+	// Default vector for BRK will come from 0xfffffe.  But if
+	//  I/O shadowing is off, or we're a //e, then get from bank0
+	if((g_c035_shadow_reg & 0x40) || (g_rom_version == 0)) {
+		// I/O shadowing off, or Apple //e: use RAM loc
+		addr = addr & 0xffff;
+	}
+	return addr;
+}
 
 #define CALC_DCYCS_FROM_CYC_PTR(dcycs, cyc_ptr)			\
 	dcycs = g_last_vbl_dcycs + *cyc_ptr;

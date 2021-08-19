@@ -1,4 +1,4 @@
-const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.87 2021-06-30 02:06:10+00 kentd Exp $";
+const char rcsid_config_c[] = "@(#)$KmKId: config.c,v 1.97 2021-08-19 03:40:54+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -96,7 +96,7 @@ int	g_cfg_ignorecase = 1;
 int	g_cfg_ignorecase = 0;
 #endif
 
-#define CFG_MAX_OPTS	16
+#define CFG_MAX_OPTS	34
 #define CFG_OPT_MAXSTR	100
 
 int g_cfg_opts_vals[CFG_MAX_OPTS];
@@ -104,6 +104,8 @@ char g_cfg_opts_strs[CFG_MAX_OPTS][CFG_OPT_MAXSTR];
 char g_cfg_opt_buf[CFG_OPT_MAXSTR];
 
 char *g_cfg_rom_path = "ROM";
+char *g_cfg_charrom_path = "Undefined";
+int g_cfg_charrom_pos = 0;
 char *g_cfg_file_def_name = "Undefined";
 char **g_cfg_file_strptr = 0;
 int g_cfg_file_min_size = 1024;
@@ -145,7 +147,8 @@ Cfg_menu g_cfg_newslot6_menu[] = {
 								CFGTYPE_MENU },
 { "size,140,140KB", KNM(g_cfg_newdisk_size),
 			&g_cfg_newdisk_size_default, CFGTYPE_INT },
-{ "Type,1,ProDOS/DOS 3.3,2,WOZ image", KNM(g_cfg_newdisk_type),
+{ "Type,1,ProDOS/DOS 3.3,2,WOZ image,3,Dynamic ProDOS directory",
+			KNM(g_cfg_newdisk_type),
 			&g_cfg_newdisk_type_default, CFGTYPE_INT },
 { "", 0, 0, 0, 0 },
 { "Create and name the image", (void *)cfg_name_new_image, 0, 0, CFGTYPE_FUNC },
@@ -158,7 +161,8 @@ Cfg_menu g_cfg_newslot5_menu[] = {
 { "New 3.5\" disk image Configuration", g_cfg_newslot5_menu, 0, 0,CFGTYPE_MENU},
 { "size,800,800KB", KNM(g_cfg_newdisk_size),
 			&g_cfg_newdisk_size_default, CFGTYPE_INT },
-{ "Type,1,ProDOS,2,WOZ image", KNM(g_cfg_newdisk_type),
+{ "Type,1,ProDOS,2,WOZ image,3,Dynamic ProDOS directory",
+			KNM(g_cfg_newdisk_type),
 			&g_cfg_newdisk_type_default, CFGTYPE_INT },
 { "", 0, 0, 0, 0 },
 { "Create and name the image", (void *)cfg_name_new_image, 0, 0, CFGTYPE_FUNC },
@@ -173,7 +177,7 @@ Cfg_menu g_cfg_newslot7_menu[] = {
 { "size,800,800KB,1600,1600KB,8192,8MB,16384,16MB,32764,32MB",
 			KNM(g_cfg_newdisk_size), &g_cfg_newdisk_size_default,
 			CFGTYPE_INT },
-{ "Type,1,ProDOS", KNM(g_cfg_newdisk_type),
+{ "Type,1,ProDOS,3,Dynamic ProDOS directory", KNM(g_cfg_newdisk_type),
 			&g_cfg_newdisk_type_default, CFGTYPE_INT },
 { "", 0, 0, 0, 0 },
 { "Create and name the image", (void *)cfg_name_new_image, 0, 0, CFGTYPE_FUNC },
@@ -211,6 +215,31 @@ Cfg_menu g_cfg_rom_menu[] = {
 { 0, 0, 0, 0, 0 },
 };
 
+Cfg_menu g_cfg_charrom_menu[] = {
+{ "Character ROM File Selection", g_cfg_charrom_menu, 0, 0, CFGTYPE_MENU },
+{ "Character ROM File", KNMP(g_cfg_charrom_path), CFGTYPE_FILE },
+{ "Character Set,0,0x00 US Enhanced,1,0x01 US Un-enhanced,"
+	"2,0x02 Clinton Turner V1 Enhanced,3,0x03 ReActiveMicro Enhanced,"
+	"4,0x04 Dan Paymar Enhanced,5,0x05 Blippo Black Enhanced,"
+	"6,0x06 Byte Enhanced,7,0x07 Colossal Enhanced,"
+	"8,0x08 Count Enhanced,9,0x09 Flow Enhanced,"
+	"10,0x0a Gothic Enhanced,11,0x0b Outline Enhanced,"
+	"12,0x0c Pigfont Enhanced,13,0x0d Pinocchio Enhanced,"
+	"14,0x0e Slant Enhanced,15,0x0f Stop Enhanced,"
+	"16,0x10 Euro Un-Enhanced,17,0x11 Euro Enhanced,"
+	"18,0x12 Clinton Turner V2 Enhanced,19,0x13 Improved German Enhanced,"
+	"20,0x14 Improved German Un-Enhanced,21,0x15 Franch Canadian Enhanced,"
+	"22,0x16 French Canadian Un-Enhanced,23,0x17 Hebrew Enhanced,"
+	"24,0x18 Hebrew Un-Enhanced,25,0x19 Apple II+ Enhanced,"
+	"26,0x1a Apple II+ Un-Enhanced,27,0x1b Katakana Enhanced,"
+	"28,0x1c Cyrillic Enhanced,29,0x1d Greek Enhanced,"
+	"30,0x1e Esperanto Enhanced,31,0x1f Videx Enhanced",
+	KNMP(g_cfg_charrom_pos), CFGTYPE_INT },
+{ "", 0, 0, 0, 0 },
+{ "Back to Main Config", g_cfg_main_menu, 0, 0, CFGTYPE_MENU },
+{ 0, 0, 0, 0, 0 },
+};
+
 Cfg_menu g_cfg_serial_menu[] = {
 { "Serial Port Configuration", g_cfg_serial_menu, 0, 0, CFGTYPE_MENU },
 { "Serial Ports,0,Only use sockets 6501-6502,1,Use real ports if avail",
@@ -233,6 +262,7 @@ Cfg_menu g_cfg_main_menu[] = {
 { "Disk Configuration", g_cfg_disk_menu, 0, 0, CFGTYPE_MENU },
 { "Joystick Configuration", g_cfg_joystick_menu, 0, 0, CFGTYPE_MENU },
 { "ROM File Selection", g_cfg_rom_menu, 0, 0, CFGTYPE_MENU },
+{ "Character ROM Selection", g_cfg_charrom_menu, 0, 0, CFGTYPE_MENU },
 { "Serial Port Configuration", g_cfg_serial_menu, 0, 0, CFGTYPE_MENU },
 { "Force X-windows display depth", KNMP(g_force_depth), CFGTYPE_INT },
 { "Auto-update config.kegs,0,Manual,1,Immediately",
@@ -492,9 +522,10 @@ cfg_set_config_panel(int panel)
 		// Leave config panel, go back to A2 emulation
 
 		for(i = 0; i < 0x400; i++) {
-			set_memory_c(0xe00400+i, g_save_text_screen_bytes[i]);
-			set_memory_c(0xe10400+i,
-					g_save_text_screen_bytes[0x400+i]);
+			set_memory_c(0xe00400 + i, g_save_text_screen_bytes[i],
+									0);
+			set_memory_c(0xe10400 + i,
+					g_save_text_screen_bytes[0x400+i], 0);
 		}
 
 		// And quit
@@ -572,9 +603,8 @@ config_parse_option(char *buf, int pos, int len, int line)
 	Cfg_menu *menuptr;
 	Cfg_defval *defptr;
 	int	*iptr;
-	char	**strptr;
 	char	*nameptr;
-	int	num_equals, type, val, c;
+	int	num_equals, type, val, c, old_val;
 	int	i;
 
 // warning: modifies buf (turns spaces to nulls)
@@ -635,15 +665,15 @@ config_parse_option(char *buf, int pos, int len, int line)
 	case CFGTYPE_INT:
 		/* use strtol */
 		val = (int)strtol(&buf[pos], 0, 0);
+		printf("strtol ret: %d\n", val);
 		iptr = (int *)menuptr->ptr;
+		old_val = *iptr;
 		*iptr = val;
+		cfg_int_updated(iptr, val, old_val);
 		break;
 	case CFGTYPE_FILE:
-		strptr = (char **)menuptr->ptr;
-		if(strptr && *strptr) {
-			free(*strptr);
-		}
-		*strptr = kegs_malloc_str(&buf[pos]);
+		g_cfg_file_strptr = (char **)menuptr->ptr;
+		cfg_file_update_ptr(&buf[pos], 0);
 		break;
 	default:
 		printf("Config file variable %s is unknown type: %d\n",
@@ -683,6 +713,43 @@ config_parse_bram(char *buf, int pos, int len)
 		clk_bram_set(bram_num, offset, val);
 		offset++;
 		pos += 2;
+	}
+}
+
+void
+cfg_int_updated(int *iptr, int new_val, int old_val)
+{
+	// Called to handle an integer being changed in the F4 config menus
+	//  where it's value may need special handling
+
+	if((iptr == &g_cfg_charrom_pos) && (old_val != new_val)) {
+		cfg_load_charrom();
+	}
+}
+
+void
+cfg_load_charrom()
+{
+	byte	buffer[4096];
+	dword64	dsize;
+	word32	ret, upos;
+	int	fd;
+
+	printf("Loading character ROM from: %s\n", g_cfg_charrom_path);
+	fd = open(g_cfg_charrom_path, O_RDONLY | O_BINARY);
+	if(fd < 0) {
+		printf("Cannot open %s\n", g_cfg_charrom_path);
+		return;
+	}
+	dsize = cfg_get_fd_size(fd);
+	upos = g_cfg_charrom_pos * 0x1000U;
+	if(dsize < (upos + 0x1000)) {
+		g_cfg_charrom_pos = 0;
+		return;
+	}
+	ret = cfg_read_from_fd(fd, &buffer[0], upos, 4096);
+	if(ret != 0) {
+		prepare_a2_romx_font(&buffer[0]);
 	}
 }
 
@@ -904,7 +971,8 @@ config_parse_config_kegs_file()
 {
 	FILE	*fconf;
 	char	*buf, *ptr, *name_ptr, *partition_name;
-	int	part_num, ejected, line, pos, slot, drive, len, ret;
+	word32	dynamic_size;
+	int	part_num, ejected, line, pos, slot, drive, len, ret, c;
 	int	i;
 
 	printf("Parsing config.kegs file: %s\n", g_config_kegs_name);
@@ -998,6 +1066,7 @@ config_parse_config_kegs_file()
 		/* see if it has a partition name */
 		partition_name = 0;
 		part_num = -1;
+		dynamic_size = 0;
 		if(buf[pos] == ':') {
 			pos++;
 			/* yup, it's got a partition name! */
@@ -1008,15 +1077,20 @@ config_parse_config_kegs_file()
 			buf[pos] = 0;	/* null terminate partition name */
 			pos++;
 		}
-		if(buf[pos] == ';') {
+		c = buf[pos];
+		if((c == ';') || (c == '@')) {
 			pos++;
-			/* it's got a partition number */
+			// ; - partition number;  @ - Dynamic ProDOS dir size
 			part_num = 0;
 			while((pos < len) && (buf[pos] != ':')) {
 				part_num = (10*part_num) + buf[pos] - '0';
 				pos++;
 			}
 			pos++;
+			if(c == '@') {		// Dynamic ProDOS directory
+				dynamic_size = part_num;
+				part_num = -1;
+			}
 		}
 
 		/* Get filename */
@@ -1026,8 +1100,7 @@ config_parse_config_kegs_file()
 		}
 
 		insert_disk(slot, drive, name_ptr, ejected, partition_name,
-								part_num);
-
+							part_num, dynamic_size);
 	}
 
 	ret = fclose(fconf);
@@ -1049,18 +1122,24 @@ config_generate_config_kegs_name(char *outstr, int maxlen, Disk *dsk,
 
 	str = outstr;
 
-	if(with_extras && (dsk->fd < 0)) {
-		snprintf(str, maxlen - (str - outstr), "#");
-		str = &outstr[strlen(outstr)];
-	}
-	if(with_extras && (dsk->partition_name != 0)) {
-		snprintf(str, maxlen - (str - outstr), ":%s:",
+	if(with_extras) {
+		if(dsk->fd < 0) {
+			snprintf(str, maxlen - (str - outstr), "#");
+			str = &outstr[strlen(outstr)];
+		}
+		if(dsk->dynapro_size) {
+			snprintf(str, maxlen - (str - outstr), "@%d:",
+							dsk->dynapro_size);
+			str = &outstr[strlen(outstr)];
+		} else if(dsk->partition_name != 0) {
+			snprintf(str, maxlen - (str - outstr), ":%s:",
 							dsk->partition_name);
-		str = &outstr[strlen(outstr)];
-	} else if(with_extras && (dsk->partition_num >= 0)) {
-		snprintf(str, maxlen - (str - outstr), ";%d:",
+			str = &outstr[strlen(outstr)];
+		} else if(dsk->partition_num >= 0) {
+			snprintf(str, maxlen - (str - outstr), ";%d:",
 							dsk->partition_num);
-		str = &outstr[strlen(outstr)];
+			str = &outstr[strlen(outstr)];
+		}
 	}
 	snprintf(str, maxlen - (str - outstr), "%s", dsk->name_ptr);
 }
@@ -1152,7 +1231,7 @@ config_write_config_kegs_file()
 
 void
 insert_disk(int slot, int drive, const char *name, int ejected,
-		const char *partition_name, int part_num)
+		const char *partition_name, int part_num, word32 dynamic_size)
 {
 	byte	buf_2img[512];
 	Disk	*dsk;
@@ -1176,9 +1255,10 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 
 	dsk = iwm_get_dsk_from_slot_drive(slot, drive);
 
-#if 0
-	printf("Inserting disk %s (%s or %d) in slot %d, drive: %d\n", name,
-		partition_name, part_num, slot, drive);
+#if 1
+	printf("Inserting disk %s (%s or %d) in slot %d, drive: %d, "
+		"dyna_size:%d\n", name, partition_name, part_num, slot, drive,
+		dynamic_size);
 #endif
 
 	dsk->just_ejected = 0;
@@ -1199,17 +1279,17 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		}
 	}
 
-	if(dsk->name_ptr != 0) {
-		/* free old name_ptr */
-		free(dsk->name_ptr);
-	}
+	/* free old name_ptr, partition_name */
+	free(dsk->name_ptr);
+	free(dsk->partition_name);
+	dsk->name_ptr = 0;
+	dsk->partition_name = 0;
 
 	name_len = (int)strlen(name);
 	name_ptr = (char *)malloc(name_len + 1);
 	cfg_strncpy(name_ptr, name, name_len + 1);
 	dsk->name_ptr = name_ptr;
 
-	dsk->partition_name = 0;
 	part_len = 0;
 	part_ptr = 0;
 	if(partition_name != 0) {
@@ -1219,6 +1299,7 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		dsk->partition_name = part_ptr;
 	}
 	dsk->partition_num = part_num;
+	dsk->dynapro_size = dynamic_size;
 
 	iwm_printf("Opening up disk image named: %s\n", name_ptr);
 
@@ -1238,6 +1319,14 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 	image_type = 0;
 	can_write = 1;
 
+	if(dynamic_size) {
+		ret = dynapro_mount(dsk, name_ptr, 2*dynamic_size);
+		if(ret < 0) {
+			iwm_eject_disk(dsk);
+			return;
+		}
+		image_type = DSK_TYPE_DYNAPRO;
+	}
 	if((partition_name != 0) || (part_num >= 0)) {
 		ret = cfg_partition_find_by_name_or_num(dsk, partition_name,
 								part_num);
@@ -1258,7 +1347,8 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		}
 	}
 
-	if((name_len > 3) && !cfg_str_match(".gz", &name_ptr[name_len - 3], 3)){
+	if((name_len > 3) && !image_type &&
+			!cfg_str_match(".gz", &name_ptr[name_len - 3], 3)) {
 		// it's gzip'ed, try to gunzip it to dsk->raw_data
 		undeflate_gzip(dsk, name_ptr);
 
@@ -1268,7 +1358,8 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		name_len -= 3;		// So .dsk, .po look for correct chars
 	}
 
-	if((name_len > 4) && !cfg_str_match(".bz2", &name_ptr[name_len - 4],4)){
+	if((name_len > 4) && !image_type &&
+			!cfg_str_match(".bz2", &name_ptr[name_len - 4], 4)) {
 		// it's bzip2'ed, try to bunzip2 it to dsk->raw_data
 		config_file_to_pipe(dsk, "bunzip2", name_ptr);
 		can_write = 0;
@@ -1278,7 +1369,8 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		name_len -= 4;
 	}
 
-	if((name_len > 4) && !cfg_str_match(&name_ptr[name_len - 4], ".sdk",4)){
+	if((name_len > 4) && !image_type &&
+			!cfg_str_match(&name_ptr[name_len - 4], ".sdk", 4)) {
 		// it's a ShrinkIt archive with a disk image in it
 		unshk(dsk, name_ptr);
 		can_write = 0;
@@ -1289,19 +1381,19 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		dsk->dimage_size = dsk->raw_dsize;
 	}
 
-	if((name_len > 4) && !cfg_str_match(".nib", &name_ptr[name_len-4],4) &&
-							dsk->disk_525) {
+	if((name_len > 4) && !image_type && dsk->disk_525 &&
+			!cfg_str_match(".nib", &name_ptr[name_len-4], 4)) {
 		// Old, obsolete .nib 5.25" nibblized format.  Support is
 		//  read-only
 		image_type = DSK_TYPE_NIB;
 		can_write = 0;
 	}
 
-	if((dsk->fd < 0) && can_write) {
+	if((dsk->fd < 0) && can_write && !dynamic_size) {
 		dsk->fd = open(name_ptr, O_RDWR | O_BINARY, 0x1b6);
 	}
 
-	if(dsk->fd < 0) {
+	if((dsk->fd < 0) && !dynamic_size) {
 		printf("Trying to open %s read-only, errno: %d\n", name_ptr,
 								errno);
 		dsk->fd = open(name_ptr, O_RDONLY | O_BINARY, 0x1b6);
@@ -1310,7 +1402,7 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 
 	iwm_printf("open returned: %d\n", dsk->fd);
 
-	if(dsk->fd < 0) {
+	if((dsk->fd < 0) && !dynamic_size) {
 		fatal_printf("Disk image %s does not exist!\n", name_ptr);
 		free(dsk->raw_data);
 		return;
@@ -1318,7 +1410,8 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 
 	printf("Checking if it's woz, name_ptr:%s. %d vs %d\n", name_ptr,
 		name_len, (int)strlen(name_ptr));
-	if((name_len > 4) && !cfg_str_match(&name_ptr[name_len - 4], ".woz",4)){
+	if((name_len > 4) && !image_type &&
+			!cfg_str_match(&name_ptr[name_len - 4], ".woz", 4)){
 		// it's a WOZ applesauce disk image
 		image_type = DSK_TYPE_WOZ;
 		printf("It is woz!\n");
@@ -1343,6 +1436,7 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		dsize = cfg_get_fd_size(dsk->fd);
 	}
 
+#if 0
 	/* Try to guess that there is a Mac Binary header of 128 bytes */
 	/* See if image size & 0xfff = 0x080 which indicates extra 128 bytes */
 	if(((dsize & 0xfff) == 0x080) && (dsize < (801*1024)) && !image_type) {
@@ -1350,11 +1444,12 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 		dsk->dimage_start += 0x80;
 		dsize -= 0x80;
 	}
+#endif
 
 	dsk->dimage_size = dsize;
 
-	if(buf_2img[0] == '2' && buf_2img[1] == 'I' && buf_2img[2] == 'M' &&
-			buf_2img[3] == 'G') {
+	if(!image_type && (buf_2img[0] == '2') && (buf_2img[1] == 'I') &&
+				(buf_2img[2] == 'M') && (buf_2img[3] == 'G')) {
 		/* It's a 2IMG disk */
 		printf("Image named %s is in 2IMG format\n", dsk->name_ptr);
 		image_type = DSK_TYPE_PRODOS;
@@ -1403,8 +1498,8 @@ insert_disk(int slot, int drive, const char *name, int ejected,
 	}
 	if(!image_type) {
 		/* See if it might be the Mac diskcopy format */
-		dtmp = (buf_2img[0x40] << 24) + (buf_2img[0x41] << 16) +
-				(buf_2img[0x42] << 8) + buf_2img[0x43];
+		dtmp = ((word32)buf_2img[0x40] << 24) | (buf_2img[0x41] << 16) |
+				(buf_2img[0x42] << 8) | buf_2img[0x43];
 		if((dsize >= (exp_dsize + 0x54)) && (dtmp == exp_dsize)) {
 			/* It's diskcopy since data size field matches */
 			printf("Image named %s is in Mac diskcopy format\n",
@@ -1799,14 +1894,28 @@ cfg_maybe_insert_disk(int slot, int drive, const char *namestr)
 		g_cfg_select_partition = 1;
 		g_cfg_file_pathfield = 0;
 	} else {
-		insert_disk(slot, drive, namestr, 0, 0, -1);
+		insert_disk(slot, drive, namestr, 0, 0, -1, 0);
 		return 1;
 	}
 	return 0;
 }
 
+void
+cfg_insert_disk_dynapro(int slot, int drive, const char *name)
+{
+	int	dynapro_size;
+
+	dynapro_size = 140;
+	if(slot == 5) {
+		dynapro_size = 800;
+	} else if(slot == 7) {
+		dynapro_size = 32768;
+	}
+	insert_disk(slot, drive, name, 0, 0, -1, dynapro_size);
+}
+
 int
-cfg_stat(char *path, struct stat *sb)
+cfg_stat(char *path, struct stat *sb, int do_lstat)
 {
 	int	ret, len, removed_slash;
 
@@ -1822,7 +1931,11 @@ cfg_stat(char *path, struct stat *sb)
 	}
 #endif
 
-	ret = stat(path, sb);
+	if(do_lstat) {
+		ret = lstat(path, sb);
+	} else {
+		ret = stat(path, sb);
+	}
 
 	/* put the slash back */
 	if(removed_slash) {
@@ -2037,7 +2150,7 @@ cfg_putchar(int c)
 	if(g_cfg_curs_mousetext) {
 		c = (c & 0x1f) | 0x40;
 	}
-	set_memory_c(0xe00400 + offset + (x >> 1), c);
+	set_memory_c(0xe00400 + offset + (x >> 1), c, 0);
 	x++;
 	if(x >= 80) {
 		x = 0;
@@ -2102,7 +2215,7 @@ cfg_print_dnum(dword64 dnum, int max_len)
 	cfg_printf(&buf2[1]);
 }
 
-void
+int
 cfg_get_disk_name(char *outstr, int maxlen, int type_ext, int with_extras)
 {
 	Disk	*dsk;
@@ -2114,10 +2227,11 @@ cfg_get_disk_name(char *outstr, int maxlen, int type_ext, int with_extras)
 
 	outstr[0] = 0;
 	if(dsk->name_ptr == 0) {
-		return;
+		return 0;
 	}
 
 	config_generate_config_kegs_name(outstr, maxlen, dsk, with_extras);
+	return dsk->dynapro_size;
 }
 
 void
@@ -2129,7 +2243,7 @@ cfg_parse_menu(Cfg_menu *menuptr, int menu_pos, int highlight_pos, int change)
 	const char *menustr;
 	char	*curstr, *defstr, *str, *outstr;
 	int	val, num_opts, opt_num, bufpos, outpos, curval, defval, type;
-	int	type_ext, opt_get_str, separator, len, c;
+	int	type_ext, opt_get_str, separator, len, c, old_val;
 	int	i;
 
 	g_cfg_opt_buf[0] = 0;
@@ -2293,7 +2407,9 @@ cfg_parse_menu(Cfg_menu *menuptr, int menu_pos, int highlight_pos, int change)
 				/* HACK: min_val, max_val testing here */
 			}
 			iptr = (int *)menuptr->ptr;
+			old_val = *iptr;
 			*iptr = curval;
+			cfg_int_updated(iptr, curval, old_val);
 		}
 		g_config_kegs_update_needed = 1;
 	}
@@ -2312,7 +2428,8 @@ cfg_parse_menu(Cfg_menu *menuptr, int menu_pos, int highlight_pos, int change)
 			snprintf(str, CFG_OPT_MAXSTR, "%d", curval);
 		} else if (type == CFGTYPE_DISK) {
 			str = &(g_cfg_opts_strs[0][0]);
-			cfg_get_disk_name(str, CFG_OPT_MAXSTR, type_ext, 1);
+			(void)cfg_get_disk_name(str, CFG_OPT_MAXSTR, type_ext,
+									1);
 			str = cfg_shorten_filename(str, 68);
 		} else if (type == CFGTYPE_FILE) {
 			str = &(g_cfg_opts_strs[0][0]);
@@ -2449,7 +2566,7 @@ cfg_create_new_image_act(const char *str, int type, int size_kb)
 {
 	byte	buf[1024];
 	word32	val;
-	int	fd;
+	int	fd, ret;
 	int	i;
 
 	// Called after file dialog selects a new image name, this creates it
@@ -2464,37 +2581,46 @@ cfg_create_new_image_act(const char *str, int type, int size_kb)
 		buf[i] = 0;
 	}
 
+	ret = 0;
 	if(type == 2) {		// WOZ
 		(void)woz_new(fd, str, size_kb);
 	} else {
 		for(i = 0; i < size_kb; i++) {
 			val = cfg_write_to_fd(fd, &(buf[0]), i * 1024U, 1024);
 			if(val != 1024) {
-				return -1;
+				ret = -1;
+				break;
 			}
 		}
 	}
 	close(fd);
 
-	return 0;
+	return ret;		// 0=success, -1 is a failure
 }
 
 void
 cfg_create_new_image()
 {
+	word32	dynamic_size;
 	int	ret;
 
 	// Type is in g_cfg_file_path.  Create this file and prepare it
 	printf("Creating new image: %s\n", &g_cfg_file_path[0]);
 
-	ret = cfg_create_new_image_act(&g_cfg_file_path[0], g_cfg_newdisk_type,
-		g_cfg_newdisk_size);
+	ret = 0;
+	dynamic_size = 0;
+	if(g_cfg_newdisk_type == 3) {
+		dynamic_size = g_cfg_newdisk_size;
+	} else {
+		ret = cfg_create_new_image_act(&g_cfg_file_path[0],
+					g_cfg_newdisk_type, g_cfg_newdisk_size);
+	}
 	if(ret < 0) {
 		// Maybe open a dialog?  Oh well...do nothing
 	}
 	insert_disk(g_cfg_newdisk_slotdrive >> 8,
 			g_cfg_newdisk_slotdrive & 0xff, &(g_cfg_file_path[0]),
-			0, 0, -2);
+			0, 0, -2, dynamic_size);
 	g_cfg_slotdrive = -1;
 	g_menuptr = &g_cfg_disk_menu[0];
 	g_menu_redraw_needed = 1;
@@ -2505,11 +2631,12 @@ cfg_create_new_image()
 void
 cfg_file_init()
 {
-	int	slot, drive;
+	int	slot, drive, is_dynapro;
 	int	i;
 
+	is_dynapro = 0;
 	if(g_cfg_slotdrive < 0xfff) {
-		cfg_get_disk_name(&g_cfg_tmp_path[0], CFG_PATH_MAX,
+		is_dynapro = cfg_get_disk_name(&g_cfg_tmp_path[0], CFG_PATH_MAX,
 							g_cfg_slotdrive, 0);
 
 		slot = g_cfg_slotdrive >> 8;
@@ -2526,8 +2653,8 @@ cfg_file_init()
 					slot = 5;
 				}
 			}
-			cfg_get_disk_name(&g_cfg_tmp_path[0], CFG_PATH_MAX,
-							(slot << 8) + drive, 0);
+			is_dynapro = cfg_get_disk_name(&g_cfg_tmp_path[0],
+					CFG_PATH_MAX, (slot << 8) + drive, 0);
 		}
 	} else {
 		// Just use g_cfg_file_def_name
@@ -2536,6 +2663,11 @@ cfg_file_init()
 	}
 
 	cfg_get_base_path(&g_cfg_file_curpath[0], &g_cfg_tmp_path[0], 0);
+	if(is_dynapro) {
+		// Use the full path to the dir (don't strip off last part)
+		cfg_strncpy(&g_cfg_file_curpath[0], &g_cfg_tmp_path[0],
+							CFG_PATH_MAX);
+	}
 	g_cfg_dirlist.invalid = 1;
 }
 
@@ -2684,6 +2816,60 @@ cfg_strncpy(char *dstptr, const char *srcptr, int dstsize)
 	return dstptr;
 }
 
+const char *
+cfg_str_basename(const char *str)
+{
+	int	len;
+	int	i;
+
+	// If str is /aa/bb/cc, this routine returns cc
+	len = strlen(str);
+	while(len && (str[len - 1] == '/')) {
+		len--;		// Ignore trailing '/' if there are any
+	}
+	for(i = len - 1; i > 0; i--) {
+		if(str[i] == '/') {
+			return str + i + 1;
+		}
+	}
+
+	return str;
+}
+
+char *
+cfg_strncpy_dirname(char *dstptr, const char *srcptr, int dstsize)
+{
+	char	*ptr;
+	int	c;
+
+	// If srcptr is /aa/bb/cc, this routine returns /aa/bb/
+	// Copy srcptr to dstptr, ensuring there is room for a null
+	// Compatible with strncpy()--except dstptr is ALWAYS null terminated
+	ptr = dstptr;
+	while(--dstsize > 0) {
+		c = *srcptr++;
+		*ptr++ = c;
+		if(c == 0) {
+			// Remove any trailing /'s
+			ptr--;
+			while((ptr > dstptr) && (ptr[0] == '/')) {
+				ptr[0] = 0;
+				ptr--;
+			}
+			while(ptr > dstptr) {
+				if(ptr[0] == '/') {
+					ptr[1] = 0;
+					break;
+				}
+				ptr--;
+			}
+			return dstptr;
+		}
+	}
+	*ptr = 0;
+	return dstptr;
+}
+
 void
 cfg_file_readdir(const char *pathptr)
 {
@@ -2724,7 +2910,7 @@ cfg_file_readdir(const char *pathptr)
 				str[len+1] = 0;
 			}
 		}
-		ret = cfg_stat(str, &stat_buf);
+		ret = cfg_stat(str, &stat_buf, 0);
 		is_dir = 0;
 		if(ret == 0) {
 			fmt = stat_buf.st_mode & S_IFMT;
@@ -2768,7 +2954,7 @@ cfg_file_readdir(const char *pathptr)
 								CFG_PATH_MAX);
 		cfg_strlcat(&(g_cfg_tmp_path[0]), direntptr->d_name,
 								CFG_PATH_MAX);
-		ret = cfg_stat(&g_cfg_tmp_path[0], &stat_buf);
+		ret = cfg_stat(&g_cfg_tmp_path[0], &stat_buf, 0);
 		len = (int)strlen(g_cfg_tmp_path);
 		is_dir = 0;
 		is_gz = 0;
@@ -2779,6 +2965,9 @@ cfg_file_readdir(const char *pathptr)
 			is_gz = 1;
 		}
 		if((len > 4) && !strcasecmp(&g_cfg_tmp_path[len - 4], ".zip")) {
+			is_gz = 1;
+		}
+		if((len > 4) && !strcasecmp(&g_cfg_tmp_path[len - 4], ".woz")) {
 			is_gz = 1;
 		}
 		if(ret != 0) {
@@ -3059,32 +3248,36 @@ cfg_partition_selected()
 		"part:%s\n", pos, g_cfg_file_path, part_str2);
 
 	insert_disk(g_cfg_slotdrive >> 8, g_cfg_slotdrive & 0xff,
-			&(g_cfg_file_path[0]), 0, part_str2, part_num);
+			&(g_cfg_file_path[0]), 0, part_str2, part_num, 0);
 	free(part_str2);
 	g_cfg_slotdrive = -1;
 	g_cfg_select_partition = -1;
 }
 
 void
-cfg_file_update_ptr(char *str)
+cfg_file_update_ptr(char *str, int need_update)
 {
 	char	*newstr;
-	int	len;
 
-	len = (int)strlen(str) + 1;
-	newstr = malloc(len);
-	memcpy(newstr, str, len);
-	if(g_cfg_file_strptr) {
-		if(*g_cfg_file_strptr) {
-			free(*g_cfg_file_strptr);
-		}
+	newstr = kegs_malloc_str(str);
+	if(!g_cfg_file_strptr) {
+		return;
+	}
+	if(*g_cfg_file_strptr) {
+		free(*g_cfg_file_strptr);
 	}
 	*g_cfg_file_strptr = newstr;
 	if(g_cfg_file_strptr == &(g_cfg_rom_path)) {
 		printf("Updated ROM file\n");
 		load_roms_init_memory();
 	}
-	g_config_kegs_update_needed = 1;
+	if(g_cfg_file_strptr == &(g_cfg_charrom_path)) {
+		printf("Updated Char ROM file\n");
+		cfg_load_charrom();
+	}
+	if(need_update) {
+		g_config_kegs_update_needed = 1;
+	}
 }
 
 void
@@ -3092,15 +3285,18 @@ cfg_file_selected()
 {
 	struct stat stat_buf;
 	char	*str;
-	int	fmt;
+	int	fmt, stat_errno, is_cmd_key_down;
 	int	ret;
+
+	is_cmd_key_down = adb_is_cmd_key_down() && (g_cfg_slotdrive < 0xfff);
+		// Cmd-Return means create DynaPro image when using slot/drive
 
 	if(g_cfg_select_partition > 0) {
 		cfg_partition_selected();
 		return;
 	}
 
-	if(g_cfg_file_pathfield == 0) {
+	if(!is_cmd_key_down && (g_cfg_file_pathfield == 0)) {
 		// in file section area of window
 		str = g_cfg_dirlist.direntptr[g_cfg_dirlist.curent].name;
 		if(!strcmp(str, "../")) {
@@ -3119,45 +3315,51 @@ cfg_file_selected()
 							CFG_PATH_MAX);
 	}
 
-	ret = cfg_stat(&g_cfg_file_path[0], &stat_buf);
+	ret = cfg_stat(&g_cfg_file_path[0], &stat_buf, 0);
+	stat_errno = errno;
 	fmt = stat_buf.st_mode & S_IFMT;
 	cfg_printf("Stat'ing %s, st_mode is: %08x\n", &g_cfg_file_path[0],
 			(int)stat_buf.st_mode);
 
-	if(ret != 0) {
-		if(g_cfg_newdisk_select) {
+	if((ret == 0) && (fmt == S_IFDIR) && is_cmd_key_down) {
+		// Make a new DynaPro disk
+		cfg_insert_disk_dynapro(g_cfg_slotdrive >> 8,
+				g_cfg_slotdrive & 0xff, &g_cfg_file_path[0]);
+		g_cfg_slotdrive = -1;		// End file selection
+	} else if(g_cfg_newdisk_select && (g_cfg_newdisk_type == 3) &&
+			g_cfg_file_pathfield && (fmt == S_IFDIR)) {
+		// Special handling for Dynamic ProDOS directories.  User hit
+		//  return in the Path field on a directory, use this directory
+		cfg_create_new_image();
+	} if(ret != 0) {
+		if(g_cfg_newdisk_select && (g_cfg_newdisk_type != 3)) {
 			// This looks good, a new file name was entered
-			if(errno == ENOENT) {
+			if(stat_errno == ENOENT) {
 				cfg_create_new_image();
 			} else {
 				printf("Unknown errno:%d while checking %s\n",
-						errno, &g_cfg_file_path[0]);
+					stat_errno, &g_cfg_file_path[0]);
 			}
 		} else {
 			printf("stat %s returned %d, errno: %d\n",
-					&g_cfg_file_path[0], ret, errno);
+					&g_cfg_file_path[0], ret, stat_errno);
+		}
+	} else if(fmt == S_IFDIR) {
+		/* it's a directory */
+		cfg_strncpy(&g_cfg_file_curpath[0], &g_cfg_file_path[0],
+								CFG_PATH_MAX);
+	} else if(g_cfg_newdisk_select) {
+		// Do not allow selecting files, just ignore it
+	} else if(g_cfg_slotdrive < 0xfff) {
+		/* select it */
+		ret = cfg_maybe_insert_disk(g_cfg_slotdrive >> 8,
+				g_cfg_slotdrive & 0xff, &g_cfg_file_path[0]);
+		if(ret > 0) {
+			g_cfg_slotdrive = -1;
 		}
 	} else {
-		if(fmt == S_IFDIR) {
-			/* it's a directory */
-			cfg_strncpy(&g_cfg_file_curpath[0], &g_cfg_file_path[0],
-						CFG_PATH_MAX);
-		} else if(g_cfg_newdisk_select) {
-			// Do not allow selecting files, just ignore it
-		} else {
-			/* select it */
-			if(g_cfg_slotdrive < 0xfff) {
-				ret = cfg_maybe_insert_disk(g_cfg_slotdrive>>8,
-					g_cfg_slotdrive & 0xff,
-					&g_cfg_file_path[0]);
-				if(ret > 0) {
-					g_cfg_slotdrive = -1;
-				}
-			} else {
-				cfg_file_update_ptr(&g_cfg_file_path[0]);
-				g_cfg_slotdrive = -1;
-			}
-		}
+		cfg_file_update_ptr(&g_cfg_file_path[0], 1);
+		g_cfg_slotdrive = -1;
 	}
 }
 
@@ -3225,6 +3427,8 @@ cfg_file_handle_key(int key)
 	case 0x09:	/* tab */
 		g_cfg_file_pathfield = !g_cfg_file_pathfield;
 		if(g_cfg_select_partition > 0) {
+			// If selecting file inside zip or partition, don't
+			//  allow editing of the Path info
 			g_cfg_file_pathfield = 0;
 		}
 		break;
@@ -3333,7 +3537,11 @@ cfg_draw_menu()
 	}
 	if(g_cfg_slotdrive >= 0) {
 		cfg_printf("  Edit Path: \bTAB\b");
-		if(g_cfg_newdisk_select) {
+		if((g_cfg_newdisk_type == 3) || !g_cfg_newdisk_select) {
+			// Dynamic ProDOS, select a directory
+			cfg_printf("  (\bCmd\b-\bEnter\b for DynaPro)");
+		}
+		if(g_cfg_newdisk_select && (g_cfg_newdisk_type != 3)) {
 			cfg_printf("  (Enter new name on Path)");
 		}
 	}

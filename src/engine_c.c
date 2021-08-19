@@ -1,4 +1,4 @@
-const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.82 2021-06-29 22:44:29+00 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.84 2021-08-17 00:04:28+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -13,6 +13,8 @@ const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.82 2021-06-29 22:44:
 /************************************************************************/
 
 #include "defc.h"
+
+// PSR[7:0] is NVMXDIZC
 
 #if 0
 /* define FCYCS_PTR_FCYCLES_ROUND_SLOW to get accurate 1MHz write to slow mem*/
@@ -90,6 +92,17 @@ int bogus[] = {
 #define	GET_1BYTE_ARG	arg = arg_ptr[1];
 #define	GET_2BYTE_ARG	arg = arg_ptr[1] + (arg_ptr[2] << 8);
 #define	GET_3BYTE_ARG	arg = arg_ptr[1] + (arg_ptr[2] << 8) + (arg_ptr[3]<<16);
+
+#define LOG_DATA_MACRO_ACT(in_addr, in_val, in_size, in_stat)		\
+		g_log_data_ptr->dcycs = fcycles + g_last_vbl_dcycs;	\
+		g_log_data_ptr->stat = in_stat;				\
+		g_log_data_ptr->addr = in_addr;				\
+		g_log_data_ptr->val = in_val;				\
+		g_log_data_ptr->size = in_size;				\
+		g_log_data_ptr++;					\
+		if(g_log_data_ptr >= g_log_data_end_ptr) {		\
+			g_log_data_ptr = g_log_data_start_ptr;		\
+		}
 
 /* HACK HACK HACK */
 #define	UPDATE_PSR(dummy, old_psr)				\
@@ -540,29 +553,26 @@ get_memory24_c(word32 addr)
 }
 
 void
-set_memory_c(word32 addr, word32 val)
+set_memory_c(word32 addr, word32 val, int do_log)
 {
-	byte	*stat;
-	byte	*ptr;
-	double	fcycles, fcycles_tmp1;
-	double	fplus_1;
-	double	fplus_x_m1;
+	byte	*stat, *ptr;
+	double	fcycles, fcycles_tmp1, fplus_1, fplus_x_m1;
 	word32	wstat;
 
 	fcycles = g_cur_dcycs - g_last_vbl_dcycs;
 	fplus_1 = 0;
 	fplus_x_m1 = 0;
 	SET_MEMORY8(addr, val);
+	if(g_log_pc_enable && do_log) {
+		LOG_DATA_MACRO_ACT(addr, val, 8, stat)
+	}
 }
 
 void
-set_memory16_c(word32 addr, word32 val)
+set_memory16_c(word32 addr, word32 val, int do_log)
 {
-	byte	*stat;
-	byte	*ptr;
-	double	fcycles, fcycles_tmp1;
-	double	fplus_1, fplus_2;
-	double	fplus_x_m1;
+	byte	*stat, *ptr;
+	double	fcycles, fcycles_tmp1, fplus_1, fplus_2, fplus_x_m1;
 	word32	wstat;
 
 	fcycles = g_cur_dcycs - g_last_vbl_dcycs;
@@ -570,14 +580,17 @@ set_memory16_c(word32 addr, word32 val)
 	fplus_2 = 0;
 	fplus_x_m1 = 0;
 	SET_MEMORY16(addr, val, 0);
+	if(g_log_pc_enable && do_log) {
+		LOG_DATA_MACRO_ACT(addr, val, 16, stat)
+	}
 }
 
 void
 set_memory24_c(word32 addr, word32 val)
 {
-	set_memory_c(addr, val);
-	set_memory_c(addr + 1, val >> 8);
-	set_memory_c(addr + 2, val >> 16);
+	set_memory_c(addr, val, 1);
+	set_memory_c(addr + 1, val >> 8, 1);
+	set_memory_c(addr + 2, val >> 16, 1);
 }
 
 word32
@@ -913,15 +926,7 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 		g_log_pc_ptr = tmp_pc_ptr;
 
 #define LOG_DATA_MACRO(in_addr, in_val, in_size, in_stat)		\
-		g_log_data_ptr->dcycs = fcycles + g_last_vbl_dcycs;	\
-		g_log_data_ptr->stat = in_stat;				\
-		g_log_data_ptr->addr = in_addr;				\
-		g_log_data_ptr->val = in_val;				\
-		g_log_data_ptr->size = in_size;				\
-		g_log_data_ptr++;					\
-		if(g_log_data_ptr >= g_log_data_end_ptr) {		\
-			g_log_data_ptr = g_log_data_start_ptr;		\
-		}
+		LOG_DATA_MACRO_ACT(in_addr, in_val, in_size, in_stat)
 
 #undef ACC8
 #undef IS_ACC16

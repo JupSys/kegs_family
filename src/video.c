@@ -1,4 +1,4 @@
-const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.177 2021-06-30 02:04:09+00 kentd Exp $";
+const char rcsid_video_c[] = "@(#)$KmKId: video.c,v 1.180 2021-08-19 03:37:51+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -424,8 +424,6 @@ video_init(int mdepth)
 		g_pixels_widened[i] = val1;
 	}
 
-	prepare_a2_font();
-
 	g_new_a2_stat_cur_line = 0;
 
 	vid_printf("Zeroing out video memory, mdepth:%d\n", mdepth);
@@ -435,6 +433,7 @@ video_init(int mdepth)
 	}
 
 	/* create g_dhires_convert[] array */
+	// Look at patent #4786893 for details on VGC and dhr
 	for(i = 0; i < 4096; i++) {
 		/* Convert index bits 11:0 where 3:0 is the previous color */
 		/*  and 7:4 is the current color to translate */
@@ -671,7 +670,8 @@ change_display_mode(double dcycs)
 	}
 	tmp_line = MY_MIN(199, line);
 
-	dbg_log_info(dcycs, (g_cur_a2_stat << 12) | (line & 0xfff), 0, 0x102);
+	dbg_log_info(dcycs, ((word32)g_cur_a2_stat << 12) | (line & 0xfff), 0,
+									0x102);
 
 	video_update_all_stat_through_line(tmp_line);
 
@@ -1672,7 +1672,7 @@ video_update_through_line(int line)
 					must_reparse = 1;
 					g_mode_line[i] = new_stat;
 				}
-				mask = 1 << (line >> 3);
+				mask = 1 << (i >> 3);
 				g_full_refresh_needed |= mask;
 				g_a2_screen_buffer_changed |= mask;
 			}
@@ -1805,6 +1805,32 @@ prepare_a2_font()
 					val2 |= 3;
 				}
 				val0 = val0 >> 1;
+			}
+			g_a2font_bits[i][j] = (val2 << 8) | val1;
+		}
+	}
+}
+
+void
+prepare_a2_romx_font(byte *font_ptr)
+{
+	word32	val0, val1, val2;
+	int	i, j, k;
+
+	// ROMX file
+	for(i = 0; i < 256; i++) {
+		for(j = 0; j < 8; j++) {
+			val0 = font_ptr[i*8 + j];
+			val1 = 0;		// 80-column bits
+			val2 = 0;		// 40-column bits (doubled)
+			for(k = 0; k < 7; k++) {
+				val1 = val1 << 1;
+				val2 = val2 << 2;
+				if((val0 & 0x40) == 0) {
+					val1 |= 1;
+					val2 |= 3;
+				}
+				val0 = val0 << 1;
 			}
 			g_a2font_bits[i][j] = (val2 << 8) | val1;
 		}

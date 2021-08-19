@@ -1,4 +1,4 @@
-const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.151 2021-06-30 02:05:20+00 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.160 2021-08-12 04:03:08+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -109,10 +109,12 @@ iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525)
 	dsk->dcycs_last_read = 0.0;
 	dsk->raw_data = 0;
 	dsk->wozinfo_ptr = 0;
+	dsk->dynapro_info_ptr = 0;
 	dsk->name_ptr = 0;
 	dsk->partition_name = 0;
 	dsk->partition_num = -1;
 	dsk->fd = -1;
+	dsk->dynapro_size = 0;
 	dsk->raw_dsize = 0;
 	dsk->dimage_start = 0;
 	dsk->dimage_size = 0;
@@ -268,8 +270,10 @@ iwm_flush_disk_to_unix(Disk *dsk)
 	byte	buffer[0x4000];
 	int	ret;
 
-	if((dsk->disk_dirty == 0) || (dsk->write_through_to_unix == 0) ||
-							(dsk->raw_data != 0)) {
+	if((dsk->disk_dirty == 0) || (dsk->write_through_to_unix == 0)) {
+		return;
+	}
+	if((dsk->raw_data != 0) && !dsk->dynapro_info_ptr) {
 		return;
 	}
 
@@ -290,9 +294,13 @@ iwm_flush_disk_to_unix(Disk *dsk)
 
 /* Check for dirty disk 3 times a second */
 
+int	g_iwm_dynapro_last_vbl_count = 0;
+
 void
 iwm_vbl_update()
 {
+	int	i;
+
 	if(g_iwm.motor_on && g_iwm.motor_off) {
 		if(g_iwm.motor_off_vbl_count <= g_vbl_count) {
 			printf("Disk timer expired, drive off: %08x\n",
@@ -300,6 +308,16 @@ iwm_vbl_update()
 			g_iwm.motor_on = 0;
 			g_iwm.motor_off = 0;
 		}
+	}
+	if((g_vbl_count - g_iwm_dynapro_last_vbl_count) >= 60) {
+		for(i = 0; i < 2; i++) {
+			dynapro_try_fix_damaged_disk(&(g_iwm.drive525[i]));
+			dynapro_try_fix_damaged_disk(&(g_iwm.drive35[i]));
+		}
+		for(i = 0; i < MAX_C7_DISKS; i++) {
+			dynapro_try_fix_damaged_disk(&(g_iwm.smartport[i]));
+		}
+		g_iwm_dynapro_last_vbl_count = g_vbl_count;
 	}
 }
 
@@ -766,6 +784,10 @@ iwm_do_action35(double dcycs)
 	drive = g_iwm.drive_select;
 	dsk = &(g_iwm.drive35[drive]);
 
+	if(dcycs || 1) {
+		state = 0;		// Use dcycs
+	}
+
 	if(g_iwm.motor_on) {
 		/* Perform action */
 		state = (g_iwm.iwm_phase[1] << 3) + (g_iwm.iwm_phase[0] << 2) +
@@ -801,8 +823,7 @@ iwm_do_action35(double dcycs)
 			g_iwm.motor_on35 = 0;
 			break;
 		case 0x0d:	/* eject disk */
-			halt_printf("Action 0x0d, will eject disk\n");
-			iwm_show_track(-1, -1, dcycs);
+			printf("Action 0x0d, will eject disk\n");
 			iwm_eject_disk(dsk);
 			break;
 		case 0x02:
@@ -1660,7 +1681,7 @@ void
 iwm_recalc_sync_from(Disk *dsk, word32 qbit_pos, double dcycs)
 {
 	byte	*bptr, *sync_ptr;
-	word32	track_bits, bits, val, mask, last_sync, sync;
+	word32	track_bits, bits, val, mask, last_sync, sync, hunting;
 	word32	bit_pos, bit_end, val1, val2, sync_0_mask;
 	int	byte_pos, matches, wraps, bad_cnt;
 
@@ -1683,6 +1704,7 @@ iwm_recalc_sync_from(Disk *dsk, word32 qbit_pos, double dcycs)
 	matches = 0;
 	wraps = 0;
 	last_sync = 0x17;
+	hunting = 0;		// Not searching for next 1 bit
 	while(1) {
 		if(bit_pos >= track_bits) {
 			bit_pos -= track_bits;
@@ -1714,7 +1736,7 @@ iwm_recalc_sync_from(Disk *dsk, word32 qbit_pos, double dcycs)
 		sync_0_mask = 0;
 		if(val2) {
 			// There were too many 0's in this byte
-			if(val2 > mask) {
+			if((val2 > mask) && !hunting) {
 				// These 0's would interfere with the previous
 				//  nibble.
 				sync_0_mask |= 0x20;
@@ -1726,21 +1748,23 @@ iwm_recalc_sync_from(Disk *dsk, word32 qbit_pos, double dcycs)
 				sync_0_mask |= 0x10;
 			}
 #if 0
-			printf("byte_pos:%04x, val2:%03x, sync_0:%02x "
-				"dcycs:%f\n", byte_pos, val2, sync_0_mask,
-				dcycs);
+				printf("byte_pos:%04x, val2:%03x, sync_0:%02x "
+					"dcycs:%f\n", byte_pos, val2,
+					sync_0_mask, dcycs);
+				printf("val:%02x, mask:%02x, last_sync:%02x\n",
+					val, mask, last_sync);
 #endif
 			dbg_log_info(dcycs, bit_pos * 32,
 					(byte_pos << 8) | sync_0_mask, 0xe7);
 			//g_halt_arm_move = 1;
+			//val = val | val2;		// Find some 1's
 		}
 		if(val & mask) {
 			sync = 7 - (bit_pos & 7);
 		} else {
-			if((bit_pos & 7) == 7) {
-				sync_ptr[byte_pos] = last_sync | sync_0_mask;
-			}
+			sync_ptr[byte_pos] = last_sync | sync_0_mask;
 			bit_pos++;
+			hunting = 1;
 			continue;
 		}
 		sync |= sync_0_mask;
@@ -1762,6 +1786,7 @@ iwm_recalc_sync_from(Disk *dsk, word32 qbit_pos, double dcycs)
 #endif
 		last_sync = (sync + 8) & 0xf;
 		bit_pos += 8;
+		hunting = 0;
 	}
 
 	// printf("sync done at qbit*8=%06x\n", bit_pos * 4 * 8);
@@ -2542,6 +2567,9 @@ disk_track_to_unix(Disk *dsk, byte *outbuf)
 		return -1;
 	}
 
+	if(dsk->dynapro_info_ptr) {
+		return dynapro_write(dsk, outbuf, dunix_pos, unix_len);
+	}
 	dret = lseek(dsk->fd, dunix_pos, SEEK_SET);
 	if(dret != dunix_pos) {
 		halt_printf("lseek 525: %08llx, errno: %d\n", dret, errno);
@@ -3322,6 +3350,7 @@ iwm_eject_disk(Disk *dsk)
 		halt_printf("Try eject dsk:%s, but motor_on!\n", dsk->name_ptr);
 	}
 
+	dynapro_try_fix_damaged_disk(dsk);
 	iwm_flush_disk_to_unix(dsk);
 
 	printf("Ejecting disk: %s\n", dsk->name_ptr);
@@ -3349,6 +3378,8 @@ iwm_eject_disk(Disk *dsk)
 		free(wozinfo_ptr);
 	}
 	dsk->wozinfo_ptr = 0;
+
+	dynapro_free_dynapro_info(dsk);
 
 	/* close file, clean up dsk struct */
 	if(dsk->raw_data) {

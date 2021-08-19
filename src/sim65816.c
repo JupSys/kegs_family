@@ -1,4 +1,4 @@
-const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.419 2021-06-30 02:19:44+00 kentd Exp $";
+const char rcsid_sim65816_c[] = "@(#)$KmKId: sim65816.c,v 1.425 2021-08-19 03:38:25+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -96,7 +96,7 @@ int	g_serial_out_masking = 0;
 int	g_serial_modem[2] = { 0, 1 };
 
 int	g_config_iwm_vbl_count = 0;
-const char g_kegs_version_str[] = "1.08";
+const char g_kegs_version_str[] = "1.11";
 
 #define START_DCYCS	(0.0)
 
@@ -591,6 +591,8 @@ parse_argv(int argc, char **argv, int slashes_to_find)
 	int	skip_amt, tmp1, len;
 	int	i;
 
+	printf("Starting KEGS v%s\n", &g_kegs_version_str[0]);
+
 	// parse arguments
 	// First, Check if KEGS_BIG_ENDIAN is set correctly
 	g_word32_tmp = 0x01020304;
@@ -742,6 +744,7 @@ kegs_init(int mdepth)
 							(int)sizeof(word32));
 		return 1;
 	}
+	prepare_a2_font();		// Prepare default built-in font
 
 	iwm_init();
 	config_init();
@@ -791,7 +794,7 @@ load_roms_init_memory()
 	/*  at uninitialized $e1/15fe and if it is negative it will JMP */
 	/*  through $e1/1688 which ROM 03 left pointing to fc/0199 */
 	/* So set e1/15fe = 0 */
-	set_memory16_c(0xe115fe, 0);
+	set_memory16_c(0xe115fe, 0, 1);
 }
 
 void
@@ -1319,7 +1322,7 @@ run_a2_one_vbl()
 
 		if(g_irq_pending && !(engine.psr & 0x4)) {
 			irq_printf("taking an irq!\n");
-			take_irq(0);
+			take_irq();
 			/* Interrupt! */
 		}
 
@@ -1492,7 +1495,7 @@ remove_irq(word32 irq_mask)
 }
 
 void
-take_irq(int is_it_brk)
+take_irq()
 {
 	word32	new_kpc;
 	word32	va;
@@ -1511,52 +1514,35 @@ take_irq(int is_it_brk)
 
 	if(engine.psr & 0x100) {
 		/* Emulation */
-		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff);
+		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff, 1);
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
-		set_memory_c(engine.stack, engine.kpc & 0xff);
+		set_memory_c(engine.stack, engine.kpc & 0xff, 1);
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
-		set_memory_c(engine.stack, (engine.psr & 0xef)|(is_it_brk<<4));
+		set_memory_c(engine.stack, (engine.psr & 0xef), 1);
 			/* Clear B bit in psr on stack */
 		engine.stack = ((engine.stack -1) & 0xff) + 0x100;
 
 		va = 0xfffffe;
-		if((g_c035_shadow_reg & 0x40) || (g_rom_version == 0)) {
-			// I/O shadowing off, or Apple II or //e: use RAM locs
-			va = 0x00fffe;
-		}
-
 	} else {
 		/* native */
-		set_memory_c(engine.stack, (engine.kpc >> 16) & 0xff);
+		set_memory_c(engine.stack, (engine.kpc >> 16) & 0xff, 1);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff);
+		set_memory_c(engine.stack, (engine.kpc >> 8) & 0xff, 1);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		set_memory_c(engine.stack, engine.kpc & 0xff);
+		set_memory_c(engine.stack, engine.kpc & 0xff, 1);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		set_memory_c(engine.stack, engine.psr & 0xff);
+		set_memory_c(engine.stack, engine.psr & 0xff, 1);
 		engine.stack = ((engine.stack -1) & 0xffff);
 
-		if(is_it_brk) {
-			/* break */
-			va = 0xffffe6;
-			if(g_c035_shadow_reg & 0x40) {
-				va = 0xffe6;
-			}
-		} else {
-			/* irq */
-			va = 0xffffee;
-			if(g_c035_shadow_reg & 0x40) {
-				va = 0xffee;
-			}
-		}
-
+		va = 0xffffee;
 	}
 
+	va = moremem_fix_vector_pull(va);
 	new_kpc = get_memory_c(va);
 	new_kpc = new_kpc + (get_memory_c(va + 1) << 8);
 
@@ -2204,7 +2190,7 @@ clear_fatal_logs()
 }
 
 char *
-kegs_malloc_str(char *in_str)
+kegs_malloc_str(const char *in_str)
 {
 	char	*str;
 	int	len;

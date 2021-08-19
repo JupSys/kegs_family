@@ -1,8 +1,8 @@
-const char rcsid_scc_macdriver_c[] = "@(#)$KmKId: scc_macdriver.c,v 1.10 2021-06-13 14:59:02+00 kentd Exp $";
+const char rcsid_scc_macdriver_c[] = "@(#)$KmKId: scc_macdriver.c,v 1.11 2021-08-17 00:08:26+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/

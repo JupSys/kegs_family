@@ -1,4 +1,4 @@
-const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.139 2021-06-30 02:23:40+00 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.140 2021-08-01 15:47:37+00 kentd Exp $";
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
@@ -798,8 +798,8 @@ sound_play(double dsamps)
 					rptr->cur_acc = cur_acc;
 					rptr->samps_left = 0;
 					DOC_LOG("end or 0", osc, cur_dsamp,
-						(pos << 16) + ((i &0xff) << 8) +
-						val);
+						((pos & 0xffffU) << 16) |
+						((i &0xff) << 8) | val);
 					doc_sound_end(osc, val, cur_dsamp,
 								dsamp_now);
 					val = 0;

@@ -1,5 +1,5 @@
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.23 2021-06-30 02:06:49+00 kentd Exp $";
+const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.30 2021-08-10 13:47:06+00 kentd Exp $";
 #endif
 
 /************************************************************************/
@@ -23,8 +23,9 @@ const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.23 2021-06-30 02:06:49+00 kent
 // image_type settings.  0 means unknown type
 #define DSK_TYPE_PRODOS		1
 #define DSK_TYPE_DOS33		2
-#define DSK_TYPE_NIB		3
-#define DSK_TYPE_WOZ		4
+#define DSK_TYPE_DYNAPRO	3
+#define DSK_TYPE_NIB		4
+#define DSK_TYPE_WOZ		5
 
 STRUCT(Trk) {
 	byte	*raw_bptr;
@@ -47,14 +48,53 @@ STRUCT(Woz_info) {
 	byte	*meta_bptr;
 };
 
+typedef struct Dynapro_map_st Dynapro_map;
+
+STRUCT(Dynapro_file) {
+	Dynapro_file *next_ptr;
+	Dynapro_file *parent_ptr;
+	Dynapro_file *subdir_ptr;
+	char	*unix_path;
+	byte	*buffer_ptr;
+	byte	prodos_name[17];	// First byte is len, nul at end
+	word32	dir_byte;		// Byte address of this file's dir ent
+	word32	eof;
+	word32	blocks_used;
+	word32	creation_time;
+	word32	lastmod_time;
+	word16	upper_lower;		// Version/Min_version: lowercase flags
+	word16	key_block;
+	word16	aux_type;
+	word16	header_pointer;
+	word16	map_first_block;
+	byte	file_type;
+	byte	modified_flag;
+	byte	damaged;
+};
+
+struct Dynapro_map_st {
+	Dynapro_file *file_ptr;
+	word16	next_map_block;
+	word16	modified;
+};
+
+STRUCT(Dynapro_info) {
+	char	*root_path;
+	Dynapro_file *volume_ptr;
+	Dynapro_map *block_map_ptr;
+	int	damaged;
+};
+
 STRUCT(Disk) {
 	double	dcycs_last_read;
 	byte	*raw_data;
 	Woz_info *wozinfo_ptr;
+	Dynapro_info *dynapro_info_ptr;
 	char	*name_ptr;
 	char	*partition_name;
 	int	partition_num;
 	int	fd;
+	int	dynapro_size;
 	dword64	raw_dsize;
 	dword64	dimage_start;
 	dword64	dimage_size;

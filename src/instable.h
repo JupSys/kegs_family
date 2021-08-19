@@ -1,8 +1,8 @@
-// "@(#)$KmKId: instable.h,v 1.115 2021-04-05 18:19:05+00 kentd Exp $"
+// "@(#)$KmKId: instable.h,v 1.117 2021-08-17 00:08:36+00 kentd Exp $"
 
 /************************************************************************/
 /*			KEGS: Apple //gs Emulator			*/
-/*			Copyright 2002-2020 by Kent Dickey		*/
+/*			Copyright 2002-2021 by Kent Dickey		*/
 /*									*/
 /*	This code is covered by the GNU GPL v3				*/
 /*	See the file COPYING.txt or https://www.gnu.org/licenses/	*/
@@ -16,18 +16,21 @@ case 0x00:			/*  brk */
 	GET_1BYTE_ARG;
 	g_num_brk++;
 	INC_KPC_2;
+	psr = (psr & (~0x82)) | (neg7 & 0x80) | ((!zero) << 1);
 	if(psr & 0x100) {
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xfffe, kpc, 0);
+		tmp1 = 0xfffffe;
 		dbank = 0;
 	} else {
 		PUSH8(kpc >> 16);
 		PUSH16(kpc);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xffe6, kpc, 0);
+		tmp1 = 0xffffe6;
 		halt_printf("Halting for native break!\n");
 	}
+	tmp1 = moremem_fix_vector_pull(tmp1);
+	GET_MEMORY16(tmp1, kpc, 0);
 	kpc = kpc & 0xffff;
 	psr |= 0x4;
 	psr &= ~(0x8);
@@ -41,18 +44,21 @@ case 0x01:			/*  ORA (Dloc,X) */
 case 0x02:			/*  COP */
 	g_num_cop++;
 	INC_KPC_2;
+	psr = (psr & ~0x82) | (neg7 & 0x80) | ((!zero) << 1);
 	if(psr & 0x100) {
 		halt_printf("Halting for emul COP at %04x\n", kpc);
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xfff4, kpc, 0);
+		tmp1 = 0xfffff4;
 		dbank = 0;
 	} else {
 		PUSH8(kpc >> 16);
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xffe4, kpc, 0);
+		tmp1 = 0xffffe4;
 	}
+	tmp1 = moremem_fix_vector_pull(tmp1);
+	GET_MEMORY16(tmp1, kpc, 0);
 	kpc = kpc & 0xffff;
 	psr |= 4;
 	psr &= ~(0x8);

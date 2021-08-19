@@ -11,7 +11,7 @@
 /************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_protos_base_h[] = "@(#)$KmKId: protos_base.h,v 1.64 2021-06-30 02:06:58+00 kentd Exp $";
+const char rcsid_protos_base_h[] = "@(#)$KmKId: protos_base.h,v 1.82 2021-08-19 03:41:26+00 kentd Exp $";
 #endif
 
 /* xdriver.c and macdriver.c and windriver.c */
@@ -77,7 +77,8 @@ word32 adb_read_c025(void);
 int adb_is_cmd_key_down(void);
 int adb_is_option_key_down(void);
 void adb_increment_speed(void);
-void adb_physical_key_update(Kimage *kimage_ptr, int a2code, int is_up, int shift_down, int ctrl_down, int lock_down);
+int adb_ascii_to_a2code(int unicode_c, int a2code, int *shift_down_ptr);
+void adb_physical_key_update(Kimage *kimage_ptr, int a2code, word32 unicode_c, int is_up, int shift_down, int ctrl_down, int lock_down);
 void adb_virtual_key_update(int a2code, int is_up);
 void adb_kbd_repeat_off(void);
 
@@ -93,8 +94,8 @@ void set_memory24_pieces_stub(word32 addr, word32 val, double *fcycs_ptr, Fplus 
 word32 get_memory_c(word32 addr);
 word32 get_memory16_c(word32 addr);
 word32 get_memory24_c(word32 addr);
-void set_memory_c(word32 addr, word32 val);
-void set_memory16_c(word32 addr, word32 val);
+void set_memory_c(word32 addr, word32 val, int do_log);
+void set_memory16_c(word32 addr, word32 val, int do_log);
 void set_memory24_c(word32 addr, word32 val);
 word32 do_adc_sbc8(word32 in1, word32 in2, word32 psr, int sub);
 word32 do_adc_sbc16(word32 in1, word32 in2, word32 psr, int sub);
@@ -134,11 +135,13 @@ void cfg_text_screen_dump(void);
 void config_vbl_update(int doit_3_persec);
 void config_parse_option(char *buf, int pos, int len, int line);
 void config_parse_bram(char *buf, int pos, int len);
+void cfg_int_updated(int *iptr, int new_val, int old_val);
+void cfg_load_charrom(void);
 void config_load_roms(void);
 void config_parse_config_kegs_file(void);
 void config_generate_config_kegs_name(char *outstr, int maxlen, Disk *dsk, int with_extras);
 void config_write_config_kegs_file(void);
-void insert_disk(int slot, int drive, const char *name, int ejected, const char *partition_name, int part_num);
+void insert_disk(int slot, int drive, const char *name, int ejected, const char *partition_name, int part_num, word32 dynamic_size);
 dword64 cfg_get_fd_size(int fd);
 word32 cfg_read_from_fd(int fd, byte *bufptr, dword64 dpos, word32 size);
 word32 cfg_write_to_fd(int fd, byte *bufptr, dword64 dpos, word32 size);
@@ -149,7 +152,8 @@ int cfg_partition_find_by_name_or_num(Disk *dsk, const char *in_partnamestr, int
 int cfg_partition_make_list_from_name(const char *namestr);
 int cfg_partition_make_list(int fd);
 int cfg_maybe_insert_disk(int slot, int drive, const char *namestr);
-int cfg_stat(char *path, struct stat *sb);
+void cfg_insert_disk_dynapro(int slot, int drive, const char *name);
+int cfg_stat(char *path, struct stat *sb, int do_lstat);
 word32 cfg_get_le16(byte *bptr);
 word32 cfg_get_le32(byte *bptr);
 dword64 cfg_get_le64(byte *bptr);
@@ -163,7 +167,7 @@ void cfg_cleol(void);
 void cfg_putchar(int c);
 void cfg_printf(const char *fmt, ...);
 void cfg_print_dnum(dword64 dnum, int max_len);
-void cfg_get_disk_name(char *outstr, int maxlen, int type_ext, int with_extras);
+int cfg_get_disk_name(char *outstr, int maxlen, int type_ext, int with_extras);
 void cfg_parse_menu(Cfg_menu *menuptr, int menu_pos, int highlight_pos, int change);
 void cfg_get_base_path(char *pathptr, const char *inptr, int go_up);
 void cfg_name_new_image(void);
@@ -176,12 +180,14 @@ int cfg_dirent_sortfn(const void *obj1, const void *obj2);
 int cfg_str_match(const char *str1, const char *str2, int len);
 int cfg_strlcat(char *dstptr, const char *srcptr, int dstsize);
 char *cfg_strncpy(char *dstptr, const char *srcptr, int dstsize);
+const char *cfg_str_basename(const char *str);
+char *cfg_strncpy_dirname(char *dstptr, const char *srcptr, int dstsize);
 void cfg_file_readdir(const char *pathptr);
 char *cfg_shorten_filename(const char *in_ptr, int maxlen);
 void cfg_fix_topent(Cfg_listhdr *listhdrptr);
 void cfg_file_draw(void);
 void cfg_partition_selected(void);
-void cfg_file_update_ptr(char *str);
+void cfg_file_update_ptr(char *str, int need_update);
 void cfg_file_selected(void);
 void cfg_file_handle_key(int key);
 void cfg_draw_menu(void);
@@ -399,6 +405,7 @@ void setup_pageinfo(void);
 void show_bankptrs_bank0rdwr(void);
 void show_bankptrs(int bnk);
 void show_addr(byte *ptr);
+word32 moremem_fix_vector_pull(word32 addr);
 int io_read(word32 loc, double *cyc_ptr);
 void io_write(word32 loc, int val, double *cyc_ptr);
 word32 get_lines_since_vbl(double dcycs);
@@ -474,7 +481,7 @@ int run_16ms(void);
 int run_a2_one_vbl(void);
 void add_irq(word32 irq_mask);
 void remove_irq(word32 irq_mask);
-void take_irq(int is_it_brk);
+void take_irq(void);
 void show_dtime_array(void);
 void update_60hz(double dcycs, double dtime_now);
 void do_vbl_int(void);
@@ -493,7 +500,7 @@ int fatal_printf(const char *fmt, ...);
 int kegs_vprintf(const char *fmt, va_list ap);
 word32 must_write(int fd, byte *bufptr, word32 size);
 void clear_fatal_logs(void);
-char *kegs_malloc_str(char *in_str);
+char *kegs_malloc_str(const char *in_str);
 
 
 /* smartport.c */
@@ -602,6 +609,75 @@ int undeflate_zipfile_search(byte *bptr, byte *cmp_ptr, int size, int cmp_len, i
 int undeflate_zipfile_make_list(int fd);
 
 
+/* dynapro.c */
+word32 dynapro_get_word32(byte *bptr);
+word32 dynapro_get_word24(byte *bptr);
+word32 dynapro_get_word16(byte *bptr);
+void dynapro_set_word24(byte *bptr, word32 val);
+void dynapro_set_word32(byte *bptr, word32 val);
+void dynapro_set_word16(byte *bptr, word32 val);
+Dynapro_file *dynapro_alloc_file(void);
+void dynapro_free_file(Dynapro_file *fileptr, int check_map);
+void dynapro_free_recursive_file(Dynapro_file *fileptr, int check_map);
+void dynapro_free_dynapro_info(Disk *dsk);
+word32 dynapro_find_free_block(Disk *dsk);
+byte *dynapro_malloc_file(char *path_ptr, dword64 *dsize_ptr, int extra_size);
+void dynapro_join_path_and_file(char *outstr, const char *unix_path, const char *str, int path_max);
+word32 dynapro_fill_fileptr_from_prodos(Disk *dsk, Dynapro_file *fileptr, char *buf32_ptr, word32 dir_byte);
+word32 dynapro_diff_fileptrs(Dynapro_file *oldfileptr, Dynapro_file *newfileptr);
+word32 dynapro_do_one_dir_entry(Disk *dsk, Dynapro_file *fileptr, Dynapro_file *localfile_ptr, char *buf32_ptr, word32 dir_byte);
+void dynapro_fix_damaged_entry(Disk *dsk, Dynapro_file *fileptr);
+void dynapro_try_fix_damage(Disk *dsk, Dynapro_file *fileptr);
+void dynapro_try_fix_damaged_disk(Disk *dsk);
+void dynapro_new_unix_path(Dynapro_file *fileptr, const char *path_str, const char *name_str);
+Dynapro_file *dynapro_process_write_dir(Disk *dsk, Dynapro_file *parent_ptr, Dynapro_file **head_ptr_ptr, word32 dir_byte);
+void dynapro_handle_write_dir(Disk *dsk, Dynapro_file *parent_ptr, Dynapro_file *head_ptr, word32 dir_byte);
+word32 dynapro_process_write_file(Disk *dsk, Dynapro_file *fileptr);
+void dynapro_handle_write_file(Disk *dsk, Dynapro_file *fileptr);
+void dynapro_handle_changed_entry(Disk *dsk, Dynapro_file *fileptr);
+word32 dynapro_validate_header(Disk *dsk, Dynapro_file *fileptr, word32 dir_byte, word32 parent_dir_byte);
+word32 dynapro_write_to_unix_file(const char *unix_path, byte *data_ptr, word32 size);
+void dynapro_unmap_file(Disk *dsk, Dynapro_file *fileptr);
+void dynapro_unlink_file(Dynapro_file *fileptr);
+void dynapro_erase_free_entry(Disk *dsk, Dynapro_file *fileptr);
+void dynapro_erase_free_dir(Disk *dsk, Dynapro_file *fileptr);
+void dynapro_mark_damaged(Disk *dsk, Dynapro_file *fileptr);
+int dynapro_write(Disk *dsk, byte *bufptr, dword64 doffset, word32 size);
+void dynapro_debug_update(Disk *dsk);
+void dynapro_debug_map(Disk *dsk, const char *str);
+void dynapro_debug_recursive_file_map(Dynapro_file *fileptr);
+void dynapro_validate_init_freeblks(byte *freeblks_ptr, word32 num_blocks);
+word32 dynapro_validate_freeblk(Disk *dsk, byte *freeblks_ptr, word32 block);
+word32 dynapro_validate_file(Disk *dsk, byte *freeblks_ptr, word32 block_num, int level);
+word32 dynapro_validate_dir(Disk *dsk, byte *freeblks_ptr, word32 dir_byte, word32 parent_dir_byte, word32 exp_blocks_used);
+int dynapro_validate_disk(Disk *dsk);
+word32 dynapro_unix_to_prodos_time(const time_t *time_ptr);
+int dynapro_create_prodos_name(Dynapro_file *newfileptr, Dynapro_file *matchptr, word32 storage_type);
+Dynapro_file *dynapro_new_unix_file(const char *path, Dynapro_file *parent_ptr, Dynapro_file *match_ptr, word32 storage_type);
+int dynapro_create_dir(Disk *dsk, char *unix_path, Dynapro_file *parent_ptr, word32 dir_byte);
+word32 dynapro_add_file_entry(Disk *dsk, Dynapro_file *fileptr, Dynapro_file *head_ptr, word32 dir_byte, word32 inc);
+word32 dynapro_file_from_unix(Disk *dsk, Dynapro_file *fileptr);
+word32 dynapro_prep_image(Disk *dsk, const char *dir_path, word32 num_blocks);
+word32 dynapro_map_one_file_block(Disk *dsk, Dynapro_file *fileptr, word32 block_num, word32 file_offset);
+word32 dynapro_map_file_blocks(Disk *dsk, Dynapro_file *fileptr, word32 block_num, int level, word32 file_offset);
+word32 dynapro_map_dir_blocks(Disk *dsk, Dynapro_file *fileptr);
+word32 dynapro_build_map(Disk *dsk, Dynapro_file *fileptr);
+int dynapro_mount(Disk *dsk, char *dir_path, word32 num_blocks);
+
+
+/* dyna_type.c */
+word32 dynatype_scan_extensions(const char *str);
+word32 dynatype_find_prodos_type(const char *str);
+const char *dynatype_find_file_type(word32 file_type);
+void dynatype_detect_file_type(Dynapro_file *fileptr, const char *path_ptr);
+int dynatype_get_extension(const char *str, char *out_ptr, int buf_len);
+int dynatype_comma_arg(const char *str, word32 *type_or_aux_ptr);
+void dynatype_fix_unix_name(Dynapro_file *fileptr, char *outbuf_ptr, int path_max);
+
+
+/* dyna_filt.c */
+
+
 /* video.c */
 void video_set_red_mask(word32 red_mask);
 void video_set_green_mask(word32 green_mask);
@@ -639,6 +715,7 @@ void video_update_event_line(int line);
 void video_update_through_line(int line);
 void video_refresh_line(int line, int must_reparse);
 void prepare_a2_font(void);
+void prepare_a2_romx_font(byte *font_ptr);
 void video_add_rect(Kimage *kimage_ptr, int x, int y, int width, int height);
 void video_add_a2_rect(int start_line, int end_line, int left_pix, int right_pix);
 void video_form_change_rects(void);
