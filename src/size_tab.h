@@ -1,18 +1,15 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
 #ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$Header: size_tab.h,v 1.11 97/03/31 22:57:16 kentd Exp $"
+	.stringz "@(#)$KmKId: size_tab.h,v 1.13 2002-11-19 03:10:38-05 kadickey Exp $"
 #else
 
 	.word	inst00_SYM+1	/* brk */

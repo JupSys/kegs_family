@@ -1,28 +1,25 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_sound_h[] = "@(#)$Header: sound.h,v 1.7 99/10/31 01:13:38 kentd Exp $";
+const char rcsid_sound_h[] = "@(#)$KmKId: sound.h,v 1.17 2003-11-21 15:15:57-05 kentd Exp $";
 #endif
 
-#ifndef _WIN32
-#include <sys/ipc.h>
-#include <sys/shm.h>
+#if !defined(_WIN32) && !defined(__CYGWIN__)
+# include <sys/ipc.h>
+# include <sys/shm.h>
 #endif
 
-#define SOUND_SHM_SAMP_SIZE	(8*1024)
+#define SOUND_SHM_SAMP_SIZE		(32*1024)
 
-#define SAMPLE_SIZE		    2
+#define SAMPLE_SIZE		2
 #define NUM_CHANNELS		2
 #define SAMPLE_CHAN_SIZE	(SAMPLE_SIZE * NUM_CHANNELS)
 
@@ -47,4 +44,17 @@ STRUCT(Doc_reg) {
 	word32	wavesize;
 	word32	last_samp_val;
 };
+
+/* prototypes for win32snd_driver.c functions */
+void win32snd_init(word32 *);
+void win32snd_shutdown();
+void win32snd_shutdown();
+void child_sound_init_win32();
+int win32_send_audio(byte *ptr, int size);
+
+
+/* Prototypes for macsnd_driver.c functions */
+int mac_send_audio(byte *ptr, int in_size);
+void child_sound_init_mac();
+void macsnd_init(word32 *shmaddr);
 

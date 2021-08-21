@@ -1,21 +1,16 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:17 kentd Exp $";
+const char rcsdif_defcomm_h[] = "@(#)$KmKId: defcomm.h,v 1.94 2004-10-13 21:53:44-04 kentd Exp $";
 #endif
-
-#define USE_XIMAGE_CHANGED
 
 #if 0
 # define CHECK_BREAKPOINTS
@@ -32,7 +27,9 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:
 #define JOYSTICK_MOUSE		1
 #define JOYSTICK_LINUX		2
 #define JOYSTICK_KEYPAD		3
-#define JOYSTICK_WIN32      4
+#define JOYSTICK_WIN32_1	4
+#define JOYSTICK_WIN32_2	5
+
 
 #define HALT_EVENT	0x10
 
@@ -60,25 +57,6 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:
 		(&g_dummy_memory1_ptr[BANK_IO_TMP | BANK_IO2_TMP])
 
 #define BANK_BAD_MEM		(&g_dummy_memory1_ptr[0xff])
-
-
-#define LEN_FIFO_BUF	160
-#define LEN_KBD_BUF	160
-
-#define FIFO_OK         0x1
-#define FIFO_INIT       0x2
-#define FIFO_END        0x3
-#define FIFO_40COLS     0x4
-#define FIFO_80COLS     0x5
-#define FIFO_SENDCHAR   0x6
-#define FIFO_SENDKEY	0x7
-#define FIFO_REFRESH    0x8
-
-#define B_OP_SIZE	2
-#define B_OP_D_SIZE	5
-#define B_OP_DTYPE	12
-#define SIZE_OP_DTYPE	7
-
 
 
 #define ENGINE_FCYCLES		0x00
@@ -167,41 +145,26 @@ const char rcsdif_defcomm_h[] = "@(#)$Header: defcomm.h,v 1.89 2000/09/24 00:54:
 
 #define EFF_BORDER_WIDTH	(BORDER_WIDTH + (640-560))
 
+/* BASE_MARGIN_BOTTOM+MARGIN_TOP must equal 62.  There are 262 scan lines */
+/*  at 60Hz (15.7KHz line rate) and so we just make 62 border lines */
 #define BASE_MARGIN_TOP		32
 #define BASE_MARGIN_BOTTOM	30
 #define BASE_MARGIN_LEFT	BORDER_WIDTH
 #define BASE_MARGIN_RIGHT	BORDER_WIDTH
 
-#define A2_BORDER_TOP		0
-#define A2_BORDER_BOTTOM	0
-#define A2_BORDER_LEFT		0
-#define A2_BORDER_RIGHT		0
-#define A2_WINDOW_WIDTH		(640 + A2_BORDER_LEFT + A2_BORDER_RIGHT)
-#define A2_WINDOW_HEIGHT	(400 + A2_BORDER_TOP + A2_BORDER_BOTTOM)
-
-#if 0
-#define A2_DATA_OFF		(A2_BORDER_TOP*A2_WINDOW_WIDTH + A2_BORDER_LEFT)
-#endif
+#define A2_WINDOW_WIDTH		640
+#define A2_WINDOW_HEIGHT	400
 
 #define X_A2_WINDOW_WIDTH	(A2_WINDOW_WIDTH + BASE_MARGIN_LEFT + \
 							BASE_MARGIN_RIGHT)
 #define X_A2_WINDOW_HEIGHT	(A2_WINDOW_HEIGHT + BASE_MARGIN_TOP + \
 							BASE_MARGIN_BOTTOM)
 
-#define STATUS_WINDOW_HEIGHT	(7*13)
+#define MAX_STATUS_LINES	7
+#define STATUS_LINE_LENGTH	88
 
 #define BASE_WINDOW_WIDTH	(X_A2_WINDOW_WIDTH)
-#define BASE_WINDOW_HEIGHT	(X_A2_WINDOW_HEIGHT + STATUS_WINDOW_HEIGHT)
 
 
 #define A2_BORDER_COLOR_NUM	0xfe
-
-#if 0
-#define A2_TEXT_COLOR_ALT_NUM	0x01
-#define A2_BG_COLOR_ALT_NUM	0x00
-#define A2_TEXT_COLOR_PRIM_NUM	0x02
-#define A2_BG_COLOR_PRIM_NUM	0x00
-#define A2_TEXT_COLOR_FLASH_NUM	0x0c
-#define A2_BG_COLOR_FLASH_NUM	0x08
-#endif
 

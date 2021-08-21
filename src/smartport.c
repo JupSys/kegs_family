@@ -1,17 +1,14 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
-const char rcsid_smartport_c[] = "@(#)$Header: smartport.c,v 1.23 2000/01/11 00:13:23 kentd Exp $";
+const char rcsid_smartport_c[] = "@(#)$KmKId: smartport.c,v 1.31 2004-11-12 23:10:50-05 kentd Exp $";
 
 #include "defc.h"
 
@@ -26,127 +23,6 @@ int g_cycs_in_io_read = 0;
 extern Engine_reg engine;
 
 extern Iwm iwm;
-
-#define MAX_BLOCK_SIZE		0x4000
-
-word32	part_blk_buf[MAX_BLOCK_SIZE];
-
-int
-get_fd_size(int fd)
-{
-	struct stat stat_buf;
-	int	ret;
-
-	ret = fstat(fd, &stat_buf);
-	if(ret != 0) {
-		fprintf(stderr,"fstat returned %d on fd %d, errno: %d\n",
-			ret, fd, errno);
-		exit(2);
-	}
-	return stat_buf.st_size;
-
-}
-
-void
-read_partition_block(int fd, void *buf, int blk, int blk_size)
-{
-	int	ret;
-
-	ret = lseek(fd, blk * blk_size, SEEK_SET);
-	if(ret != blk * blk_size) {
-		printf("lseek: %08x, wanted: %08x, errno: %d\n", ret,
-			blk * blk_size, errno);
-		exit(1);
-	}
-
-	ret = read(fd, (char *)buf, blk_size);
-	if(ret != blk_size) {
-		printf("ret: %08x, wanted %08x, errno: %d\n", ret, blk_size,
-			errno);
-		exit(1);
-	}
-}
-
-
-int
-find_partition_by_name(int fd, char *name, Disk *dsk)
-{
-	Driver_desc *driver_desc_ptr;
-	Part_map *part_map_ptr;
-	int	block_size;
-	int	map_blks;
-	int	cur_blk;
-	int	match_number;
-	word32	start;
-	word32	len;
-	word32	data_off;
-	word32	data_len;
-	word32	sig;
-
-	block_size = 512;
-
-	match_number = -1;
-	if(*name >= '0' && *name <= '9') {
-		/* find partition by number! */
-		match_number = atoi(name);
-	}
-
-	read_partition_block(fd, part_blk_buf, 0, block_size);
-
-	driver_desc_ptr = (Driver_desc *)part_blk_buf;
-	sig = GET_BE_WORD16(driver_desc_ptr->sig);
-	block_size = GET_BE_WORD16(driver_desc_ptr->blk_size);
-	if(block_size == 0) {
-		block_size = 512;
-	}
-	if(sig != 0x4552 || block_size < 0x200 || block_size > MAX_BLOCK_SIZE) {
-		printf("Partition error: No driver descriptor map found\n");
-		return -1;
-	}
-
-	map_blks = 1;
-	cur_blk = 0;
-	while(cur_blk < map_blks) {
-		read_partition_block(fd, part_blk_buf, cur_blk + 1, block_size);
-		part_map_ptr = (Part_map *)part_blk_buf;
-		sig = GET_BE_WORD16(part_map_ptr->sig);
-		if(cur_blk == 0) {
-			map_blks = MIN(100,
-				GET_BE_WORD32(part_map_ptr->map_blk_cnt));
-		}
-		if(sig != 0x504d) {
-			printf("Partition entry %d bad sig\n", cur_blk);
-			return -1;
-		}
-
-		if((strncmp(name, part_map_ptr->part_name, 32) == 0) ||
-						(cur_blk == match_number)) {
-			/* found it, check for consistency */
-			start = GET_BE_WORD32(part_map_ptr->phys_part_start);
-			len = GET_BE_WORD32(part_map_ptr->part_blk_cnt);
-			data_off = GET_BE_WORD32(part_map_ptr->data_start);
-			data_len = GET_BE_WORD32(part_map_ptr->data_cnt);
-			if(data_off + data_len > len) {
-				printf("Poorly formed entry\n");
-				return -1;
-			}
-
-			if(data_len < 10 || start < 1) {
-				printf("Poorly formed entry3\n");
-				return -1;
-			}
-
-			dsk->image_start = (start + data_off) * block_size;
-			dsk->image_size = (data_len) * block_size;
-
-			return 0;
-		}
-
-		cur_blk++;
-	}
-
-	return -1;
-}
 
 #define LEN_SMPT_LOG	16
 STRUCT(Smpt_log) {
@@ -319,12 +195,9 @@ do_c70d(word32 arg0)
 			/* see technotes/smpt/tn-smpt-002 */
 			set_memory_c(status_ptr, g_highest_smartport_unit+1, 0);
 			set_memory_c(status_ptr+1, 0xff, 0); /* interrupt stat*/
-			set_memory_c(status_ptr+2, 0x02, 0); /* vendor id */
-			set_memory_c(status_ptr+3, 0x00, 0); /* vendor id */
-			set_memory_c(status_ptr+4, 0x00, 0); /* version lo */
-			set_memory_c(status_ptr+5, 0x10, 0); /* version hi */
-			set_memory_c(status_ptr+6, 0x00, 0);
-			set_memory_c(status_ptr+7, 0x00, 0);
+			set_memory16_c(status_ptr+2, 0x0002, 0); /* vendor id */
+			set_memory16_c(status_ptr+4, 0x1000, 0); /* version */
+			set_memory16_c(status_ptr+6, 0x0000, 0);
 
 			engine.xreg = 8;
 			engine.yreg = 0;
@@ -343,9 +216,7 @@ do_c70d(word32 arg0)
 				size = (size+511) / 512;
 			}
 			set_memory_c(status_ptr, stat_val, 0);
-			set_memory_c(status_ptr +1, size & 0xff, 0);
-			set_memory_c(status_ptr +2, (size >> 8) & 0xff, 0);
-			set_memory_c(status_ptr +3, (size >> 16) & 0xff, 0);
+			set_memory24_c(status_ptr +1, size, 0);
 			engine.xreg = 4;
 			if(cmd & 0x40) {
 				set_memory_c(status_ptr + 4,
@@ -373,9 +244,7 @@ do_c70d(word32 arg0)
 			}
 			/* DIB for unit 1 */
 			set_memory_c(status_ptr, stat_val, 0);
-			set_memory_c(status_ptr +1, size & 0xff, 0);
-			set_memory_c(status_ptr +2, (size >> 8) & 0xff, 0);
-			set_memory_c(status_ptr +3, (size >> 16) & 0xff, 0);
+			set_memory24_c(status_ptr +1, size, 0);
 			if(cmd & 0x40) {
 				set_memory_c(status_ptr + 4,
 						(size >> 24) & 0xff, 0);
@@ -386,16 +255,13 @@ do_c70d(word32 arg0)
 				set_memory_c(status_ptr +i, 0x20, 0);
 			}
 			set_memory_c(status_ptr +5, 'K', 0);
-			set_memory_c(status_ptr +6, 'D', 0);
-			set_memory_c(status_ptr +7, '3', 0);
-			set_memory_c(status_ptr +8, '5', 0);
+			set_memory_c(status_ptr +6, 'E', 0);
+			set_memory_c(status_ptr +7, 'G', 0);
+			set_memory_c(status_ptr +8, 'S', 0);
 
 			/* hard disk supporting extended calls */
-			set_memory_c(status_ptr + 21, 0x02, 0);
-			set_memory_c(status_ptr + 22, 0xa0, 0);
-
-			set_memory_c(status_ptr + 23, 0x00, 0);
-			set_memory_c(status_ptr + 24, 0x00, 0);
+			set_memory16_c(status_ptr + 21, 0xa002, 0);
+			set_memory16_c(status_ptr + 23, 0x0000, 0);
 
 			if(cmd & 0x40) {
 				engine.xreg = 26;
@@ -408,12 +274,9 @@ do_c70d(word32 arg0)
 			engine.kpc = (rts_addr + 3 + ext) & 0xffff;
 
 			disk_printf("Just finished unit %d, stat 3\n", unit);
-			if(unit == 0 || unit > (g_highest_smartport_unit+1)) {
+			if(unit == 0 || unit > MAX_C7_DISKS) {
 				engine.acc |= 0x28;
 				engine.psr |= 1;
-				if(unit == 0 || unit > MAX_C7_DISKS) {
-					halt_printf("unit:%02x, stat 3\n",unit);
-				}
 			}
 			return;
 		}
@@ -619,50 +482,39 @@ do_c70a(word32 arg0)
 
 	smartport_log(0xc70a, cmd, blk, buf);
 
-	if(cmd == 0x01) {
-		ret = do_read_c7(unit, buf, blk);
-		smartport_log(0, unit, buf, blk);
-		engine.psr &= ~1;
-		if(ret != 0) {
-			engine.psr |= 1;
-		}
-		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
-		if(g_rom_version >= 3) {
-			engine.kpc = 0xc764;
-		} else {
-			engine.kpc = 0xc765;
-		}
-		return;
-	} else if(cmd == 0x00) {
+	engine.psr &= ~1;	/* clear carry */
+	if(g_rom_version >= 3) {
+		engine.kpc = 0xc764;
+	} else {
+		engine.kpc = 0xc765;
+	}
+
+	ret = 0x27;	/* I/O error */
+	if(cmd == 0x00) {
 		size = iwm.smartport[unit].image_size;
 		size = (size+511) / 512;
 
 		smartport_log(0, unit, size, 0);
 
-		engine.psr &= ~1;
 		ret = 0;
-		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
-		if(g_rom_version >= 3) {
-			engine.kpc = 0xc764;
-		} else {
-			engine.kpc = 0xc765;
-		}
 		engine.xreg = size & 0xff;
 		engine.yreg = size >> 8;
-		return;
+	} else if(cmd == 0x01) {
+		smartport_log(0, unit, buf, blk);
+		ret = do_read_c7(unit, buf, blk);
 	} else if(cmd == 0x02) {
 		smartport_log(0, unit, buf, blk);
 		ret = do_write_c7(unit, buf, blk);
-		engine.psr &= ~1;
-		engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
-		if(g_rom_version >= 3) {
-			engine.kpc = 0xc764;
-		} else {
-			engine.kpc = 0xc765;
-		}
-		return;
+	} else if(cmd == 0x03) {	/* format */
+		smartport_log(0, unit, buf, blk);
+		ret = do_format_c7(unit);
 	}
-	halt_printf("cmd unknown: %02x, unit: %02x!!!!\n", cmd, unit);
+
+	engine.acc = (engine.acc & 0xff00) | (ret & 0xff);
+	if(ret != 0) {
+		engine.psr |= 1;
+	}
+	return;
 }
 
 int
@@ -690,11 +542,13 @@ do_read_c7(int unit_num, word32 buf, int blk)
 	image_size = iwm.smartport[unit_num].image_size;
 	if(fd < 0) {
 		printf("c7_fd == %d!\n", fd);
+#if 0
 		if(blk != 2 && blk != 0) {
 			/* don't print error if only reading directory */
 			smartport_error();
 			halt_printf("Read unit:%02x blk:%04x\n", unit_num, blk);
 		}
+#endif
 		return 0x2f;
 	}
 
@@ -723,7 +577,7 @@ do_read_c7(int unit_num, word32 buf, int blk)
 
 	g_io_amt += 0x200;
 
-	if(buf >= 0xfe0000) {
+	if(buf >= 0xfc0000) {
 		disk_printf("reading into ROM, just returning\n");
 		return 0;
 	}
@@ -902,18 +756,15 @@ do_c700(word32 ret)
 	ret = do_read_c7(0, 0x800, 0);
 
 	set_memory_c(0x7f8, 7, 0);
-	set_memory_c(0x42, 0x01, 0);
-	set_memory_c(0x43, 0x70, 0);
-	set_memory_c(0x44, 0x0, 0);
-	set_memory_c(0x45, 0x8, 0);
-	set_memory_c(0x46, 0x0, 0);
-	set_memory_c(0x47, 0x0, 0);
+	set_memory16_c(0x42, 0x7001, 0);
+	set_memory16_c(0x44, 0x0800, 0);
+	set_memory16_c(0x46, 0x0000, 0);
 	engine.xreg = 0x70;
 	engine.kpc = 0x801;
 
 	if(ret != 0) {
 		printf("Failure reading boot disk in s7d1!\n");
-		engine.kpc = 0xe000;
+		engine.kpc = 0xff59;	/* Jump to monitor, fix $36-$39 */
 	}
 }
 

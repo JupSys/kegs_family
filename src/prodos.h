@@ -12,7 +12,7 @@
 /****************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: prodos.h,v 1.3 98/05/23 01:00:53 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$Id: prodos.h,v 1.4 2002/11/19 07:49:31 kadickey Exp $";
 #endif
 
 

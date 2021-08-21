@@ -1,31 +1,36 @@
-/****************************************************************/
-/*            Apple IIgs emulator                               */
-/*            Copyright 1996 Kent Dickey                        */
-/*                                                              */
-/*    This code may not be used in a commercial product         */
-/*    without prior written permission of the author.           */
-/*                                                              */
-/*    You may freely distribute this code.                      */ 
-/*                                                              */
-/*    You can contact the author at kentd@cup.hp.com.           */
-/*                                                              */
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
-/* xdriver.c */
-void update_color_array(int col_num, int a2_color);
-void update_physical_colormap(void);
-void xdriver_end(void);
-void dev_video_init(void);
-void update_status_line(int line, const char *string);
-void redraw_status_lines(void);
-void x_refresh_ximage(void);
+// $KmKId: protos_windriver.h,v 1.4 2004-03-23 17:27:26-05 kentd Exp $
+
+/* END_HDR */
+
+/* windriver.c */
+int win_update_mouse(int x, int y, int button_states, int buttons_valid);
+void win_event_mouse(WPARAM wParam, LPARAM lParam);
+void win_event_key(HWND hwnd, UINT raw_vk, BOOL down, int repeat, UINT flags);
+void win_event_quit(HWND hwnd);
+void win_event_redraw(void);
+LRESULT CALLBACK win_event_handler(HWND hwnd, UINT umsg, WPARAM wParam, LPARAM lParam);
+int main(int argc, char **argv);
 void check_input_events(void);
-int x_keysym_to_a2code(int keysym, int is_up);
+void x_update_color(int col_num, int red, int green, int blue, word32 rgb);
+void x_update_physical_colormap(void);
+void show_xcolor_array(void);
+void xdriver_end(void);
+void x_get_kimage(Kimage *kimage_ptr);
+void dev_video_init(void);
+void x_redraw_status_lines(void);
+void x_push_kimage(Kimage *kimage_ptr, int destx, int desty, int srcx, int srcy, int width, int height);
+void x_push_done(void);
 void x_auto_repeat_on(int must);
 void x_auto_repeat_off(int must);
-void win_refresh_lines(HBITMAP xim, int start_line, int end_line, int left_pix, int right_pix);
-void win_redraw_border_sides_lines(int end_x, int width, int start_line, int end_line);
-void win_refresh_border_sides(void);
-void win_refresh_border_special(void);
-unsigned int __stdcall dev_video_init_ex(void *param); 
-int win_keysym_to_a2code(int keysym, int is_up);
+void x_hide_pointer(int do_hide);
+

@@ -1,5 +1,7 @@
 #!/usr/local/bin/perl -w
 
+# $KmKId: make_inst,v 1.5 2002-11-07 08:18:16-08 kadickey Exp $
+
 $is_c = shift;
 $repl = shift;
 

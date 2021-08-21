@@ -1,19 +1,16 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
 #ifdef ASM
 # ifdef INCLUDE_RCSID_S
-	.stringz "@(#)$Header: instable.h,v 1.94 99/10/23 15:59:11 kentd Exp $"
+	.stringz "@(#)$KmKId: instable.h,v 1.104 2004-10-05 20:12:08-04 kentd Exp $"
 # endif
 #endif
 
@@ -23,7 +20,7 @@ inst00_SYM		/*  brk */
 	ldil	l%g_testing,arg3
 	ldil	l%g_num_brk,arg1
 	ldw	r%g_testing(arg3),arg3
-	addi	2,kpc,kpc
+	INC_KPC_2;
 	ldw	r%g_num_brk(arg1),arg2
 	comib,<> 0,arg3,brk_testing_SYM
 	extru	kpc,31,16,arg0
@@ -80,7 +77,7 @@ brk_native_SYM
 	depi	1,29,2,psr		;ints masked, decimal off
 
 brk_testing_SYM
-	addi	-2,kpc,kpc
+	DEC_KPC2;
 	CYCLES_PLUS_2
 	b	dispatch_done
 	depi	RET_BREAK,3,4,ret0
@@ -92,17 +89,17 @@ brk_testing_SYM
 		FINISH(RET_BREAK, arg);
 	}
 	g_num_brk++;
-	kpc += 2;
+	INC_KPC_2;
 	if(psr & 0x100) {
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xfffe, kpc);
+		GET_MEMORY16(0xfffe, kpc, 0);
 		dbank = 0;
 	} else {
 		PUSH8(kpc >> 16);
 		PUSH16(kpc);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xffe6, kpc);
+		GET_MEMORY16(0xffe6, kpc, 0);
 		halt_printf("Halting for native break!\n");
 	}
 	kpc = kpc & 0xffff;
@@ -118,7 +115,7 @@ inst01_SYM		/*  ORA (Dloc,X) */
 inst02_SYM		/*  COP */
 #ifdef ASM
 	ldil	l%g_num_cop,arg1
-	addi	2,kpc,kpc
+	INC_KPC_2;
 	ldw	r%g_num_cop(arg1),arg2
 	extru	kpc,31,16,arg0
 	addi	1,arg2,arg2
@@ -166,18 +163,18 @@ cop_native_SYM
 
 #else
 	g_num_cop++;
-	kpc += 2;
+	INC_KPC_2;
 	if(psr & 0x100) {
 		halt_printf("Halting for emul COP at %04x\n", kpc);
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xfff4, kpc);
+		GET_MEMORY16(0xfff4, kpc, 0);
 		dbank = 0;
 	} else {
 		PUSH8(kpc >> 16);
 		PUSH16(kpc & 0xffff);
 		PUSH8(psr & 0xff);
-		GET_MEMORY16(0xffe4, kpc);
+		GET_MEMORY16(0xffe4, kpc, 0);
 	}
 	kpc = kpc & 0xffff;
 	psr |= 4;
@@ -190,7 +187,7 @@ inst03_SYM		/*  ORA Disp8,S */
 
 inst04_SYM		/*  TSB Dloc */
 	GET_DLOC_RD();
-	TSB_INST();
+	TSB_INST(1);
 
 inst05_SYM		/*  ORA Dloc */
 	GET_DLOC_RD();
@@ -198,7 +195,7 @@ inst05_SYM		/*  ORA Dloc */
 
 inst06_SYM		/*  ASL Dloc */
 	GET_DLOC_RD();
-	ASL_INST();
+	ASL_INST(1);
 
 inst07_SYM		/*  ORA [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -208,7 +205,7 @@ inst08_SYM		/*  PHP */
 #ifdef ASM
 	dep	neg,24,1,psr
 	ldil	l%dispatch,link
-	addi	1,kpc,kpc
+	INC_KPC_1
 	depi	0,30,1,psr
 	comiclr,<> 0,zero,0
 	depi	1,30,1,psr
@@ -216,7 +213,7 @@ inst08_SYM		/*  PHP */
 	b	push_8
 	extru	psr,31,8,arg0
 #else
-	kpc++;
+	INC_KPC_1;
 	psr = (psr & ~0x82) | ((neg & 1) << 7) | ((!zero) << 1);
 	PUSH8(psr);
 #endif
@@ -230,7 +227,7 @@ inst0a_SYM		/*  ASL a */
 # ifdef ACC8
 	ldi	0xff,scratch1
 	sh1add	acc,0,scratch3
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	scratch3,24,1,neg
 	and	scratch3,scratch1,zero
 	extru	scratch3,23,1,scratch2
@@ -240,7 +237,7 @@ inst0a_SYM		/*  ASL a */
 # else
 	zdepi	-1,31,16,scratch1
 	sh1add	acc,0,scratch3
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	scratch3,16,1,neg
 	and	scratch3,scratch1,zero
 	extru	scratch3,15,1,scratch2
@@ -249,7 +246,7 @@ inst0a_SYM		/*  ASL a */
 	dep	zero,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 	tmp1 = acc + acc;
 # ifdef ACC8
 	SET_CARRY8(tmp1);
@@ -266,17 +263,17 @@ inst0b_SYM		/*  PHD */
 #ifdef ASM
 	ldil	l%dispatch,link
 	extru	direct,31,16,arg0
-	addi	1,kpc,kpc
+	INC_KPC_1
 	b	push_16_unsafe
 	ldo	r%dispatch(link),link
 #else
-	kpc++;
+	INC_KPC_1;
 	PUSH16_UNSAFE(direct);
 #endif
 
 inst0c_SYM		/*  TSB abs */
 	GET_ABS_RD();
-	TSB_INST();
+	TSB_INST(0);
 
 inst0d_SYM		/*  ORA abs */
 	GET_ABS_RD();
@@ -284,7 +281,7 @@ inst0d_SYM		/*  ORA abs */
 
 inst0e_SYM		/*  ASL abs */
 	GET_ABS_RD();
-	ASL_INST();
+	ASL_INST(0);
 
 inst0f_SYM		/*  ORA long */
 	GET_LONG_RD();
@@ -317,7 +314,7 @@ inst13_SYM		/*  ORA (Disp8,s),y */
 
 inst14_SYM		/*  TRB Dloc */
 	GET_DLOC_RD();
-	TRB_INST();
+	TRB_INST(1);
 
 inst15_SYM		/*  ORA Dloc,x */
 	GET_DLOC_X_RD();
@@ -325,7 +322,7 @@ inst15_SYM		/*  ORA Dloc,x */
 
 inst16_SYM		/*  ASL Dloc,X */
 	GET_DLOC_X_RD();
-	ASL_INST();
+	ASL_INST(1);
 
 inst17_SYM		/*  ORA [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -333,12 +330,12 @@ inst17_SYM		/*  ORA [Dloc],Y */
 
 inst18_SYM		/*  CLC */
 #ifdef ASM
-	depi	0,31,1,psr		/* clear carry */
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	depi	0,31,1,psr		/* clear carry */
 #else
 	psr = psr & (~1);
-	kpc++;
+	INC_KPC_1;
 #endif
 
 inst19_SYM		/*  ORA abs,y */
@@ -352,7 +349,7 @@ inst1a_SYM		/*  INC a */
 	ldi	0xff,scratch2
 	addi	1,acc,scratch1
 	extru	scratch1,24,1,neg
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	scratch1,31,8,zero
 	b	dispatch
 	dep	zero,31,8,acc
@@ -360,13 +357,13 @@ inst1a_SYM		/*  INC a */
 	zdepi	-1,31,16,scratch2
 	addi	1,acc,scratch1
 	extru	scratch1,16,1,neg
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	scratch1,31,16,zero
 	b	dispatch
 	dep	zero,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 # ifdef ACC8
 	acc = (acc & 0xff00) | ((acc + 1) & 0xff);
 	SET_NEG_ZERO8(acc & 0xff);
@@ -381,11 +378,12 @@ inst1b_SYM		/*  TCS */
 	copy	acc,stack
 	extru,=	psr,23,1,0		/* in emulation mode, stack page 1 */
 	depi	1,23,24,stack
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	nop
 #else
 	stack = acc;
-	kpc++;
+	INC_KPC_1;
 	if(psr & 0x100) {
 		stack = (stack & 0xff) + 0x100;
 	}
@@ -393,7 +391,7 @@ inst1b_SYM		/*  TCS */
 
 inst1c_SYM		/*  TRB Abs */
 	GET_ABS_RD();
-	TRB_INST();
+	TRB_INST(0);
 
 inst1d_SYM		/*  ORA Abs,X */
 	GET_ABS_X_RD();
@@ -401,7 +399,7 @@ inst1d_SYM		/*  ORA Abs,X */
 
 inst1e_SYM		/*  ASL Abs,X */
 	GET_ABS_X_RD_WR();
-	ASL_INST();
+	ASL_INST(0);
 
 inst1f_SYM		/*  ORA Long,X */
 	GET_LONG_X_RD();
@@ -422,7 +420,8 @@ inst20_SYM		/*  JSR abs */
 	dep	scratch1,23,8,kpc
 #else
 	GET_2BYTE_ARG;
-	PUSH16(kpc + 2);
+	INC_KPC_2;
+	PUSH16(kpc);
 	kpc = (kpc & 0xff0000) + arg;
 	CYCLES_PLUS_2;
 #endif
@@ -434,8 +433,9 @@ inst21_SYM		/*  AND (Dloc,X) */
 
 inst22_SYM		/*  JSL Long */
 #ifdef ASM
+	INC_KPC_3
 	ldb	3(scratch1),scratch2
-	addi	3,kpc,arg0
+	copy	kpc,arg0
 	ldb	1(scratch1),kpc
 	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_3
@@ -449,8 +449,9 @@ inst22_SYM		/*  JSL Long */
 #else
 	GET_3BYTE_ARG;
 	tmp1 = arg;
-	PUSH24_UNSAFE(kpc + 3);
 	CYCLES_PLUS_3;
+	INC_KPC_3;
+	PUSH24_UNSAFE(kpc);
 	kpc = tmp1 & 0xffffff;
 #endif
 
@@ -472,7 +473,7 @@ inst26_SYM		/*  ROL Dloc */
 	GET_DLOC_RD();
 /*  save1 is now apple addr */
 /*  ret0 is data */
-	ROL_INST();
+	ROL_INST(1);
 
 inst27_SYM		/*  AND [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -486,7 +487,7 @@ inst28_SYM		/*  PLP */
 	extru	psr,27,2,scratch2		/* save old x & m */
 	dep	ret0,31,8,psr
 	CYCLES_PLUS_1
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru,<> ret0,30,1,0
 	ldi	1,zero
 	copy	scratch2,arg0
@@ -496,7 +497,7 @@ inst28_SYM		/*  PLP */
 	PULL8(tmp1);
 	tmp2 = psr;
 	CYCLES_PLUS_1;
-	kpc++;
+	INC_KPC_1;
 	psr = (psr & ~0xff) | (tmp1 & 0xff);
 	zero = !(psr & 2);
 	neg = (psr >> 7) & 1;
@@ -514,7 +515,7 @@ inst2a_SYM		/*  ROL a */
 	extru	psr,31,1,scratch2
 	ldi	0xff,scratch1
 	sh1add	acc,scratch2,scratch3
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	scratch3,24,1,neg
 	and	scratch3,scratch1,zero
 	extru	scratch3,23,1,scratch2
@@ -523,7 +524,7 @@ inst2a_SYM		/*  ROL a */
 	dep	scratch2,31,1,psr		/* set carry */
 # else
 	extru	psr,31,1,scratch2
-	addi	1,kpc,kpc
+	INC_KPC_1
 	sh1add	acc,scratch2,scratch3
 	zdepi	-1,31,16,scratch1
 	extru	scratch3,16,1,neg
@@ -534,7 +535,7 @@ inst2a_SYM		/*  ROL a */
 	dep	zero,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 # ifdef ACC8
 	tmp1 = ((acc & 0xff) << 1) + (psr & 1);
 	SET_CARRY8(tmp1);
@@ -550,7 +551,7 @@ inst2a_SYM		/*  ROL a */
 
 inst2b_SYM		/*  PLD */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bl	pull_16_unsafe,link
 	CYCLES_PLUS_1
 	extru	ret0,31,16,direct
@@ -558,7 +559,7 @@ inst2b_SYM		/*  PLD */
 	b	dispatch
 	copy	direct,zero
 #else
-	kpc++;
+	INC_KPC_1;
 	PULL16_UNSAFE(direct);
 	CYCLES_PLUS_1;
 	SET_NEG_ZERO16(direct);
@@ -574,7 +575,7 @@ inst2d_SYM		/*  AND abs */
 
 inst2e_SYM		/*  ROL abs */
 	GET_ABS_RD();
-	ROL_INST();
+	ROL_INST(0);
 
 inst2f_SYM		/*  AND long */
 	GET_LONG_RD();
@@ -615,7 +616,7 @@ inst35_SYM		/*  AND Dloc,x */
 
 inst36_SYM		/*  ROL Dloc,X */
 	GET_DLOC_X_RD();
-	ROL_INST();
+	ROL_INST(1);
 
 inst37_SYM		/*  AND [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -623,12 +624,12 @@ inst37_SYM		/*  AND [Dloc],Y */
 
 inst38_SYM		/*  SEC */
 #ifdef ASM
-	depi	1,31,1,psr		/* set carry */
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	depi	1,31,1,psr		/* set carry */
 #else
 	psr = psr | 1;
-	kpc++;
+	INC_KPC_1;
 #endif
 
 inst39_SYM		/*  AND abs,y */
@@ -640,20 +641,20 @@ inst3a_SYM		/*  DEC a */
 # ifdef ACC8
 	addi	-1,acc,scratch1
 	extru	scratch1,24,1,neg
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	scratch1,31,8,zero
 	b	dispatch
 	dep	zero,31,8,acc
 # else
 	addi	-1,acc,scratch1
 	extru	scratch1,16,1,neg
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	scratch1,31,16,zero
 	b	dispatch
 	dep	zero,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 # ifdef ACC8
 	acc = (acc & 0xff00) | ((acc - 1) & 0xff);
 	SET_NEG_ZERO8(acc & 0xff);
@@ -668,11 +669,11 @@ inst3b_SYM		/*  TSC */
 #ifdef ASM
 	copy	stack,acc
 	extru	stack,16,1,neg
-	addi	1,kpc,kpc
+	INC_KPC_1
 	b	dispatch
 	extru	acc,31,16,zero
 #else
-	kpc++;
+	INC_KPC_1;
 	acc = stack;
 	SET_NEG_ZERO16(acc);
 #endif
@@ -687,7 +688,7 @@ inst3d_SYM		/*  AND Abs,X */
 
 inst3e_SYM		/*  ROL Abs,X */
 	GET_ABS_X_RD_WR();
-	ROL_INST();
+	ROL_INST(0);
 
 inst3f_SYM		/*  AND Long,X */
 	GET_LONG_X_RD();
@@ -761,10 +762,14 @@ inst41_SYM		/*  EOR (Dloc,X) */
 inst42_SYM		/*  WDM */
 #ifdef ASM
 	ldb	1(scratch1),ret0
+	CYCLES_PLUS_5
+	CYCLES_PLUS_2
+	INC_KPC_2
 	b	dispatch_done
 	depi	RET_WDM,3,4,ret0
 #else
 	GET_1BYTE_ARG;
+	INC_KPC_2;
 	CYCLES_PLUS_5;
 	CYCLES_PLUS_2;
 	FINISH(RET_WDM, arg & 0xff);
@@ -784,15 +789,10 @@ inst44_SYM		/*  MVP */
 	stw	scratch2,STACK_SRC_BANK(sp)
 
 inst44_loop_SYM
-	fldds	0(fcycles_stop_ptr),fcycles_stop
-	CYCLES_PLUS_3
+	CYCLES_PLUS_1
 	ldw	STACK_SRC_BANK(sp),scratch2
-	fcmp,<,dbl fcycles,fcycles_stop
-	ftest
-	b	inst44_out_of_time_SYM
 	copy	xreg,arg0
 
-	CYCLES_PLUS_2
 	bl	get_mem_long_8,link
 	dep	scratch2,15,8,arg0
 /*  got byte */
@@ -801,19 +801,32 @@ inst44_loop_SYM
 	bl	set_mem_long_8,link
 	dep	dbank,15,8,arg0
 /*  wrote byte, dec acc */
+	CYCLES_PLUS_2
+	fldds	0(fcycles_stop_ptr),fcycles_stop
 	addi	-1,xreg,xreg
 	zdepi	-1,31,16,scratch2
 	addi	-1,yreg,yreg
 	addi	-1,acc,acc
+	fcmp,<,dbl fcycles,fcycles_stop
 	and	xreg,scratch2,xreg
 	extrs	acc,31,16,scratch1
 	and	yreg,scratch2,yreg
-	comib,<> -1,scratch1,inst44_loop_SYM
+
+	comib,= -1,scratch1,inst44_done_SYM
 	and	acc,scratch2,acc
 
+	ftest
+	b	inst44_out_of_time_SYM
+
+	CYCLES_PLUS_2
+	b	inst44_loop_SYM
+	nop
+
 /*  get here if done */
+inst44_done_SYM
+	INC_KPC_3
 	b	dispatch
-	addi	3,kpc,kpc
+	nop
 
 inst44_notnat_SYM
 	copy	dbank,ret0
@@ -833,6 +846,7 @@ inst44_out_of_time_SYM
 		halt_printf("MVP but not native m or x!\n");
 		break;
 	}
+	CYCLES_MINUS_2
 	dbank = arg & 0xff;
 	tmp1 = (arg >> 8) & 0xff;
 	while(1) {
@@ -844,7 +858,7 @@ inst44_out_of_time_SYM
 		yreg = (yreg - 1) & 0xffff;
 		acc = (acc - 1) & 0xffff;
 		if(acc == 0xffff) {
-			kpc += 3;
+			INC_KPC_3;
 			break;
 		}
 		if(fcycles >= g_fcycles_stop) {
@@ -863,7 +877,7 @@ inst46_SYM		/*  LSR Dloc */
 	GET_DLOC_RD();
 /*  save1 is now apple addr */
 /*  ret0 is data */
-	LSR_INST();
+	LSR_INST(1);
 
 inst47_SYM		/*  EOR [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -872,20 +886,20 @@ inst47_SYM		/*  EOR [Dloc] */
 inst48_SYM		/*  PHA */
 #ifdef ASM
 # ifdef ACC8
-	addi	1,kpc,kpc
+	INC_KPC_1
 	ldil	l%dispatch,link
 	extru	acc,31,8,arg0
 	b	push_8
 	ldo	r%dispatch(link),link
 # else
-	addi	1,kpc,kpc
+	INC_KPC_1
 	ldil	l%dispatch,link
 	extru	acc,31,16,arg0
 	b	push_16
 	ldo	r%dispatch(link),link
 # endif
 #else
-	kpc += 1;
+	INC_KPC_1;
 # ifdef ACC8
 	PUSH8(acc);
 # else
@@ -901,7 +915,7 @@ inst4a_SYM		/*  LSR a */
 #ifdef ASM
 # ifdef ACC8
 	extru	acc,31,1,scratch2
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	acc,30,7,zero
 	ldi	0,neg
 	dep	scratch2,31,1,psr		/* set carry */
@@ -909,7 +923,7 @@ inst4a_SYM		/*  LSR a */
 	dep	zero,31,8,acc
 # else
 	extru	acc,31,1,scratch2
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	acc,30,15,zero
 	ldi	0,neg
 	dep	scratch2,31,1,psr		/*  set carry */
@@ -917,7 +931,7 @@ inst4a_SYM		/*  LSR a */
 	dep	zero,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 # ifdef ACC8
 	tmp1 = ((acc & 0xff) >> 1);
 	SET_CARRY8(acc << 8);
@@ -935,12 +949,12 @@ inst4b_SYM		/*  PHK */
 #ifdef ASM
 	ldil	l%dispatch,link
 	extru	kpc,15,8,arg0
-	addi	1,kpc,kpc
+	INC_KPC_1
 	b	push_8
 	ldo	r%dispatch(link),link
 #else
 	PUSH8(kpc >> 16);
-	kpc += 1;
+	INC_KPC_1;
 #endif
 
 inst4c_SYM		/*  JMP abs */
@@ -964,7 +978,7 @@ inst4d_SYM		/*  EOR abs */
 
 inst4e_SYM		/*  LSR abs */
 	GET_ABS_RD();
-	LSR_INST();
+	LSR_INST(0);
 
 inst4f_SYM		/*  EOR long */
 	GET_LONG_RD();
@@ -1007,15 +1021,10 @@ inst54_SYM		/*  MVN  */
 /*  even in 8bit acc mode, use 16-bit accumulator! */
 
 inst54_loop_SYM
-	fldds	0(fcycles_stop_ptr),fcycles_stop
-	CYCLES_PLUS_3
+	CYCLES_PLUS_1
 	ldw	STACK_SRC_BANK(sp),scratch2
-	fcmp,<,dbl fcycles,fcycles_stop
-	ftest
-	b	inst54_out_of_time_SYM
 	copy	xreg,arg0
 
-	CYCLES_PLUS_2
 	bl	get_mem_long_8,link
 	dep	scratch2,15,8,arg0
 /*  got byte */
@@ -1024,19 +1033,31 @@ inst54_loop_SYM
 	bl	set_mem_long_8,link
 	dep	dbank,15,8,arg0
 /*  wrote byte, dec acc */
+	CYCLES_PLUS_2
+	fldds	0(fcycles_stop_ptr),fcycles_stop
 	addi	1,xreg,xreg
 	zdepi	-1,31,16,scratch2
 	addi	1,yreg,yreg
 	addi	-1,acc,acc
+	fcmp,<,dbl fcycles,fcycles_stop
 	and	xreg,scratch2,xreg
 	extrs	acc,31,16,scratch1
 	and	yreg,scratch2,yreg
-	comib,<> -1,scratch1,inst54_loop_SYM
+
+	comib,=	-1,scratch1,inst54_done_SYM
 	and	acc,scratch2,acc
+	ftest
+	b,n	inst54_out_of_time_SYM
+
+	CYCLES_PLUS_2
+	b	inst54_loop_SYM
+	nop
 
 /*  get here if done */
+inst54_done_SYM
+	INC_KPC_3
 	b	dispatch
-	addi	3,kpc,kpc
+	nop
 
 inst54_out_of_time_SYM
 /*  cycle have gone positive, just get out, don't update kpc */
@@ -1056,6 +1077,7 @@ inst54_notnat_SYM
 		halt_printf("MVN but not native m or x!\n");
 		break;
 	}
+	CYCLES_MINUS_2;
 	dbank = arg & 0xff;
 	tmp1 = (arg >> 8) & 0xff;
 	while(1) {
@@ -1067,7 +1089,7 @@ inst54_notnat_SYM
 		yreg = (yreg + 1) & 0xffff;
 		acc = (acc - 1) & 0xffff;
 		if(acc == 0xffff) {
-			kpc += 3;
+			INC_KPC_3;
 			break;
 		}
 		if(fcycles >= g_fcycles_stop) {
@@ -1082,7 +1104,7 @@ inst55_SYM		/*  EOR Dloc,x */
 
 inst56_SYM		/*  LSR Dloc,X */
 	GET_DLOC_X_RD();
-	LSR_INST();
+	LSR_INST(1);
 
 inst57_SYM		/*  EOR [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -1090,12 +1112,12 @@ inst57_SYM		/*  EOR [Dloc],Y */
 
 inst58_SYM		/*  CLI */
 #ifdef ASM
-	depi	0,29,1,psr		/* clear int disable */
+	INC_KPC_1
 	b	check_irqs_pending	/* check for ints pending! */
-	addi	1,kpc,kpc
+	depi	0,29,1,psr		/* clear int disable */
 #else
 	psr = psr & (~4);
-	kpc++;
+	INC_KPC_1;
 	if(((psr & 0x4) == 0) && g_irq_pending) {
 		FINISH(RET_IRQ, 0);
 	}
@@ -1107,7 +1129,7 @@ inst59_SYM		/*  EOR abs,y */
 
 inst5a_SYM		/*  PHY */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	ldil	l%dispatch,link
 	bb,>=	psr,27,phy_16_SYM
 	ldo	r%dispatch(link),link
@@ -1119,7 +1141,7 @@ phy_16_SYM
 	b	push_16
 	copy	yreg,arg0
 #else
-	kpc += 1;
+	INC_KPC_1;
 	if(psr & 0x10) {
 		PUSH8(yreg);
 	} else {
@@ -1130,12 +1152,12 @@ phy_16_SYM
 inst5b_SYM		/*  TCD */
 #ifdef ASM
 	extru	acc,31,16,direct
-	addi	1,kpc,kpc
+	INC_KPC_1
 	copy	acc,zero
 	b	dispatch
 	extru	acc,16,1,neg
 #else
-	kpc++;
+	INC_KPC_1;
 	direct = acc;
 	SET_NEG_ZERO16(acc);
 #endif
@@ -1161,7 +1183,7 @@ inst5d_SYM		/*  EOR Abs,X */
 
 inst5e_SYM		/*  LSR Abs,X */
 	GET_ABS_X_RD_WR();
-	LSR_INST();
+	LSR_INST(0);
 
 inst5f_SYM		/*  EOR Long,X */
 	GET_LONG_X_RD();
@@ -1177,8 +1199,9 @@ inst60_SYM		/*  RTS */
 	b	dispatch
 	dep	ret0,31,16,kpc
 #else
+	CYCLES_PLUS_2
 	PULL16(tmp1);
-	kpc = (kpc & 0xff0000) + (tmp1 + 1);
+	kpc = (kpc & 0xff0000) + ((tmp1 + 1) & 0xffff);
 #endif
 
 
@@ -1190,7 +1213,7 @@ inst61_SYM		/*  ADC (Dloc,X) */
 inst62_SYM		/*  PER */
 #ifdef ASM
 	ldb	1(scratch1),ret0
-	addi	3,kpc,kpc
+	INC_KPC_3
 	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_2
 	ldil	l%dispatch,link
@@ -1202,7 +1225,7 @@ inst62_SYM		/*  PER */
 #else
 	GET_2BYTE_ARG;
 	CYCLES_PLUS_2;
-	kpc += 3;
+	INC_KPC_3;
 	PUSH16_UNSAFE(kpc + arg);
 #endif
 
@@ -1213,7 +1236,7 @@ inst63_SYM		/*  ADC Disp8,S */
 
 inst64_SYM		/*  STZ Dloc */
 	GET_DLOC_ADDR();
-	STZ_INST();
+	STZ_INST(1);
 
 inst65_SYM		/*  ADC Dloc */
 /*  called with arg = val to ADC in */
@@ -1224,7 +1247,7 @@ inst66_SYM		/*  ROR Dloc */
 	GET_DLOC_RD();
 /*  save1 is now apple addr */
 /*  ret0 is data */
-	ROR_INST();
+	ROR_INST(1);
 
 inst67_SYM		/*  ADC [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -1233,7 +1256,7 @@ inst67_SYM		/*  ADC [Dloc] */
 inst68_SYM		/*  PLA */
 #ifdef ASM
 # ifdef ACC8
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bl	pull_8,link
 	CYCLES_PLUS_1
 	extru	ret0,31,8,zero
@@ -1241,7 +1264,7 @@ inst68_SYM		/*  PLA */
 	b	dispatch
 	dep	ret0,31,8,acc
 # else
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bl	pull_16,link
 	CYCLES_PLUS_1
 
@@ -1251,7 +1274,7 @@ inst68_SYM		/*  PLA */
 	extru	ret0,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 	CYCLES_PLUS_1;
 # ifdef ACC8
 	PULL8(tmp1);
@@ -1273,7 +1296,7 @@ inst6a_SYM		/*  ROR a */
 #ifdef ASM
 # ifdef ACC8
 	extru	psr,31,1,neg
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	acc,30,7,zero
 	dep	neg,24,1,zero
 	dep	acc,31,1,psr			/* set carry */
@@ -1281,7 +1304,7 @@ inst6a_SYM		/*  ROR a */
 	dep	zero,31,8,acc
 # else
 	extru	psr,31,1,neg
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	acc,30,15,zero
 	dep	neg,16,1,zero
 	dep	acc,31,1,psr		/*  set carry */
@@ -1289,7 +1312,7 @@ inst6a_SYM		/*  ROR a */
 	dep	zero,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 # ifdef ACC8
 	tmp1 = ((acc & 0xff) >> 1) + ((psr & 1) << 7);
 	SET_CARRY8((acc << 8));
@@ -1314,6 +1337,7 @@ inst6b_SYM		/*  RTL */
 	dep	scratch1,31,16,kpc
 	
 #else
+	CYCLES_PLUS_1;
 	PULL24(tmp1);
 	kpc = (tmp1 & 0xff0000) + ((tmp1 + 1) & 0xffff);
 #endif
@@ -1331,7 +1355,7 @@ inst6c_SYM		/*  JMP (abs) */
 #else
 	GET_2BYTE_ARG;
 	CYCLES_PLUS_1;
-	GET_MEMORY16(arg, tmp1);
+	GET_MEMORY16(arg, tmp1, 1);
 	kpc = (kpc & 0xff0000) + tmp1;
 #endif
 
@@ -1341,7 +1365,7 @@ inst6d_SYM		/*  ADC abs */
 
 inst6e_SYM		/*  ROR abs */
 	GET_ABS_RD();
-	ROR_INST();
+	ROR_INST(0);
 
 inst6f_SYM		/*  ADC long */
 	GET_LONG_RD();
@@ -1376,11 +1400,11 @@ inst74_SYM		/*  STZ Dloc,x */
 #ifdef ASM
 	ldb	1(scratch1),arg0
 	GET_DLOC_X_WR();
-	STZ_INST();
+	STZ_INST(1);
 #else
 	GET_1BYTE_ARG;
 	GET_DLOC_X_WR();
-	STZ_INST();
+	STZ_INST(1);
 #endif
 
 inst75_SYM		/*  ADC Dloc,x */
@@ -1389,7 +1413,7 @@ inst75_SYM		/*  ADC Dloc,x */
 
 inst76_SYM		/*  ROR Dloc,X */
 	GET_DLOC_X_RD();
-	ROR_INST();
+	ROR_INST(1);
 
 inst77_SYM		/*  ADC [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -1397,12 +1421,12 @@ inst77_SYM		/*  ADC [Dloc],Y */
 
 inst78_SYM		/*  SEI */
 #ifdef ASM
-	depi	1,29,1,psr		/* set int disable */
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	depi	1,29,1,psr		/* set int disable */
 #else
 	psr = psr | 4;
-	kpc++;
+	INC_KPC_1;
 #endif
 
 inst79_SYM		/*  ADC abs,y */
@@ -1411,8 +1435,9 @@ inst79_SYM		/*  ADC abs,y */
 
 inst7a_SYM		/*  PLY */
 #ifdef ASM
+	INC_KPC_1
 	bb,>=	psr,27,inst7a_16bit_SYM
-	addi	1,kpc,kpc
+	nop
 
 	bl	pull_8,link
 	CYCLES_PLUS_1
@@ -1432,7 +1457,7 @@ inst7a_16bit_SYM
 	copy	zero,yreg
 
 #else
-	kpc++;
+	INC_KPC_1;
 	CYCLES_PLUS_1
 	if(psr & 0x10) {
 		PULL8(yreg);
@@ -1447,17 +1472,17 @@ inst7b_SYM		/*  TDC */
 #ifdef ASM
 	extru	direct,31,16,zero
 	copy	direct,acc
-	extru	direct,16,1,neg
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	extru	direct,16,1,neg
 #else
-	kpc++;
+	INC_KPC_1;
 	acc = direct;
 	SET_NEG_ZERO16(direct);
 #endif
 
 inst7c_SYM		/*  JMP (Abs,x) */
-/*  is this right?  Should xreg allow wrapping into next bank? */
+/*  always access kbank, xreg cannot wrap into next bank */
 #ifdef ASM
 	ldb	1(scratch1),ret0
 	copy	kpc,scratch2
@@ -1472,10 +1497,9 @@ inst7c_SYM		/*  JMP (Abs,x) */
 	dep	ret0,31,16,kpc
 #else
 	GET_2BYTE_ARG;
-	tmp1 = (kpc & 0xff0000) + xreg;
-	arg = tmp1 + (arg & 0xffff);
+	arg = (kpc & 0xff0000) + ((xreg + arg) & 0xffff);
 	CYCLES_PLUS_2;
-	GET_MEMORY16(arg & 0xffffff, tmp1);
+	GET_MEMORY16(arg, tmp1, 1);
 	kpc = (kpc & 0xff0000) + tmp1;
 #endif
 
@@ -1485,7 +1509,7 @@ inst7d_SYM		/*  ADC Abs,X */
 
 inst7e_SYM		/*  ROR Abs,X */
 	GET_ABS_X_RD_WR();
-	ROR_INST();
+	ROR_INST(0);
 
 inst7f_SYM		/*  ADC Long,X */
 	GET_LONG_X_RD();
@@ -1503,16 +1527,16 @@ inst80_SYM		/*  BRA */
 
 inst81_SYM		/*  STA (Dloc,X) */
 	GET_DLOC_X_IND_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst82_SYM		/*  BRL disp16 */
 #ifdef ASM
 	ldb	1(scratch1),ret0
 	CYCLES_PLUS_1
 	ldb	2(scratch1),scratch1
-	addi	3,kpc,kpc			/*  yup, this is needed */
+	addi	3,kpc,scratch2
 	dep	scratch1,23,8,ret0
-	add	ret0,kpc,scratch2
+	add	ret0,scratch2,scratch2
 	b	dispatch
 	dep	scratch2,31,16,kpc
 #else
@@ -1523,31 +1547,31 @@ inst82_SYM		/*  BRL disp16 */
 
 inst83_SYM		/*  STA Disp8,S */
 	GET_DISP8_S_ADDR();
-	STA_INST();
+	STA_INST(1);
 
 inst84_SYM		/*  STY Dloc */
 	GET_DLOC_ADDR();
-	STY_INST();
+	STY_INST(1);
 
 
 inst85_SYM		/*  STA Dloc */
 	GET_DLOC_ADDR();
-	STA_INST();
+	STA_INST(1);
 
 inst86_SYM		/*  STX Dloc */
 	GET_DLOC_ADDR();
-	STX_INST();
+	STX_INST(1);
 
 
 inst87_SYM		/*  STA [Dloc] */
 	GET_DLOC_L_IND_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst88_SYM		/*  DEY */
 #ifdef ASM
-	addi	-1,yreg,yreg
+	INC_KPC_1
 	bb,<	psr,27,inst88_8bit_SYM
-	addi	1,kpc,kpc
+	addi	-1,yreg,yreg
 /*  16 bit */
 	extru	yreg,31,16,zero
 	extru	yreg,16,1,neg
@@ -1560,7 +1584,7 @@ inst88_8bit_SYM
 	b	dispatch
 	copy	zero,yreg
 #else
-	kpc++;
+	INC_KPC_1;
 	SET_INDEX_REG(yreg - 1, yreg);
 #endif
 
@@ -1590,19 +1614,19 @@ inst8a_SYM		/*  TXA */
 #ifdef ASM
 # ifdef ACC8
 	extru	xreg,31,8,zero
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	xreg,24,1,neg
 	b	dispatch
 	dep	zero,31,8,acc
 # else
 	extru	xreg,31,16,zero
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	xreg,16,1,neg
 	b	dispatch
 	zdep	zero,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 	arg = xreg;
 	LDA_INST();
 #endif
@@ -1611,30 +1635,30 @@ inst8b_SYM		/*  PHB */
 #ifdef ASM
 	ldil	l%dispatch,link
 	extru	dbank,31,8,arg0
-	addi	1,kpc,kpc
+	INC_KPC_1
 	b	push_8
 	ldo	r%dispatch(link),link
 #else
-	kpc++;
+	INC_KPC_1;
 	PUSH8(dbank);
 #endif
 
 inst8c_SYM		/*  STY abs */
 	GET_ABS_ADDR();
-	STY_INST();
+	STY_INST(0);
 
 inst8d_SYM		/*  STA abs */
 	GET_ABS_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst8e_SYM		/*  STX abs */
 	GET_ABS_ADDR();
-	STX_INST();
+	STX_INST(0);
 
 
 inst8f_SYM		/*  STA long */
 	GET_LONG_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 
 inst90_SYM		/*  BCC disp8 */
@@ -1652,77 +1676,78 @@ inst90_2_SYM
 
 inst91_SYM		/*  STA (Dloc),y */
 	GET_DLOC_IND_Y_ADDR_FOR_WR();
-	STA_INST();
+	STA_INST(0);
 
 inst92_SYM		/*  STA (Dloc) */
 	GET_DLOC_IND_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst93_SYM		/*  STA (Disp8,s),y */
 	GET_DISP8_S_IND_Y_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst94_SYM		/*  STY Dloc,x */
 	GET_DLOC_X_ADDR();
-	STY_INST();
+	STY_INST(1);
 
 inst95_SYM		/*  STA Dloc,x */
 	GET_DLOC_X_ADDR();
-	STA_INST();
+	STA_INST(1);
 
 inst96_SYM		/*  STX Dloc,Y */
 	GET_DLOC_Y_ADDR();
-	STX_INST();
+	STX_INST(1);
 
 inst97_SYM		/*  STA [Dloc],Y */
 	GET_DLOC_L_IND_Y_ADDR();
-	STA_INST();
+	STA_INST(0);
 
 inst98_SYM		/*  TYA */
 #ifdef ASM
 # ifdef ACC8
 	extru	yreg,31,8,zero
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	yreg,24,1,neg
 	b	dispatch
 	dep	zero,31,8,acc
 # else
 	extru	yreg,31,16,zero
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	yreg,16,1,neg
 	b	dispatch
 	zdep	zero,31,16,acc
 # endif
 #else
-	kpc++;
+	INC_KPC_1;
 	arg = yreg;
 	LDA_INST();
 #endif
 
 inst99_SYM		/*  STA abs,y */
 	GET_ABS_INDEX_ADDR_FOR_WR(yreg)
-	STA_INST();
+	STA_INST(0);
 
 inst9a_SYM		/*  TXS */
 #ifdef ASM
 	copy	xreg,stack
 	extru,=	psr,23,1,0
 	depi	1,23,24,stack
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	nop
 #else
 	stack = xreg;
 	if(psr & 0x100) {
 		stack = 0x100 | (stack & 0xff);
 	}
-	kpc++;
+	INC_KPC_1;
 #endif
 
 
 inst9b_SYM		/*  TXY */
 #ifdef ASM
 	extru	xreg,24,1,neg
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru,<> psr,27,1,0		;skip next if 8bit
 	extru	xreg,16,1,neg
 	copy	xreg,yreg
@@ -1730,50 +1755,50 @@ inst9b_SYM		/*  TXY */
 	copy	xreg,zero
 #else
 	SET_INDEX_REG(xreg, yreg);
-	kpc++;
+	INC_KPC_1;
 #endif
 
 
 inst9c_SYM		/*  STZ Abs */
 	GET_ABS_ADDR();
-	STZ_INST();
+	STZ_INST(0);
 
 inst9d_SYM		/*  STA Abs,X */
 	GET_ABS_INDEX_ADDR_FOR_WR(xreg);
-	STA_INST();
+	STA_INST(0);
 
 inst9e_SYM		/*  STZ Abs,X */
 	GET_ABS_INDEX_ADDR_FOR_WR(xreg);
-	STZ_INST();
+	STZ_INST(0);
 
 inst9f_SYM		/*  STA Long,X */
 	GET_LONG_X_ADDR_FOR_WR();
-	STA_INST();
+	STA_INST(0);
 
 
 insta0_SYM		/*  LDY #imm */
 #ifdef ASM
-	ldb	1(scratch1),zero
+	INC_KPC_2
 	bb,>=	psr,27,insta0_16bit_SYM
-	addi	2,kpc,kpc
+	ldb	1(scratch1),zero
 
 	extru	zero,24,1,neg
 	b	dispatch
 	copy	zero,yreg
 insta0_16bit_SYM
 	ldb	2(scratch1),scratch1
-	addi	1,kpc,kpc
+	INC_KPC_1
 	CYCLES_PLUS_1
 	extru	scratch1,24,1,neg
 	dep	scratch1,23,8,zero
 	b	dispatch
 	copy	zero,yreg
 #else
-	kpc += 2;
+	INC_KPC_2;
 	if((psr & 0x10) == 0) {
 		GET_2BYTE_ARG;
 		CYCLES_PLUS_1
-		kpc++;
+		INC_KPC_1;
 	} else {
 		GET_1BYTE_ARG;
 	}
@@ -1790,25 +1815,25 @@ insta2_SYM		/*  LDX #imm */
 #ifdef ASM
 	ldb	1(scratch1),zero
 	bb,>=	psr,27,insta2_16bit_SYM
-	addi	2,kpc,kpc
+	INC_KPC_2;
 
 	extru	zero,24,1,neg
 	b	dispatch
 	copy	zero,xreg
 insta2_16bit_SYM
 	ldb	2(scratch1),scratch1
-	addi	1,kpc,kpc
+	INC_KPC_1
 	CYCLES_PLUS_1
 	extru	scratch1,24,1,neg
 	dep	scratch1,23,8,zero
 	b	dispatch
 	copy	zero,xreg
 #else
-	kpc += 2;
+	INC_KPC_2;
 	if((psr & 0x10) == 0) {
 		GET_2BYTE_ARG;
 		CYCLES_PLUS_1
-		kpc++;
+		INC_KPC_1;
 	} else {
 		GET_1BYTE_ARG;
 	}
@@ -1851,7 +1876,7 @@ insta7_SYM		/*  LDA [Dloc] */
 
 insta8_SYM		/*  TAY */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bb,>=	psr,27,insta8_16bit_SYM
 	extru	acc,31,8,zero
 
@@ -1865,7 +1890,7 @@ insta8_16bit_SYM
 	b	dispatch
 	copy	zero,yreg
 #else
-	kpc++;
+	INC_KPC_1;
 	SET_INDEX_REG(acc, yreg);
 #endif
 
@@ -1875,7 +1900,7 @@ insta9_SYM		/*  LDA #imm */
 
 instaa_SYM		/*  TAX */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bb,>=	psr,27,instaa_16bit_SYM
 	extru	acc,31,8,zero
 
@@ -1889,13 +1914,13 @@ instaa_16bit_SYM
 	b	dispatch
 	copy	zero,xreg
 #else
-	kpc++;
+	INC_KPC_1;
 	SET_INDEX_REG(acc, xreg);
 #endif
 
 instab_SYM		/*  PLB */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bl	pull_8,link
 	CYCLES_PLUS_1
 
@@ -1904,7 +1929,7 @@ instab_SYM		/*  PLB */
 	b	dispatch
 	copy	zero,dbank
 #else
-	kpc++;
+	INC_KPC_1;
 	CYCLES_PLUS_1
 	PULL8(dbank);
 	SET_NEG_ZERO8(dbank);
@@ -1992,12 +2017,12 @@ instb7_SYM		/*  LDA [Dloc],Y */
 
 instb8_SYM		/*  CLV */
 #ifdef ASM
-	depi	0,25,1,psr		/* clear overflow */
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	depi	0,25,1,psr		/* clear overflow */
 #else
 	psr = psr & ~0x40;
-	kpc++;
+	INC_KPC_1;
 #endif
 
 instb9_SYM		/*  LDA abs,y */
@@ -2006,7 +2031,7 @@ instb9_SYM		/*  LDA abs,y */
 
 instba_SYM		/*  TSX */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bb,>=	psr,27,instba_16bit_SYM
 	extru	stack,31,8,zero
 
@@ -2019,13 +2044,13 @@ instba_16bit_SYM
 	b	dispatch
 	copy	zero,xreg
 #else
-	kpc++;
+	INC_KPC_1;
 	SET_INDEX_REG(stack, xreg);
 #endif
 
 instbb_SYM		/*  TYX */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bb,>=	psr,27,instbb_16bit_SYM
 	copy	yreg,xreg
 
@@ -2038,7 +2063,7 @@ instbb_16bit_SYM
 	b	dispatch
 	copy	yreg,zero
 #else
-	kpc++;
+	INC_KPC_1;
 	SET_INDEX_REG(yreg, xreg);
 #endif
 
@@ -2073,12 +2098,12 @@ instc0_SYM		/*  CPY #imm */
 #ifdef ASM
 	ldb	1(scratch1),ret0
 	bb,>=	psr,27,instc0_16bit_SYM
-	addi	2,kpc,kpc
+	INC_KPC_2;
 	CMP_INDEX_REG_MEAT8(yreg)
 instc0_16bit_SYM
 	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_1
-	addi	1,kpc,kpc
+	INC_KPC_1
 	dep	scratch1,23,8,ret0
 	CMP_INDEX_REG_MEAT16(yreg)
 #else
@@ -2095,7 +2120,7 @@ instc2_SYM		/*  REP #imm */
 #ifdef ASM
 	ldb	1(scratch1),ret0
 	extru	psr,27,2,arg0		/* save old x & m */
-	addi	2,kpc,kpc
+	INC_KPC_2;
 	dep	neg,24,1,psr
 	CYCLES_PLUS_1
 	depi	0,30,1,psr
@@ -2112,7 +2137,7 @@ instc2_SYM		/*  REP #imm */
 	GET_1BYTE_ARG;
 	tmp2 = psr;
 	CYCLES_PLUS_1;
-	kpc += 2;
+	INC_KPC_2;
 	psr = (psr & ~0x82) | ((neg & 1) << 7) | ((!zero) << 1);
 	psr = psr & ~(arg & 0xff);
 	zero = !(psr & 2);
@@ -2141,7 +2166,7 @@ instc5_SYM		/*  CMP Dloc */
 
 instc6_SYM		/*  DEC Dloc */
 	GET_DLOC_RD();
-	DEC_INST();
+	DEC_INST(1);
 
 instc7_SYM		/*  CMP [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -2149,7 +2174,7 @@ instc7_SYM		/*  CMP [Dloc] */
 
 instc8_SYM		/*  INY */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	addi	1,yreg,yreg
 	bb,>=	psr,27,instc8_16bit_SYM
 	extru	yreg,31,8,zero
@@ -2164,7 +2189,7 @@ instc8_16bit_SYM
 	b	dispatch
 	copy	zero,yreg
 #else
-	kpc++;
+	INC_KPC_1;
 	SET_INDEX_REG(yreg + 1, yreg);
 #endif
 
@@ -2174,7 +2199,7 @@ instc9_SYM		/*  CMP #imm */
 
 instca_SYM		/*  DEX */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	addi	-1,xreg,xreg
 	bb,>=	psr,27,instca_16bit_SYM
 	extru	xreg,31,8,zero
@@ -2189,7 +2214,7 @@ instca_16bit_SYM
 	b	dispatch
 	copy	zero,xreg
 #else
-	kpc++;
+	INC_KPC_1;
 	SET_INDEX_REG(xreg - 1, xreg);
 #endif
 
@@ -2222,7 +2247,7 @@ instcd_SYM		/*  CMP abs */
 
 instce_SYM		/*  DEC abs */
 	GET_ABS_RD();
-	DEC_INST();
+	DEC_INST(0);
 
 
 instcf_SYM		/*  CMP long */
@@ -2267,7 +2292,7 @@ instd4_SYM		/*  PEI Dloc */
 	ldo	r%dispatch(link),link
 #else
 	GET_DLOC_ADDR()
-	GET_MEMORY16(arg, arg);
+	GET_MEMORY16(arg, arg, 1);
 	CYCLES_PLUS_1;
 	PUSH16_UNSAFE(arg);
 #endif
@@ -2278,7 +2303,7 @@ instd5_SYM		/*  CMP Dloc,x */
 
 instd6_SYM		/*  DEC Dloc,x */
 	GET_DLOC_X_RD();
-	DEC_INST();
+	DEC_INST(1);
 
 instd7_SYM		/*  CMP [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -2286,12 +2311,12 @@ instd7_SYM		/*  CMP [Dloc],Y */
 
 instd8_SYM		/*  CLD */
 #ifdef ASM
-	depi	0,28,1,psr		/* clear decimal */
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	depi	0,28,1,psr		/* clear decimal */
 #else
 	psr = psr & (~0x8);
-	kpc++;
+	INC_KPC_1;
 #endif
 
 instd9_SYM		/*  CMP abs,y */
@@ -2300,7 +2325,7 @@ instd9_SYM		/*  CMP abs,y */
 
 instda_SYM		/*  PHX */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	bb,>=	psr,27,instda_16bit_SYM
 	ldil	l%dispatch,link
 
@@ -2313,7 +2338,7 @@ instda_16bit_SYM
 	b	push_16
 	ldo	r%dispatch(link),link
 #else
-	kpc += 1;
+	INC_KPC_1;
 	if(psr & 0x10) {
 		PUSH8(xreg);
 	} else {
@@ -2328,9 +2353,8 @@ instdb_SYM		/*  STP */
 	b	dispatch_done
 	depi	RET_STP,3,4,ret0
 #else
-	GET_1BYTE_ARG;
-	CYCLES_PLUS_1
-	FINISH(RET_STP, arg);
+	CYCLES_FINISH
+	FINISH(RET_STP, 0);
 #endif
 
 instdc_SYM		/*  JML (Abs) */
@@ -2346,7 +2370,7 @@ instdc_SYM		/*  JML (Abs) */
 #else
 	GET_2BYTE_ARG;
 	CYCLES_PLUS_1;
-	GET_MEMORY24(arg, kpc);
+	GET_MEMORY24(arg, kpc, 1);
 #endif
 
 instdd_SYM		/*  CMP Abs,X */
@@ -2355,7 +2379,7 @@ instdd_SYM		/*  CMP Abs,X */
 
 instde_SYM		/*  DEC Abs,X */
 	GET_ABS_X_RD_WR();
-	DEC_INST();
+	DEC_INST(0);
 
 instdf_SYM		/*  CMP Long,X */
 	GET_LONG_X_RD();
@@ -2366,12 +2390,12 @@ inste0_SYM		/*  CPX #imm */
 #ifdef ASM
 	ldb	1(scratch1),ret0
 	bb,>=	psr,27,inste0_16bit_SYM
-	addi	2,kpc,kpc
+	INC_KPC_2;
 	CMP_INDEX_REG_MEAT8(xreg)
 inste0_16bit_SYM
 	ldb	2(scratch1),scratch1
 	CYCLES_PLUS_1
-	addi	1,kpc,kpc
+	INC_KPC_1
 	dep	scratch1,23,8,ret0
 	CMP_INDEX_REG_MEAT16(xreg)
 #else
@@ -2388,7 +2412,7 @@ inste2_SYM		/*  SEP #imm */
 #ifdef ASM
 	ldb	1(scratch1),ret0
 	extru	psr,27,2,arg0		/* save old x & m */
-	addi	2,kpc,kpc
+	INC_KPC_2;
 	dep	neg,24,1,psr
 	CYCLES_PLUS_1
 	depi	0,30,1,psr
@@ -2405,7 +2429,7 @@ inste2_SYM		/*  SEP #imm */
 	GET_1BYTE_ARG;
 	tmp2 = psr;
 	CYCLES_PLUS_1;
-	kpc += 2;
+	INC_KPC_2;
 	psr = (psr & ~0x82) | ((neg & 1) << 7) | ((!zero) << 1);
 	psr = psr | (arg & 0xff);
 	zero = !(psr & 2);
@@ -2435,7 +2459,7 @@ inste5_SYM		/*  SBC Dloc */
 
 inste6_SYM		/*  INC Dloc */
 	GET_DLOC_RD();
-	INC_INST();
+	INC_INST(1);
 
 inste7_SYM		/*  SBC [Dloc] */
 	GET_DLOC_L_IND_RD();
@@ -2443,7 +2467,7 @@ inste7_SYM		/*  SBC [Dloc] */
 
 inste8_SYM		/*  INX */
 #ifdef ASM
-	addi	1,kpc,kpc
+	INC_KPC_1
 	addi	1,xreg,xreg
 	bb,>=	psr,27,inste8_16bit_SYM
 	extru	xreg,31,8,zero
@@ -2458,7 +2482,7 @@ inste8_16bit_SYM
 	b	dispatch
 	copy	zero,xreg
 #else
-	kpc++;
+	INC_KPC_1;
 	SET_INDEX_REG(xreg + 1, xreg);
 #endif
 
@@ -2468,10 +2492,11 @@ inste9_SYM		/*  SBC #imm */
 
 instea_SYM		/*  NOP */
 #ifdef ASM
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	nop
 #else
-	kpc++;
+	INC_KPC_1;
 #endif
 
 insteb_SYM		/*  XBA */
@@ -2480,14 +2505,15 @@ insteb_SYM		/*  XBA */
 	CYCLES_PLUS_1			/*   bits of final acc value! */
 	copy	acc,scratch1		/* regardlessof ACC 8 or 16 bit */
 	extru	acc,23,8,acc
-	addi	1,kpc,kpc
+	INC_KPC_1
 	copy	acc,zero
 	b	dispatch
 	dep	scratch1,23,8,acc
 #else
 	tmp1 = acc & 0xff;
+	CYCLES_PLUS_1
 	acc = (tmp1 << 8) + (acc >> 8);
-	kpc++;
+	INC_KPC_1;
 	SET_NEG_ZERO8(acc & 0xff);
 #endif
 
@@ -2508,7 +2534,7 @@ insted_SYM		/*  SBC abs */
 
 instee_SYM		/*  INC abs */
 	GET_ABS_RD();
-	INC_INST();
+	INC_INST(0);
 
 
 instef_SYM		/*  SBC long */
@@ -2545,7 +2571,7 @@ instf4_SYM		/*  PEA Abs */
 	ldb	1(scratch1),arg0
 	ldil	l%dispatch,link
 	ldb	2(scratch1),scratch1
-	addi	3,kpc,kpc
+	INC_KPC_3
 	CYCLES_PLUS_1
 	ldo	r%dispatch(link),link
 	b	push_16_unsafe
@@ -2553,7 +2579,7 @@ instf4_SYM		/*  PEA Abs */
 #else
 	GET_2BYTE_ARG;
 	CYCLES_PLUS_1;
-	kpc += 3;
+	INC_KPC_3;
 	PUSH16_UNSAFE(arg);
 #endif
 
@@ -2563,7 +2589,7 @@ instf5_SYM		/*  SBC Dloc,x */
 
 instf6_SYM		/*  INC Dloc,x */
 	GET_DLOC_X_RD();
-	INC_INST();
+	INC_INST(1);
 
 instf7_SYM		/*  SBC [Dloc],Y */
 	GET_DLOC_L_IND_Y_RD();
@@ -2571,11 +2597,11 @@ instf7_SYM		/*  SBC [Dloc],Y */
 
 instf8_SYM		/*  SED */
 #ifdef ASM
-	depi	1,28,1,psr		/* set decimal */
+	INC_KPC_1
 	b	dispatch
-	addi	1,kpc,kpc
+	depi	1,28,1,psr		/* set decimal */
 #else
-	kpc++;
+	INC_KPC_1;
 	psr |= 0x8;
 #endif
 
@@ -2588,8 +2614,9 @@ instfa_SYM		/*  PLX */
 	bb,<	psr,27,instfa_8bit_SYM
 	CYCLES_PLUS_1
 
+	INC_KPC_1
 	bl	pull_16,link
-	addi	1,kpc,kpc
+	nop
 
 	extru	ret0,31,16,zero
 	extru	ret0,16,1,neg
@@ -2597,15 +2624,16 @@ instfa_SYM		/*  PLX */
 	copy	zero,xreg
 
 instfa_8bit_SYM
+	INC_KPC_1
 	bl	pull_8,link
-	addi	1,kpc,kpc
+	nop
 
 	extru	ret0,31,8,zero
 	extru	ret0,24,1,neg
 	b	dispatch
 	copy	zero,xreg
 #else
-	kpc++;
+	INC_KPC_1;
 	CYCLES_PLUS_1;
 	if(psr & 0x10) {
 		PULL8(xreg);
@@ -2619,14 +2647,14 @@ instfa_8bit_SYM
 instfb_SYM		/*  XCE */
 #ifdef ASM
 	extru	psr,27,2,arg0		/* save old x & m */
-	addi	1,kpc,kpc
+	INC_KPC_1
 	extru	psr,23,1,scratch1	/* e bit */
 	dep	psr,23,1,psr		/* copy carry to e bit */
 	b	update_system_state
 	dep	scratch1,31,1,psr	/* copy e bit to carry */
 #else
 	tmp2 = psr;
-	kpc++;
+	INC_KPC_1;
 	psr = (tmp2 & 0xfe) | ((tmp2 & 1) << 8) | ((tmp2 >> 8) & 1);
 	UPDATE_PSR(psr, tmp2);
 #endif
@@ -2637,7 +2665,7 @@ instfc_SYM		/*  JSR (Abs,X) */
 	extru	kpc,15,8,scratch2
 	ldb	2(scratch1),scratch1
 	dep	scratch2,15,16,ret0
-	addi	2,kpc,kpc
+	INC_KPC_2;
 	dep	scratch1,23,8,ret0
 	add	xreg,ret0,arg0
 	bl	get_mem_long_16,link
@@ -2651,10 +2679,12 @@ instfc_SYM		/*  JSR (Abs,X) */
 	ldo	r%dispatch(link),link
 #else
 	GET_2BYTE_ARG;
-	tmp1 = kpc + 2;
-	arg = (kpc & 0xff0000) + arg + xreg;
-	GET_MEMORY16(arg, tmp2);
+	INC_KPC_2;
+	tmp1 = kpc;
+	arg = (kpc & 0xff0000) + ((arg + xreg) & 0xffff);
+	GET_MEMORY16(arg, tmp2, 1);
 	kpc = (kpc & 0xff0000) + tmp2;
+	CYCLES_PLUS_2
 	PUSH16_UNSAFE(tmp1);
 #endif
 
@@ -2664,7 +2694,7 @@ instfd_SYM		/*  SBC Abs,X */
 
 instfe_SYM		/*  INC Abs,X */
 	GET_ABS_X_RD_WR();
-	INC_INST();
+	INC_INST(0);
 
 instff_SYM		/*  SBC Long,X */
 	GET_LONG_X_RD();

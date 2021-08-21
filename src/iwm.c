@@ -1,35 +1,20 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
-const char rcsid_iwm_c[] = "@(#)$Header: iwm.c,v 1.99 2000/09/24 01:01:46 kentd Exp $";
+const char rcsid_iwm_c[] = "@(#)$KmKId: iwm.c,v 1.119 2004-11-21 17:44:14-05 kentd Exp $";
 
 #include "defc.h"
 
 extern int Verbose;
 extern int g_vbl_count;
-extern int speed_fast;
-extern word32 g_slot_motor_detect;
-
-#define NIB_LEN_525	0x1900		/* 51072 bits per track */
-#define NIBS_FROM_ADDR_TO_DATA		20
-
-#define DSK_TYPE_RAW			0
-#define DSK_TYPE_PRODOS			1
-#define DSK_TYPE_NIB			2
-
-char g_kegs_conf_name[256];
-
-const char *g_kegs_conf_names[] = { "kegs_conf", "disk_conf", ".kegs_conf", 0 };
+extern int g_c036_val_speed;
 
 const byte phys_to_dos_sec[] = {
 	0x00, 0x07, 0x0e, 0x06,  0x0d, 0x05, 0x0c, 0x04,
@@ -86,15 +71,11 @@ int	from_disk_byte_valid = 0;
 
 Iwm	iwm;
 
-int	g_apple35_sel = 0;
-int	head_35 = 0;
+extern int g_c031_disk35;
+
 int	g_iwm_motor_on = 0;
 
 int	g_check_nibblization = 0;
-
-time_t	g_disk_conf_mtime = 0;
-int	g_reparse_delay = 0;
-int	g_highest_smartport_unit = -1;
 
 /* prototypes for IWM special routs */
 int iwm_read_data_35(Disk *dsk, int fast_disk_emul, double dcycs);
@@ -105,13 +86,12 @@ void iwm_write_data_525(Disk *dsk, word32 val, int fast_disk_emul,double dcycs);
 void
 iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525)
 {
-	int	num_tracks;
-	int	i;
-
-	num_tracks = MAX_TRACKS;
-
-	dsk->fd = -1;
+	dsk->dcycs_last_read = 0.0;
 	dsk->name_ptr = 0;
+	dsk->partition_name = 0;
+	dsk->partition_num = -1;
+	dsk->fd = -1;
+	dsk->force_size = 0;
 	dsk->image_start = 0;
 	dsk->image_size = 0;
 	dsk->smartport = smartport;
@@ -124,19 +104,34 @@ iwm_init_drive(Disk *dsk, int smartport, int drive, int disk_525)
 	dsk->write_through_to_unix = 0;
 	dsk->disk_dirty = 0;
 	dsk->just_ejected = 0;
-	dsk->dcycs_last_read = 0.0;
 	dsk->last_phase = 0;
 	dsk->nib_pos = 0;
 	dsk->num_tracks = 0;
+	dsk->trks = 0;
+
+}
+
+void
+disk_set_num_tracks(Disk *dsk, int num_tracks)
+{
+	int	i;
+
+	if(dsk->trks != 0) {
+		/* This should not be necessary! */
+		free(dsk->trks);
+		halt_printf("Needed to free dsk->trks: %p\n", dsk->trks);
+	}
+	dsk->num_tracks = num_tracks;
+	dsk->trks = (Trk *)malloc(num_tracks * sizeof(Trk));
 
 	for(i = 0; i < num_tracks; i++) {
-		dsk->tracks[i].track_dirty = 0;
-		dsk->tracks[i].overflow_size = 0;
-		dsk->tracks[i].track_len = 0;
-		dsk->tracks[i].dsk = dsk;
-		dsk->tracks[i].nib_area = 0;
-		dsk->tracks[i].unix_pos = -1;
-		dsk->tracks[i].unix_len = -1;
+		dsk->trks[i].dsk = dsk;
+		dsk->trks[i].nib_area = 0;
+		dsk->trks[i].track_dirty = 0;
+		dsk->trks[i].overflow_size = 0;
+		dsk->trks[i].track_len = 0;
+		dsk->trks[i].unix_pos = -1;
+		dsk->trks[i].unix_len = -1;
 	}
 }
 
@@ -168,13 +163,7 @@ iwm_init()
 		halt_printf("iwm_init called twice!\n");
 	}
 
-	// Find any kegs_conf and disk_conf files
-	setup_kegs_file(&g_kegs_conf_name[0], sizeof(g_kegs_conf_name), 0,
-					&g_kegs_conf_names[0]);
-
 	iwm_reset();
-
-	maybe_parse_disk_conf_file();
 }
 
 void
@@ -200,21 +189,23 @@ iwm_reset()
 	iwm.previous_write_bits = 0;
 
 	g_iwm_motor_on = 0;
-	g_apple35_sel = 0;
+	g_c031_disk35 = 0;
 }
 
 void
 draw_iwm_status(int line, char *buf)
 {
 	char	*flag[2][2];
+	int	apple35_sel;
 
 	flag[0][0] = " ";
 	flag[0][1] = " ";
 	flag[1][0] = " ";
 	flag[1][1] = " ";
 
+	apple35_sel = (g_c031_disk35 >> 6) & 1;
 	if(g_iwm_motor_on) {
-		flag[g_apple35_sel][iwm.drive_select] = "*";
+		flag[apple35_sel][iwm.drive_select] = "*";
 	}
 
 	sprintf(buf, "s6d1:%2d%s   s6d2:%2d%s   s5d1:%2d/%d%s   "
@@ -225,11 +216,11 @@ draw_iwm_status(int line, char *buf)
 		iwm.drive35[0].cur_qtr_track & 1, flag[1][0],
 		iwm.drive35[1].cur_qtr_track >> 1,
 		iwm.drive35[1].cur_qtr_track & 1, flag[1][1],
-		g_fast_disk_emul, g_slow_525_emul_wr,
-		(speed_fast << 7) + g_slot_motor_detect);
+		g_fast_disk_emul, g_slow_525_emul_wr, g_c036_val_speed);
 
-	update_status_line(line, buf);
+	video_update_status_line(line, buf);
 }
+
 
 void
 iwm_flush_disk_to_unix(Disk *dsk)
@@ -274,8 +265,8 @@ iwm_flush_disk_to_unix(Disk *dsk)
 		num_dirty++;
 
 		/* Write it out */
-		unix_pos = dsk->tracks[j].unix_pos;
-		unix_len = dsk->tracks[j].unix_len;
+		unix_pos = dsk->trks[j].unix_pos;
+		unix_len = dsk->trks[j].unix_len;
 		if(unix_pos < 0 || unix_len < 0x1000) {
 			halt_printf("Disk:%s trk:%d, unix_pos:%08x, len:%08x\n",
 				dsk->name_ptr, j, unix_pos, unix_len);
@@ -301,18 +292,13 @@ iwm_flush_disk_to_unix(Disk *dsk)
 
 }
 
-/* Check for dirty disk and disk_conf changes 3 times a second */
-#define IWM_VBL_COUNT	20
-int g_iwm_vbl_count = 0;
+/* Check for dirty disk 3 times a second */
 
 void
-iwm_vbl_update()
+iwm_vbl_update(int doit_3_persec)
 {
-	struct stat stat_buf;
 	Disk	*dsk;
-	time_t	mtime;
 	int	motor_on;
-	int	ret;
 	int	i;
 
 	if(iwm.motor_on && iwm.motor_off) {
@@ -324,13 +310,12 @@ iwm_vbl_update()
 		}
 	}
 
-	if(g_iwm_vbl_count > 0) {
-		g_iwm_vbl_count--;
+	if(!doit_3_persec) {
 		return;
 	}
 
 	motor_on = iwm.motor_on;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		motor_on = iwm.motor_on35;
 	}
 
@@ -345,27 +330,6 @@ iwm_vbl_update()
 			dsk = &(iwm.drive35[i]);
 			iwm_flush_disk_to_unix(dsk);
 		}
-
-		g_iwm_vbl_count = IWM_VBL_COUNT;
-
-		/* Also see if disk_conf has changed */
-
-		ret = stat(g_kegs_conf_name, &stat_buf);
-		if(ret != 0) {
-			halt_printf("IWM: stat of disk_conf ret:%d, errno:%d\n",
-				ret, errno);
-		} else {
-			mtime = stat_buf.st_mtime;
-			if(mtime > g_disk_conf_mtime) {
-				iwm_printf("%s has changed\n",g_kegs_conf_name);
-				if(g_disk_conf_mtime != 0) {
-					g_reparse_delay = 1;	/* 1 * 1/3 sec*/
-				}
-				g_disk_conf_mtime = mtime;
-			}
-		}
-
-		maybe_parse_disk_conf_file();
 	}
 }
 
@@ -375,11 +339,11 @@ iwm_show_stats()
 {
 	printf("IWM stats: q7,q6: %d, %d, reset,enable2: %d,%d, mode: %02x\n",
 		iwm.q7, iwm.q6, iwm.reset, iwm.enable2, iwm.iwm_mode);
-	printf("motor: %d,%d, motor35:%d drive: %d, on: %d, head35: %d "
+	printf("motor: %d,%d, motor35:%d drive: %d, c031:%02x "
 		"phs: %d %d %d %d\n",
 		iwm.motor_on, iwm.motor_off, g_iwm_motor_on,
-		iwm.drive_select, g_apple35_sel,
-		head_35, iwm.iwm_phase[0], iwm.iwm_phase[1], iwm.iwm_phase[2],
+		iwm.drive_select, g_c031_disk35,
+		iwm.iwm_phase[0], iwm.iwm_phase[1], iwm.iwm_phase[2],
 		iwm.iwm_phase[3]);
 	printf("iwm.drive525[0].fd: %d, [1].fd: %d\n",
 		iwm.drive525[0].fd, iwm.drive525[1].fd);
@@ -403,7 +367,7 @@ iwm_touch_switches(int loc, double dcycs)
 	on = loc & 1;
 	drive = iwm.drive_select;
 	phase = loc >> 1;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		dsk = &(iwm.drive35[drive]);
 	} else {
 		dsk = &(iwm.drive525[drive]);
@@ -414,9 +378,12 @@ iwm_touch_switches(int loc, double dcycs)
 		/* phase adjustments.  See if motor is on */
 
 		iwm.iwm_phase[phase] = on;
+		iwm_printf("Iwm phase %d=%d, all phases: %d %d %d %d (%f)\n",
+			phase, on, iwm.iwm_phase[0], iwm.iwm_phase[1],
+			iwm.iwm_phase[2], iwm.iwm_phase[3], dcycs);
 
 		if(iwm.motor_on) {
-			if(g_apple35_sel) {
+			if(g_c031_disk35 & 0x40) {
 				if(phase == 3 && on) {
 					iwm_do_action35(dcycs);
 				}
@@ -575,7 +542,7 @@ iwm525_phase_change(int drive, int phase)
 		last_phase = 0;
 	}
 	if(qtr_track > 4*34) {
-		printf("Disk arm moved past track 0x21, moving it back\n");
+		printf("Disk arm moved past track 34, moving it back\n");
 		qtr_track = 4*34;
 		last_phase = 0;
 	}
@@ -584,9 +551,9 @@ iwm525_phase_change(int drive, int phase)
 
 	dsk->last_phase = last_phase;
 
-	iwm_printf("Moving drive to qtr track: %04x, %d, %d, %d,   "
-		"%d %d %d %d\n",
-		qtr_track, phase, delta, last_phase, iwm.iwm_phase[0],
+	iwm_printf("Moving drive to qtr track: %04x (trk:%d.%02d), %d, %d, %d, "
+		"%d %d %d %d\n", qtr_track, qtr_track>>2, 25*(qtr_track & 3),
+		phase, delta, last_phase, iwm.iwm_phase[0],
 		iwm.iwm_phase[1], iwm.iwm_phase[2], iwm.iwm_phase[3]);
 
 	/* sanity check stepping algorithm */
@@ -612,7 +579,7 @@ iwm_read_status35(double dcycs)
 	if(iwm.motor_on) {
 		/* Read status */
 		state = (iwm.iwm_phase[1] << 3) + (iwm.iwm_phase[0] << 2) +
-			(head_35 << 1) + iwm.iwm_phase[2];
+			((g_c031_disk35 >> 6) & 2) + iwm.iwm_phase[2];
 
 		iwm_printf("Iwm status read state: %02x\n", state);
 
@@ -714,7 +681,7 @@ iwm_do_action35(double dcycs)
 	if(iwm.motor_on) {
 		/* Perform action */
 		state = (iwm.iwm_phase[1] << 3) + (iwm.iwm_phase[0] << 2) +
-			(head_35 << 1) + iwm.iwm_phase[2];
+			((g_c031_disk35 >> 6) & 2) + iwm.iwm_phase[2];
 		switch(state) {
 		case 0x00:	/* Set step direction inward */
 			/* towards higher tracks */
@@ -747,9 +714,7 @@ iwm_do_action35(double dcycs)
 			iwm.motor_on35 = 0;
 			break;
 		case 0x0d:	/* eject disk */
-			printf("Ejecting disk!\n");
-			dsk->just_ejected = 4;
-			eject_disk_by_num(5, drive+1);
+			eject_disk(dsk);
 			break;
 		case 0x02:
 		case 0x07:
@@ -765,17 +730,6 @@ iwm_do_action35(double dcycs)
 	}
 }
 
-void
-iwm_set_apple35_sel(int newval)
-{
-	if(g_apple35_sel != newval) {
-		/* Handle speed changes */
-		set_halt(HALT_EVENT);
-	}
-
-	g_apple35_sel = newval;
-}
-
 int
 iwm_read_c0ec(double dcycs)
 {
@@ -786,7 +740,7 @@ iwm_read_c0ec(double dcycs)
 
 	if(iwm.q7 == 0 && iwm.enable2 == 0 && iwm.motor_on) {
 		drive = iwm.drive_select;
-		if(g_apple35_sel) {
+		if(g_c031_disk35 & 0x40) {
 			dsk = &(iwm.drive35[drive]);
 			return iwm_read_data_35(dsk, g_fast_disk_emul, dcycs);
 		} else {
@@ -806,7 +760,7 @@ read_iwm(int loc, double dcycs)
 	Disk	*dsk;
 	word32	status;
 	double	diff_dcycs;
-	int	cmp;
+	double	dcmp;
 	int	on;
 	int	state;
 	int	drive;
@@ -823,7 +777,7 @@ read_iwm(int loc, double dcycs)
 
 	state = (iwm.q7 << 1) + iwm.q6;
 	drive = iwm.drive_select;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		dsk = &(iwm.drive35[drive]);
 	} else {
 		dsk = &(iwm.drive525[drive]);
@@ -846,7 +800,7 @@ read_iwm(int loc, double dcycs)
 					iwm_printf("read iwm st 0, m off!\n");
 /* HACK!!!! */
 					return 0xff;
-					return (((int)dcycs) & 0x7f) + 0x80;
+					//return (((int)dcycs) & 0x7f) + 0x80;
 				}
 			}
 			break;
@@ -856,7 +810,7 @@ read_iwm(int loc, double dcycs)
 				iwm_printf("Read status under enable2: 1\n");
 				status = 1;
 			} else {
-				if(g_apple35_sel) {
+				if(g_c031_disk35 & 0x40) {
 					status = iwm_read_status35(dcycs);
 				} else {
 					status = dsk->write_prot;
@@ -876,11 +830,11 @@ read_iwm(int loc, double dcycs)
 			} else {
 				status = 0xc0;
 				diff_dcycs = dcycs - dsk->dcycs_last_read;
-				cmp = 16.0;
+				dcmp = 16.0;
 				if(dsk->disk_525 == 0) {
-					cmp = 32.0;
+					dcmp = 32.0;
 				}
-				if(diff_dcycs > cmp) {
+				if(diff_dcycs > dcmp) {
 					iwm_printf("Write underrun!\n");
 					iwm_printf("cur: %f, dc_last: %f\n",
 						dcycs, dsk->dcycs_last_read);
@@ -918,7 +872,7 @@ write_iwm(int loc, int val, double dcycs)
 	state = (iwm.q7 << 1) + iwm.q6;
 	drive = iwm.drive_select;
 	fast_writes = g_fast_disk_emul;
-	if(g_apple35_sel) {
+	if(g_c031_disk35 & 0x40) {
 		dsk = &(iwm.drive35[drive]);
 	} else {
 		dsk = &(iwm.drive525[drive]);
@@ -949,8 +903,11 @@ write_iwm(int loc, int val, double dcycs)
 			if(iwm.enable2) {
 				iwm_write_enable2(val, dcycs);
 			} else {
+#if 0
+// Flobynoid writes to 0xc0e9 causing these messages...
 				printf("Write iwm1, st: %02x, loc: %x: %02x\n",
 					state, loc, val);
+#endif
 			}
 		}
 		return;
@@ -965,10 +922,7 @@ write_iwm(int loc, int val, double dcycs)
 		return;
 	}
 
-	halt_printf("Got to end of write_iwm, loc:%02x, val: %02x\n", loc, val);
-
 	return;
-
 }
 
 
@@ -1114,7 +1068,7 @@ disk_unnib_4x4(Disk *dsk)
 }
 
 int
-iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
+iwm_denib_track525(Disk *dsk, Trk *trk, int qtr_track, byte *outbuf)
 {
 	byte	aux_buf[0x80];
 	byte	*buf;
@@ -1178,10 +1132,10 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 				phys_sec);
 			break;
 		}
-		if(dsk->image_type == DSK_TYPE_PRODOS) {
-			log_sec = phys_to_prodos_sec[phys_sec];
-		} else {
+		if(dsk->image_type == DSK_TYPE_DOS33) {
 			log_sec = phys_to_dos_sec[phys_sec];
+		} else {
+			log_sec = phys_to_prodos_sec[phys_sec];
 		}
 		cksum = disk_unnib_4x4(dsk);
 		if((vol ^ track ^ phys_sec ^ cksum) != 0) {
@@ -1324,7 +1278,7 @@ iwm_denib_track525(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 }
 
 int
-iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
+iwm_denib_track35(Disk *dsk, Trk *trk, int qtr_track, byte *outbuf)
 {
 	word32	buf_c00[0x100];
 	word32	buf_d00[0x100];
@@ -1548,7 +1502,7 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 
 		val = iwm_read_data(dsk, 1, 0);
 		val2 = from_disk_byte[val] + val2;
-		if(tmp_5e != val2) {
+		if(tmp_5e != (word32)val2) {
 			printf("Checksum 5e bad: %02x vs %02x\n", tmp_5e, val2);
 			printf("val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
@@ -1557,7 +1511,7 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 
 		val = iwm_read_data(dsk, 1, 0);
 		val2 = from_disk_byte[val] + tmp_67;
-		if(tmp_5d != val2) {
+		if(tmp_5d != (word32)val2) {
 			printf("Checksum 5d bad: %02x vs %02x\n", tmp_5e, val2);
 			printf("val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
@@ -1566,7 +1520,7 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 
 		val = iwm_read_data(dsk, 1, 0);
 		val2 = from_disk_byte[val] + tmp_66;
-		if(tmp_5c != val2) {
+		if(tmp_5c != (word32)val2) {
 			printf("Checksum 5c bad: %02x vs %02x\n", tmp_5e, val2);
 			printf("val:%02x trk %02x.%x, sec %02x\n",
 				val, track, side, phys_sec);
@@ -1651,17 +1605,14 @@ iwm_denib_track35(Disk *dsk, Track *trk, int qtr_track, byte *outbuf)
 int
 disk_track_to_unix(Disk *dsk, int qtr_track, byte *outbuf)
 {
-	Track	*trk;
+	Trk	*trk;
 	int	disk_525;
 
 	disk_525 = dsk->disk_525;
 
-	trk = &(dsk->tracks[qtr_track]);
+	trk = &(dsk->trks[qtr_track]);
 
 	if(trk->track_len == 0 || trk->track_dirty == 0) {
-#if 0
-		printf("disk_track_to_unix: dirty: %d\n", trk->track_dirty);
-#endif
 		return 0;
 	}
 
@@ -1702,15 +1653,20 @@ void
 disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size)
 {
 	byte	buffer[0x3000];
-	Track	*trk;
+	Trk	*trk;
 	int	ret, ret2;
 	int	i;
+
+	if(size > 0x3000) {
+		printf("size %08x is > 0x3000, disk_check_nibblization\n",size);
+		exit(3);
+	}
 
 	for(i = 0; i < size; i++) {
 		buffer[i] = 0;
 	}
 
-	trk = &(dsk->tracks[qtr_track]);
+	trk = &(dsk->trks[qtr_track]);
 
 	if(dsk->disk_525) {
 		ret = iwm_denib_track525(dsk, trk, qtr_track, &(buffer[0]));
@@ -1733,7 +1689,7 @@ disk_check_nibblization(Disk *dsk, int qtr_track, byte *buf, int size)
 			ret, ret2, qtr_track);
 		show_hex_data(buf, 0x1000);
 		show_hex_data(buffer, 0x1000);
-		iwm_show_a_track(&(dsk->tracks[qtr_track]));
+		iwm_show_a_track(&(dsk->trks[qtr_track]));
 
 		exit(2);
 	}
@@ -1747,7 +1703,7 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 	int nib_len)
 {
 	byte	track_buf[TRACK_BUF_LEN];
-	Track	*trk;
+	Trk	*trk;
 	int	must_clear_track;
 	int	ret;
 	int	len;
@@ -1806,7 +1762,9 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 	}
 #endif
 
-	trk = &(dsk->tracks[qtr_track]);
+	dsk->nib_pos = 0;		/* for consistency */
+
+	trk = &(dsk->trks[qtr_track]);
 	trk->track_dirty = 0;
 	trk->overflow_size = 0;
 	trk->track_len = 2*nib_len;
@@ -1827,7 +1785,7 @@ disk_unix_to_nib(Disk *dsk, int qtr_track, int unix_pos, int unix_len,
 }
 
 void
-iwm_nibblize_track_nib525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
+iwm_nibblize_track_nib525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track)
 {
 	byte	*nib_ptr;
 	byte	*trk_ptr;
@@ -1846,7 +1804,7 @@ iwm_nibblize_track_nib525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 }
 
 void
-iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
+iwm_nibblize_track_525(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track)
 {
 	byte	partial_nib_buf[0x300];
 	word32	*word_ptr;
@@ -1870,10 +1828,10 @@ iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 
 
 	for(phys_sec = 0; phys_sec < 16; phys_sec++) {
-		if(dsk->image_type == DSK_TYPE_PRODOS) {
-			log_sec = phys_to_prodos_sec[phys_sec];
-		} else {
+		if(dsk->image_type == DSK_TYPE_DOS33) {
 			log_sec = phys_to_dos_sec[phys_sec];
+		} else {
+			log_sec = phys_to_prodos_sec[phys_sec];
 		}
 
 		/* Create sync headers */
@@ -1938,12 +1896,12 @@ iwm_nibblize_track_525(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 }
 
 void
-iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
+iwm_nibblize_track_35(Disk *dsk, Trk *trk, byte *track_buf, int qtr_track)
 {
 	int	phys_to_log_sec[16];
-	word32	buf_c00[0x100]={0};
-	word32	buf_d00[0x100]={0};
-	word32	buf_e00[0x100]={0};
+	word32	buf_c00[0x100];
+	word32	buf_d00[0x100];
+	word32	buf_e00[0x100];
 	byte	*buf;
 	word32	*word_ptr;
 	word32	val;
@@ -1969,6 +1927,11 @@ iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 #else
 	val = 0x08ff08ff;
 #endif
+	if(trk->track_len & 3) {
+		halt_printf("track_len: %08x is not a multiple of 4\n",
+				trk->track_len);
+	}
+
 	for(i = 0; i < trk->track_len; i += 4) {
 		*word_ptr++ = val;
 	}
@@ -2055,6 +2018,10 @@ iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 		tmp_5c = 0;
 		y = 0;
 		x = 0xaf;
+		buf_c00[0] = 0;
+		buf_d00[0] = 0;
+		buf_e00[0] = 0;
+		buf_e00[1] = 0;
 		for(y = 0x4; y > 0; y--) {
 			buf_c00[x] = 0;
 			buf_d00[x] = 0;
@@ -2121,7 +2088,7 @@ iwm_nibblize_track_35(Disk *dsk, Track *trk, byte *track_buf, int qtr_track)
 		while(y >= 0) {
 /* 63e4 */
 			/* write out acc_hi */
-			val = to_disk_byte[acc_hi];
+			val = to_disk_byte[acc_hi & 0x3f];
 			disk_nib_out(dsk, val, 8);
 
 /* 63f2 */
@@ -2184,7 +2151,7 @@ disk_4x4_nib_out(Disk *dsk, word32 val)
 void
 disk_nib_out(Disk *dsk, byte val, int size)
 {
-	Track	*trk;
+	Trk	*trk;
 	int	pos;
 	int	old_size;
 	int	track_len;
@@ -2194,9 +2161,12 @@ disk_nib_out(Disk *dsk, byte val, int size)
 
 	qtr_track = dsk->cur_qtr_track;
 
-	trk = &(dsk->tracks[qtr_track]);
-
-	track_len = trk->track_len;
+	track_len = 0;
+	trk = 0;
+	if(dsk->trks != 0) {
+		trk = &(dsk->trks[qtr_track]);
+		track_len = trk->track_len;
+	}
 
 	if(track_len <= 10) {
 		printf("Writing to an invalid qtr track: %02x!\n", qtr_track);
@@ -2250,7 +2220,7 @@ disk_nib_out(Disk *dsk, byte val, int size)
 			pos = 0;
 		}
 	} else if(overflow_size < -64) {
-		halt_printf("overflow_size:%03x, pos:%02x\n",overflow_size,pos);
+		halt_printf("overflow_sz:%03x, pos:%02x\n",overflow_size,pos);
 	}
 
 	trk->dsk->nib_pos = pos;
@@ -2268,7 +2238,7 @@ disk_nib_end_track(Disk *dsk)
 
 	dsk->nib_pos = 0;
 	qtr_track = dsk->cur_qtr_track;
-	dsk->tracks[qtr_track].track_dirty = 0;
+	dsk->trks[qtr_track].track_dirty = 0;
 
 	dsk->disk_dirty = 0;
 }
@@ -2277,14 +2247,14 @@ void
 iwm_show_track(int slot_drive, int track)
 {
 	Disk	*dsk;
-	Track	*trk;
+	Trk	*trk;
 	int	drive;
 	int	sel35;
 	int	qtr_track;
 
 	if(slot_drive < 0) {
 		drive = iwm.drive_select;
-		sel35 = g_apple35_sel;
+		sel35 = (g_c031_disk35 >> 6) & 1;
 	} else {
 		drive = slot_drive & 1;
 		sel35 = !((slot_drive >> 1) & 1);
@@ -2301,22 +2271,25 @@ iwm_show_track(int slot_drive, int track)
 	} else {
 		qtr_track = track;
 	}
-	trk = &(dsk->tracks[qtr_track]);
+	if(dsk->trks == 0) {
+		return;
+	}
+	trk = &(dsk->trks[qtr_track]);
 
 	if(trk->track_len <= 0) {
 		printf("Track_len: %d\n", trk->track_len);
-		printf("No track for type: %d, drive: %d, qtrk: %02x\n",
-			g_apple35_sel, drive, qtr_track);
+		printf("No track for type: %d, drive: %d, qtrk: 0x%02x\n",
+			sel35, drive, qtr_track);
 		return;
 	}
 
-	printf("Current drive: %d, q_track: %02x\n", drive, qtr_track);
+	printf("Current drive: %d, q_track: 0x%02x\n", drive, qtr_track);
 
 	iwm_show_a_track(trk);
 }
 
 void
-iwm_show_a_track(Track *trk)
+iwm_show_a_track(Trk *trk)
 {
 	int	sum;
 	int	len;
@@ -2361,621 +2334,3 @@ iwm_show_a_track(Track *trk)
 		sum, len*8/2, trk->overflow_size);
 }
 
-#define CONF_BUF_LEN	1024
-
-void
-maybe_parse_disk_conf_file()
-{
-	char	buf[CONF_BUF_LEN];
-	FILE	*fconf;
-	char	*ptr;
-	char	*name_ptr;
-	Disk	*dsk;
-	int	reparse_delay;
-	int	virtual_image;
-	int	line;
-	int	pos;
-	int	disk_525;
-	int	drive;
-	int	smartport;
-	int	size;
-	int	len;
-	int	ret;
-	int	i;
-
-	reparse_delay = g_reparse_delay;
-
-	if(reparse_delay < 0) {
-		return;
-	}
-	if(reparse_delay > 0) {
-		g_reparse_delay = reparse_delay - 1;
-		return;
-	}
-
-	printf("Parsing disk_conf_file\n");
-	g_reparse_delay = -1;
-
-	g_highest_smartport_unit = -1;
-
-	/* First, mark all drives as being in just_ejected | 0x80 state */
-	for(i = 0; i < MAX_C7_DISKS; i++) {
-		if(i < 2) {
-			iwm.drive525[i].just_ejected |= 0x80;
-			iwm.drive35[i].just_ejected |= 0x80;
-		}
-		iwm.smartport[i].just_ejected |= 0x80;
-	}
-
-	fconf = fopen(g_kegs_conf_name, "rt");
-	if(fconf == 0) {
-		printf("cannot open disk_conf!  Stopping!\n");
-		exit(3);
-	}
-
-	line = 0;
-	while(1) {
-		ptr = fgets(buf, CONF_BUF_LEN, fconf);
-		if(ptr == 0) {
-			iwm_printf("Done reading disk_conf\n");
-			break;
-		}
-
-		line++;
-		/* strip off newline(s) */
-		len = strlen(buf);
-		for(i = len - 1; i >= 0; i--) {
-			if((buf[i] != 0x0d) && (buf[i] != 0x0a)) {
-				break;
-			}
-			len = i;
-			buf[i] = 0;
-		}
-
-		iwm_printf("disk_conf[%d]: %s\n", line, buf);
-		if(len) {
-			if(buf[0] == '#') {
-				iwm_printf("Skipping comment\n");
-				continue;
-			}
-		}
-
-		/* determine what this is */
-		pos = 0;
-
-		while(pos < len && (buf[pos] == ' ' || buf[pos] == '\t') ) {
-			pos++;
-		}
-		if((pos + 4) > len || buf[pos] != 's' || buf[pos+2] != 'd') {
-			iwm_printf("Cannot find slot/drive on line %d:%d\n",
-				line, pos);
-			iwm_printf("line %d was %s\n", line, buf);
-			continue;
-		}
-
-		disk_525 = buf[pos+1] - '5';
-		smartport = 0;
-		if(disk_525 == 2) {
-			disk_525 = 0;
-			smartport = 1;
-		}
-
-		drive = buf[pos+3] - '0';
-
-		/* skip over slot, drive */
-		pos += 4;
-		if(buf[pos] >= '0' && buf[pos] <= '9') {
-			drive = drive * 10 + buf[pos] - '0';
-			pos++;
-		}
-
-		/*	make s6d1 mean index 0 */
-		drive--;
-
-		if(disk_525 != 0 && disk_525 != 1) {
-			printf("Not valid slot: %c\n", buf[pos]);
-			continue;
-		}
-		if(drive < 0 || (smartport && (drive >= MAX_C7_DISKS)) ||
-						(!smartport && (drive > 1))) {
-			printf("Not valid drive: %c\n", buf[pos+3]);
-			continue;
-		}
-
-		size = 0;
-		if(buf[pos] == ',') {
-			/* read optional size parameter */
-			pos++;
-			while(pos < len && buf[pos] >= '0' && buf[pos] <= '9'){
-				size = size * 10 + buf[pos] - '0';
-				pos++;
-			}
-			printf("Read optional size as: %d\n", size);
-			size = size * 1024;
-		}
-
-
-		while(pos < len && (buf[pos] == ' ' || buf[pos] == '\t' ||
-					buf[pos] == '=' || buf[pos] == ':') ) {
-			pos++;
-		}
-
-		/* Get filename */
-		if(smartport) {
-			g_highest_smartport_unit = MAX(drive,
-						g_highest_smartport_unit);
-			dsk = &(iwm.smartport[drive]);
-		} else if(disk_525) {
-			dsk = &(iwm.drive525[drive]);
-		} else {
-			dsk = &(iwm.drive35[drive]);
-		}
-
-		virtual_image = 0;
-		name_ptr = &(buf[pos]);
-		if(*name_ptr == 0) {
-			virtual_image = 1;
-			name_ptr = "virtual_image";
-		}
-
-		insert_disk(dsk, name_ptr, virtual_image, size);
-
-	}
-
-	ret = fclose(fconf);
-	if(ret != 0) {
-		printf("Closing disk_conf ret: %d, errno: %d\n", ret, errno);
-		exit(4);
-	}
-
-	/* and unmount/eject any disks that are now gone */
-	for(i = 0; i < MAX_C7_DISKS; i++) {
-		if(i < 2) {
-			eject_if_untouched(&iwm.drive525[i]);
-			eject_if_untouched(&iwm.drive35[i]);
-		}
-		eject_if_untouched(&iwm.smartport[i]);
-	}
-
-	iwm_printf("Done parsing disk_conf file\n");
-}
-
-
-void
-insert_disk(Disk *dsk, char *name, int virtual_image, int size)
-{
-	char	tmp_buf[1024];
-	byte	buf_2img[512];
-	char	*name_ptr;
-	char	*partition_name;
-	int	cmp_o, cmp_p, cmp_dot;
-	int	cmp_b, cmp_i, cmp_n;
-	int	acc;
-	int	can_write;
-	int	len;
-	int	nibs;
-	int	unix_pos;
-	int	name_len;
-	int	save_track;
-	int	ret;
-	int	tmp;
-	int	i;
-
-	tmp = dsk->disk_525 + 5;
-	if(dsk->smartport) {
-		/* print smartport disks at s7dx */
-		tmp += 2;
-	}
-	printf("Inserting disk %s in slot %d, drive: %d\n", name,
-		tmp, dsk->drive + 1);
-
-	dsk->just_ejected &= 0x7f;
-
-	if(dsk->fd >= 0) {
-		/* See if it has the same name--if so, just leave it */
-		if(!strcmp(dsk->name_ptr, name)) {
-			/* It's a match! Do nothing */
-			printf("Not remounting s%dd%d: %s\n", dsk->disk_525+5,
-				dsk->drive, dsk->name_ptr);
-			return;
-		}
-
-		/* Else, it's different, eject old disk */
-		eject_disk(dsk);
-	}
-
-	/* Before opening, make sure no other mounted disk has this name */
-	/* If so, unmount it */
-	for(i = 0; i < MAX_C7_DISKS; i++) {
-		if(i < 2) {
-			eject_named_disk(&iwm.drive525[i], name);
-			eject_named_disk(&iwm.drive35[i], name);
-		}
-		eject_named_disk(&iwm.smartport[i], name);
-	}
-
-	name_len = strlen(name) + 1;
-	dsk->name_ptr = (char *)malloc(name_len);
-	memcpy(dsk->name_ptr, name, name_len);
-
-	iwm_printf("Opening up disk image named: %s\n", dsk->name_ptr);
-
-	/* see if it has a partition name */
-	name_ptr = dsk->name_ptr;
-	partition_name = 0;
-	tmp_buf[0] = 0;
-	for(i = 0; i < name_len; i++) {
-		/* ignore drive letters--look for partition names at char 3 */
-		if((i > 2) && (name_ptr[i] == ':')) {
-			/* yup, it's got a partition name! */
-			partition_name = &name_ptr[i+1];
-			break;
-		}
-		tmp_buf[i] = name_ptr[i];
-		tmp_buf[i+1] = 0;
-	}
-
-	/* first, see if file exists.  If it doesn't just return */
-	dsk->fd = open(tmp_buf, O_RDONLY, 0x1b6);
-	if(dsk->fd < 0) {
-		printf("Disk image %s does not exist!\n", tmp_buf);
-		return;
-	}
-	close(dsk->fd);
-
-	dsk->fd = open(tmp_buf, O_RDWR | O_BINARY, 0x1b6);
-	can_write = 1;
-	if(dsk->fd < 0) {
-		printf("Trying to open %s read-only, errno: %d\n", tmp_buf,
-								errno);
-		dsk->fd = open(tmp_buf, O_RDONLY | O_BINARY, 0x1b6);
-		can_write = 0;
-		if(dsk->fd < 0 && !dsk->smartport) {
-			dsk->fd = open(tmp_buf, O_RDWR | O_CREAT | O_BINARY,
-									0x1b6);
-			if(dsk->fd >= 0) {
-				can_write = 1;
-			}
-		}
-	}
-
-	iwm_printf("open returned: %d\n", dsk->fd);
-
-	if(dsk->fd < 0) {
-		if(virtual_image) {
-			can_write = 1;
-		} else {
-			return;
-		}
-	}
-
-	/* I used to allow images that were "executable" to mean KEGS will */
-	/*  treat the image as not write-protected, but will not propagate */
-	/*  changes through to the Unix file */
-	/* This confused many users, and no one seems to have used it, so */
-	/*  I'm getting rid of it */
-
-	if(dsk->fd >= 0) {
-		acc = access(tmp_buf, W_OK);
-	} else {
-		/* virtual image */
-		acc = 0;
-	}
-
-	if(acc == 0 && can_write != 0) {
-		dsk->write_prot = 0;
-		dsk->write_through_to_unix = 1;
-	} else {
-		dsk->write_prot = 1;
-		dsk->write_through_to_unix = 0;
-	}
-
-	save_track = dsk->cur_qtr_track;
-
-	/* See if it is in 2IMG format */
-	ret = read(dsk->fd, (char *)&buf_2img[0], 512);
-	if(buf_2img[0] == '2' && buf_2img[1] == 'I' && buf_2img[2] == 'M' &&
-			buf_2img[3] == 'G') {
-		/* It's a 2IMG disk */
-		printf("Image named %s is in 2IMG format\n", dsk->name_ptr);
-
-		if(buf_2img[12] == 0) {
-			printf("2IMG is in DOS 3.3 sector order\n");
-			dsk->image_type = 0;
-		} else {
-			dsk->image_type = DSK_TYPE_PRODOS;
-		}
-		if(buf_2img[19] & 0x80) {
-			/* disk is locked */
-			printf("2IMG is write protected\n");
-			dsk->write_prot = 1;
-			dsk->write_through_to_unix = 0;
-		}
-		if((buf_2img[17] & 1) && (dsk->image_type == 0)) {
-			dsk->vol_num = buf_2img[16];
-			printf("Setting DOS 3.3 vol num to %d\n", dsk->vol_num);
-		}
-		//	Some 2IMG archives have the size byte reversed
-		size = (buf_2img[31] << 24) + (buf_2img[30] << 16) +
-				(buf_2img[29] << 8) + buf_2img[28];
-		unix_pos = (buf_2img[27] << 24) + (buf_2img[26] << 16) +
-				(buf_2img[25] << 8) + buf_2img[24];
-		if(size == 0x800c00) {
-			//	Byte reversed 0x0c8000
-			size = 0x0c8000;
-		}
-		dsk->image_start = unix_pos;
-		dsk->image_size = size;
-	} else {
-		/* Assume raw image */
-		dsk->image_start = 0;
-		if(size <= 0) {
-			size = get_fd_size(dsk->fd);
-		}
-		dsk->image_size = size;
-		if(dsk->disk_525) {
-			dsk->image_type = 0;
-			if(name_len >= 5) {
-				cmp_o = dsk->name_ptr[name_len-2];
-				cmp_p = dsk->name_ptr[name_len-3];
-				cmp_dot = dsk->name_ptr[name_len-4];
-				if(cmp_dot == '.' &&
-					  (cmp_p == 'p' || cmp_p == 'P') &&
-					  (cmp_o == 'o' || cmp_o == 'O')) {
-					dsk->image_type = DSK_TYPE_PRODOS;
-				}
-
-				cmp_b = dsk->name_ptr[name_len-2];
-				cmp_i = dsk->name_ptr[name_len-3];
-				cmp_n = dsk->name_ptr[name_len-4];
-				cmp_dot = dsk->name_ptr[name_len-5];
-				if(cmp_dot == '.' &&
-					  (cmp_n == 'n' || cmp_n == 'N') &&
-					  (cmp_i == 'i' || cmp_i == 'I') &&
-					  (cmp_b == 'b' || cmp_b == 'B')) {
-					dsk->image_type = DSK_TYPE_NIB;
-					dsk->write_prot = 1;
-					dsk->write_through_to_unix = 0;
-				}
-			}
-		} else {
-			dsk->image_type = 0;
-		}
-	}
-
-	dsk->disk_dirty = 0;
-	dsk->nib_pos = 0;
-
-	if(dsk->smartport) {
-		if(partition_name) {
-			ret = find_partition_by_name(dsk->fd, partition_name,
-							dsk);
-			printf("partition %s mounted, write_prot: %d\n",
-				partition_name, dsk->write_prot);
-
-			if(ret < 0) {
-				close(dsk->fd);
-				dsk->fd = -1;
-				return;
-			}
-		}
-		iwm_printf("adding smartport device[%d], size:%08x, "
-			"img_sz:%08x\n", dsk->drive, dsk->tracks[0].unix_len,
-			dsk->image_size);
-	} else if(dsk->disk_525) {
-		unix_pos = dsk->image_start;
-		size = dsk->image_size;
-		dsk->num_tracks = 4*35;
-		len = 0x1000;
-		nibs = NIB_LEN_525;
-		if(dsk->image_type == DSK_TYPE_NIB) {
-			len = dsk->image_size / 35;;
-			nibs = len;
-		}
-		if(size != 35*len) {
-			printf("Disk 5.25 error: size is %d, not %d\n",size,
-					35*len);
-		}
-		for(i = 0; i < 35; i++) {
-			iwm_move_to_track(dsk, 4*i);
-			disk_unix_to_nib(dsk, 4*i, unix_pos, len, nibs);
-			unix_pos += len;
-		}
-	} else {
-		/* disk_35 */
-		unix_pos = dsk->image_start;
-		size = dsk->image_size;
-		if(size != 800*1024) {
-			printf("Disk 3.5 error: size is %d, not 800K\n", size);
-		}
-		dsk->num_tracks = 2*80;
-		for(i = 0; i < 2*80; i++) {
-			iwm_move_to_track(dsk, i);
-			len = g_track_bytes_35[i >> 5];
-			nibs = g_track_nibs_35[i >> 5];
-			if(virtual_image) {
-				unix_pos = -1;
-			}
-			iwm_printf("Trk: %d.%d = unix: %08x, %04x, %04x\n",
-				i>>1, i & 1, unix_pos, len, nibs);
-			disk_unix_to_nib(dsk, i, unix_pos, len, nibs);
-			unix_pos += len;
-
-			iwm_printf(" trk_len:%05x\n",dsk->tracks[i].track_len);
-		}
-	}
-
-	iwm_move_to_track(dsk, save_track);
-
-}
-
-void
-eject_named_disk(Disk *dsk, char *name)
-{
-
-	if(dsk->fd < 0) {
-		return;
-	}
-
-	/* If name matches, eject the disk! */
-	if(!strcmp(dsk->name_ptr, name)) {
-		/* It matches, eject it */
-		eject_disk(dsk);
-	}
-}
-
-void
-eject_if_untouched(Disk *dsk)
-{
-
-	if(dsk->fd < 0) {
-		return;
-	}
-
-	if(dsk->just_ejected & 0x80) {
-		/* It was not touched, eject it */
-		eject_disk(dsk);
-	}
-}
-
-void
-eject_disk(Disk *dsk)
-{
-	int	motor_on;
-	int	i;
-
-	motor_on = iwm.motor_on;
-	if(g_apple35_sel) {
-		motor_on = iwm.motor_on35;
-	}
-	if(motor_on) {
-		halt_printf("Try eject dsk:%s, but motor_on!\n", dsk->name_ptr);
-	}
-
-	iwm_flush_disk_to_unix(dsk);
-
-	printf("Ejecting disk: %s\n", dsk->name_ptr);
-
-	/* Free all memory, close file */
-	
-	/* free the tracks first */
-	for(i = 0; i < dsk->num_tracks; i++) {
-		if(dsk->tracks[i].nib_area) {
-			free(dsk->tracks[i].nib_area);
-		}
-		dsk->tracks[i].nib_area = 0;
-		dsk->tracks[i].track_len = 0;
-	}
-	dsk->num_tracks = 0;
-
-	/* close file, clean up dsk struct */
-	close(dsk->fd);
-
-	free(dsk->name_ptr);
-	dsk->name_ptr = 0;
-	dsk->image_start = 0;
-	dsk->image_size = 0;
-	dsk->nib_pos = 0;
-	dsk->disk_dirty = 0;
-	dsk->write_through_to_unix = 0;
-	dsk->write_prot = 1;
-	dsk->fd = -1;
-	dsk->just_ejected = 1;
-}
-
-
-#define	COPY_BUF_SIZE	4096
-
-void
-kegs_file_copy(char *orig_name, char *new_name)
-{
-	char	copy_buf[COPY_BUF_SIZE];
-	int	fd_in, fd_out;
-	int	len;
-	int	ret;
-
-	fd_in = open(orig_name, O_RDONLY, 0x1b6);
-	if(fd_in < 0) {
-		printf("kegs_file_copy: open %s failed: %d %d\n",
-			orig_name, fd_in, errno);
-		exit(1);
-	}
-
-	fd_out = open(new_name, O_WRONLY | O_TRUNC | O_CREAT, 0x1b6);
-	if(fd_out < 0) {
-		printf("kegs_file_copy: open %s failed: %d %d\n",
-			orig_name, fd_out, errno);
-		exit(1);
-	}
-
-	while(1) {
-		len = read(fd_in, &copy_buf[0], COPY_BUF_SIZE);
-		if(len == 0) {
-			break;
-		}
-		if(len < 0) {
-			if(errno == EINTR) {
-				continue;
-			}
-			printf("Error reading from file %s, errno: %d\n",
-				orig_name, errno);
-			exit(1);
-		}
-		ret = write(fd_out, &copy_buf[0], len);
-		if(ret != len) {
-			printf("Error writing to file %s: ret:%d, %d\n",
-				new_name, ret, errno);
-			exit(1);
-		}
-	}
-	close(fd_in);
-	close(fd_out);
-}
-
-void
-eject_disk_by_num(int slot, int drive)
-{
-	char	buf[CONF_BUF_LEN];
-	char	tmp_buf2[1024];
-	FILE	*fconf_old, *fconf_new;
-	char	*ptr;
-	int	line;
-
-	sprintf(tmp_buf2, "%s.ktmp1", g_kegs_conf_name);
-
-	(void)unlink(tmp_buf2);			/* "rm -f tmp_buf2" */
-	kegs_file_copy(g_kegs_conf_name, tmp_buf2);
-
-	fconf_old = fopen(tmp_buf2, "rt");
-	fconf_new = fopen(g_kegs_conf_name, "wt+");
-	if(fconf_old == 0 || fconf_new == 0) {
-		printf("Cannot open %s or %s: Stopping\n", tmp_buf2,
-				g_kegs_conf_name);
-		exit(3);
-	}
-	line = 0;
-	while(1) {
-		ptr = fgets(buf, CONF_BUF_LEN, fconf_old);
-		if(ptr == 0) {
-			/* done */
-			break;
-		}
-		line++;
-		if((buf[0] == 's') && (buf[1] == (0x30 + slot)) &&
-				(buf[2] == 'd') && (buf[3] == (0x30 + drive))){
-			/* comment out this line */
-			printf("Ejecting s%dd%d from line %d of %s\n",
-				slot, drive, line, g_kegs_conf_name);
-			fputs("#", fconf_new);
-		}
-		fputs(buf, fconf_new);
-	}
-	fclose(fconf_old);
-	fclose(fconf_new);
-
-	(void)unlink(tmp_buf2);			/* "rm -f tmp_buf2" */
-
-	/* and make sure it gets reparsed */
-	g_reparse_delay = 0;
-	g_iwm_vbl_count = 0;
-}

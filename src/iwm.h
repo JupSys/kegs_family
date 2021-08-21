@@ -1,39 +1,46 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_iwm_h[] = "@(#)$Header: iwm.h,v 1.7 99/02/15 20:38:54 kentd Exp $";
+const char rcsid_iwm_h[] = "@(#)$KmKId: iwm.h,v 1.14 2004-10-20 17:29:38-04 kentd Exp $";
 #endif
 
 #define MAX_TRACKS	(2*80)
 #define MAX_C7_DISKS	32
 
+#define NIB_LEN_525		0x1900		/* 51072 bits per track */
+#define NIBS_FROM_ADDR_TO_DATA	20
+
+#define DSK_TYPE_PRODOS		0
+#define DSK_TYPE_DOS33		1
+#define DSK_TYPE_NIB		2
+
 typedef struct _Disk Disk;
 
-STRUCT(Track) {
+STRUCT(Trk) {
+	Disk	*dsk;
+	byte	*nib_area;
 	int	track_dirty;
 	int	overflow_size;
 	int	track_len;
 	int	unix_pos;
 	int	unix_len;
-	Disk	*dsk;
-	byte	*nib_area;
-	int	pad1;
 };
 
 struct _Disk {
-	int	fd;
+	double	dcycs_last_read;
 	char	*name_ptr;
+	char	*partition_name;
+	int	partition_num;
+	int	fd;
+	int	force_size;
 	int	image_start;
 	int	image_size;
 	int	smartport;
@@ -46,11 +53,10 @@ struct _Disk {
 	int	write_through_to_unix;
 	int	disk_dirty;
 	int	just_ejected;
-	double	dcycs_last_read;
 	int	last_phase;
 	int	nib_pos;
 	int	num_tracks;
-	Track	tracks[MAX_TRACKS];
+	Trk	*trks;
 };
 
 

@@ -1,19 +1,17 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
 #ifdef INCLUDE_RCSID_C
-const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.76 2000/09/24 00:53:43 kentd Exp $";
+const char rcsid_defc_h[] = "@(#)$KmKId: defc.h,v 1.100 2004-11-09 02:02:07-05 kentd Exp $";
 #endif
+
 #include "defcomm.h"
 
 #define STRUCT(a) typedef struct _ ## a a; struct _ ## a
@@ -21,7 +19,6 @@ const char rcsid_defc_h[] = "@(#)$Header: defc.h,v 1.76 2000/09/24 00:53:43 kent
 typedef unsigned char byte;
 typedef unsigned short word16;
 typedef unsigned int word32;
-//typedef unsigned long long word64;
 #if _MSC_VER
 typedef unsigned __int64 word64;
 #else
@@ -37,7 +34,10 @@ void U_STACK_TRACE();
 #define DCYCS_1_MHZ		((DCYCS_28_MHZ/28.0)*(65.0*7/(65.0*7+1.0)))
 #define CYCS_1_MHZ		((int)DCYCS_1_MHZ)
 
-#define DCYCS_IN_16MS_RAW	(DCYCS_1_MHZ / 60.0)
+/* #define DCYCS_IN_16MS_RAW	(DCYCS_1_MHZ / 60.0) */
+#define DCYCS_IN_16MS_RAW	(262.0 * 65.0)
+/* Use precisely 17030 instead of forcing 60 Hz since this is the number of */
+/*  1MHz cycles per screen */
 #define DCYCS_IN_16MS		((double)((int)DCYCS_IN_16MS_RAW))
 #define DRECIP_DCYCS_IN_16MS	(1.0 / (DCYCS_IN_16MS))
 
@@ -60,16 +60,20 @@ void U_STACK_TRACE();
 # include <libc.h>
 #endif
 
-#define W_OK 2
-//#include <unistd.h>
+#ifndef _WIN32
+# include <unistd.h>
+# include <sys/ioctl.h>
+# include <sys/wait.h>
+#endif
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-//#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdarg.h>
 #ifdef HPUX
 # include <machine/inline.h>		/* for GET_ITIMER */
 #endif
@@ -78,17 +82,10 @@ void U_STACK_TRACE();
 # include <sys/filio.h>
 #endif
 
-#ifdef _WIN32
-#include <io.h>
-#endif
-
 #ifndef O_BINARY
 /* work around some Windows junk */
 # define O_BINARY	0
 #endif
-
-
-
 
 STRUCT(Pc_log) {
 	double	dcycs;
@@ -98,6 +95,13 @@ STRUCT(Pc_log) {
 	word32	xreg_yreg;
 	word32	stack_direct;
 	word32	pad;
+};
+
+STRUCT(Data_log) {
+	double	dcycs;
+	word32	addr;
+	word32	val;
+	word32	size;
 };
 
 STRUCT(Event) {
@@ -129,9 +133,64 @@ STRUCT(Engine_reg) {
 	Fplus	*fplus_ptr;
 };
 
+STRUCT(Kimage) {
+	void	*dev_handle;
+	void	*dev_handle2;
+	byte	*data_ptr;
+	int	width_req;
+	int	width_act;
+	int	height;
+	int	depth;
+	int	mdepth;
+	int	aux_info;
+};
+
 typedef byte *Pg_info;
 STRUCT(Page_info) {
 	Pg_info rd_wr;
+};
+
+STRUCT(Cfg_menu) {
+	const char *str;
+	void	*ptr;
+	const char *name_str;
+	void	*defptr;
+	int	cfgtype;
+};
+
+STRUCT(Cfg_dirent) {
+	char	*name;
+	int	is_dir;
+	int	size;
+	int	image_start;
+	int	part_num;
+};
+
+STRUCT(Cfg_listhdr) {
+	Cfg_dirent	*direntptr;
+	int	max;
+	int	last;
+	int	invalid;
+
+	int	curent;
+	int	topent;
+
+	int	num_to_show;
+};
+
+STRUCT(Emustate_intlist) {
+	const char *str;
+	int	*iptr;
+};
+
+STRUCT(Emustate_dbllist) {
+	const char *str;
+	double	*dptr;
+};
+
+STRUCT(Emustate_word32list) {
+	const char *str;
+	word32	*wptr;
 };
 
 #ifdef __LP64__
@@ -141,14 +200,38 @@ STRUCT(Page_info) {
 #endif
 
 
-#define ALTZP	(statereg & 0x80)
-#define PAGE2	(statereg & 0x40)
-#define RAMRD	(statereg & 0x20)
-#define RAMWRT	(statereg & 0x10)
-#define RDROM	(statereg & 0x08)
-#define LCBANK2	(statereg & 0x04)
-#define ROMB	(statereg & 0x02)
-#define INTCX	(statereg & 0x01)
+#define ALTZP	(g_c068_statereg & 0x80)
+/* #define PAGE2 (g_c068_statereg & 0x40) */
+#define RAMRD	(g_c068_statereg & 0x20)
+#define RAMWRT	(g_c068_statereg & 0x10)
+#define RDROM	(g_c068_statereg & 0x08)
+#define LCBANK2	(g_c068_statereg & 0x04)
+#define ROMB	(g_c068_statereg & 0x02)
+#define INTCX	(g_c068_statereg & 0x01)
+
+#define C041_EN_25SEC_INTS	0x10
+#define C041_EN_VBL_INTS	0x08
+#define C041_EN_SWITCH_INTS	0x04
+#define C041_EN_MOVE_INTS	0x02
+#define C041_EN_MOUSE		0x01
+
+/* WARNING: SCC1 and SCC0 interrupts must be in this order for scc.c */
+/*  This order matches the SCC hardware */
+#define IRQ_PENDING_SCC1_ZEROCNT	0x00001
+#define IRQ_PENDING_SCC1_TX		0x00002
+#define IRQ_PENDING_SCC1_RX		0x00004
+#define IRQ_PENDING_SCC0_ZEROCNT	0x00008
+#define IRQ_PENDING_SCC0_TX		0x00010
+#define IRQ_PENDING_SCC0_RX		0x00020
+#define IRQ_PENDING_C023_SCAN		0x00100
+#define IRQ_PENDING_C023_1SEC		0x00200
+#define IRQ_PENDING_C046_25SEC		0x00400
+#define IRQ_PENDING_C046_VBL		0x00800
+#define IRQ_PENDING_ADB_KBD_SRQ		0x01000
+#define IRQ_PENDING_ADB_DATA		0x02000
+#define IRQ_PENDING_ADB_MOUSE		0x04000
+#define IRQ_PENDING_DOC			0x08000
+
 
 #define EXTRU(val, pos, len) 				\
 	( ( (len) >= (pos) + 1) ? ((val) >> (31-(pos))) : \
@@ -163,8 +246,6 @@ STRUCT(Page_info) {
 
 #define clear_halt() \
 	clr_halt_act()
-
-//extern int errno;
 
 #define GET_PAGE_INFO_RD(page) \
 	(page_info_rd_wr[page].rd_wr)
@@ -189,6 +270,7 @@ STRUCT(Page_info) {
 #define VERBOSE_SCC	0x080
 #define VERBOSE_TEST	0x100
 #define VERBOSE_VIDEO	0x200
+#define VERBOSE_MAC	0x400
 
 #ifdef NO_VERB
 # define DO_VERBOSE	0
@@ -206,6 +288,7 @@ STRUCT(Page_info) {
 #define scc_printf	if(DO_VERBOSE && (Verbose & VERBOSE_SCC)) printf
 #define test_printf	if(DO_VERBOSE && (Verbose & VERBOSE_TEST)) printf
 #define vid_printf	if(DO_VERBOSE && (Verbose & VERBOSE_VIDEO)) printf
+#define mac_printf	if(DO_VERBOSE && (Verbose & VERBOSE_MAC)) printf
 
 
 #define HALT_ON_SCAN_INT	0x001
@@ -226,11 +309,7 @@ STRUCT(Page_info) {
 # define MAX(a,b)	(((a) < (b)) ? (b) : (a))
 #endif
 
-#ifdef HPUX
-# define GET_ITIMER(dest)	dest = get_itimer();
-#else
-# define GET_ITIMER(dest)	dest = 0;
-#endif
+#define GET_ITIMER(dest)	dest = get_itimer();
 
 #include "iwm.h"
 #include "protos.h"

@@ -1,17 +1,14 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
-const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.89 2000/09/24 00:56:31 kentd Exp $";
+const char rcsid_sound_c[] = "@(#)$KmKId: sound.c,v 1.108 2004-10-31 00:56:07-04 kentd Exp $";
 
 #include "defc.h"
 
@@ -23,22 +20,14 @@ const char rcsid_sound_c[] = "@(#)$Header: sound.c,v 1.89 2000/09/24 00:56:31 ke
 # define DO_DOC_LOG
 #endif
 
-#ifdef _WIN32
-#include <windows.h>
-#include <process.h>
-#include <io.h>
-extern unsigned int __stdcall child_sound_loop_win32(void *);
-#endif
-
 extern int Verbose;
 extern int g_use_shmem;
 extern word32 g_vbl_count;
 extern int g_preferred_rate;
 
+extern int g_c03ef_doc_ptr;
 
 extern double g_last_vbl_dcycs;
-
-extern int errno;
 
 void U_STACK_TRACE();
 
@@ -46,7 +35,6 @@ byte doc_ram[0x10000 + 16];
 
 word32 doc_sound_ctl = 0;
 word32 doc_saved_val = 0;
-word32 doc_ptr = 0;
 int	g_doc_num_osc_en = 1;
 double	g_dcycs_per_doc_update = 1.0;
 double	g_dupd_per_dcyc = 1.0;
@@ -57,19 +45,16 @@ int	g_queued_samps = 0;
 int	g_queued_nonsamps = 0;
 int	g_num_osc_interrupting = 0;
 
-#ifdef HPUX
+#if defined(HPUX) || defined(__linux__) || defined(_WIN32) || defined(MAC)
 int	g_audio_enable = -1;
 #else
-# if defined(__linux__) || defined(OSS)
+# if defined(OSS)
 /* default to off for now */
 int	g_audio_enable = 0;
-#else
-# ifdef _WIN32
-int	g_audio_enable = 1;
-#else
+# else
+/* Default to sound off */
 int	g_audio_enable = 0;
-#endif
-#endif
+# endif
 #endif
 
 Doc_reg g_doc_regs[32];
@@ -169,7 +154,7 @@ show_doc_log(void)
 	int	pos;
 	int	i;
 
-	docfile = fopen("doc_log_out", "wt");
+	docfile = fopen("doc_log_out", "w");
 	if(docfile == 0) {
 		printf("fopen failed, errno: %d\n", errno);
 		return;
@@ -220,16 +205,7 @@ void
 sound_init()
 {
 	Doc_reg	*rptr;
-	word32	*shmaddr;
-	int	tmp;
-	int	shmid;
-	int	ret;
-	int	pid;
 	int	i;
-
-    #ifdef _WIN32
-    unsigned long tid;
-    #endif
 
 	for(i = 0; i < 32; i++) {
 		rptr = &(g_doc_regs[i]);
@@ -254,21 +230,42 @@ sound_init()
 		rptr->last_samp_val = 0;
         }
 
-#ifndef _WIN32    
+	sound_init_general();
+}
+
+
+void
+sound_init_general()
+{
+#if !defined(_WIN32) && !defined(__CYGWIN__) && !defined(MAC)
+	int	pid;
+	int	shmid;
+	int	tmp;
+	int	i;
+#endif
+	word32	*shmaddr;
+	int	size;
+	int	ret;
+
+#if !defined(_WIN32) && !defined(__CYGWIN__) && !defined(MAC)
 	if(!g_use_shmem) {
 		if(g_audio_enable < 0) {
 			printf("Defaulting audio off for slow X display\n");
 			g_audio_enable = 0;
 		}
 	}
-    
+#endif
+	ret = 0;
+
 	if(g_audio_enable == 0) {
 		set_audio_rate(g_preferred_rate);
 		return;
 	}
 
-	shmid = shmget(IPC_PRIVATE, SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE,
-							IPC_CREAT | 0777);
+	size = SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE;
+
+#if !defined(_WIN32) && !defined(__CYGWIN__) && !defined(MAC)
+	shmid = shmget(IPC_PRIVATE, size, IPC_CREAT | 0777);
 	if(shmid < 0) {
 		printf("sound_init: shmget ret: %d, errno: %d\n", shmid,
 			errno);
@@ -288,12 +285,19 @@ sound_init()
 		printf("sound_init: shmctl ret: %d, errno: %d\n", ret, errno);
 		exit(4);
 	}
+#else
+/* windows and mac */
+	shmaddr = malloc(size);
+	memset(shmaddr, 0, size);
+#endif
 
 	g_sound_shm_addr = shmaddr;
 
+	fflush(stdout);
+
+#if !defined(MAC) && !defined(_WIN32) && !defined(__CYGWIN__)
 	/* prepare pipe so parent can signal child each other */
 	/*  pipe[0] = read side, pipe[1] = write end */
-
 	ret = pipe(&g_pipe_fd[0]);
 	if(ret < 0) {
 		printf("sound_init: pipe ret: %d, errno: %d\n", ret, errno);
@@ -305,49 +309,50 @@ sound_init()
 		exit(5);
 	}
 
+
+	printf("pipes: pipe_fd = %d, %d  pipe2_fd: %d,%d\n",
+		g_pipe_fd[0], g_pipe_fd[1], g_pipe2_fd[0], g_pipe2_fd[1]);
+	fflush(stdout);
+
 	pid = fork();
 	switch(pid) {
 	case 0:
+		/* child */
+		/* close stdin and write-side of pipe */
 		close(0);
+		/* Close other fds to make sure X window fd is closed */
 		for(i = 3; i < 100; i++) {
 			if((i != g_pipe_fd[0]) && (i != g_pipe2_fd[1])) {
 				close(i);
 			}
 		}
-		close(g_pipe_fd[1]);		
-		close(g_pipe2_fd[0]);		
+		close(g_pipe_fd[1]);		/*make sure write pipe closed*/
+		close(g_pipe2_fd[0]);		/*make sure read pipe closed*/
 		child_sound_loop(g_pipe_fd[0], g_pipe2_fd[1], g_sound_shm_addr);
+		printf("Child sound loop returned\n");
 		exit(0);
 	case -1:
+		/* error */
 		printf("sound_init: fork ret: -1, errno: %d\n", errno);
 		exit(6);
 	default:
+		/* parent */
+		/* close read-side of pipe1, and the write side of pipe2 */
 		close(g_pipe_fd[0]);
 		close(g_pipe2_fd[1]);
 		doc_printf("Child is pid: %d\n", pid);
-		parent_sound_get_sample_rate(g_pipe2_fd[0]);
 	}
 
+	parent_sound_get_sample_rate(g_pipe2_fd[0]);
 #else
-	if(g_audio_enable == 0) {
-		set_audio_rate(g_preferred_rate);
-		return;
-	}
-    printf ("Sound shared memory size=%d\n", 
-            SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
+# ifdef MAC
+	macsnd_init(shmaddr);
+# else
+/* windows */
+	win32snd_init(shmaddr);
+# endif
+#endif /* _WIN32 */
 
-    shmaddr = malloc(SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
-    memset(shmaddr,0,SOUND_SHM_SAMP_SIZE * SAMPLE_CHAN_SIZE);
-	g_sound_shm_addr = shmaddr;
-
-    if (_pipe(g_pipe_fd,0,_O_BINARY) <0) {
-        printf ("Unable to create sound pipes\n");
-        exit(1);
-    }
-    _beginthreadex(NULL,0,child_sound_loop_win32,shmaddr,0,(void *)&tid);
-    parent_sound_get_sample_rate(g_pipe_fd[0]);
-    printf ("Audio rate=%d\n",g_audio_rate);
-#endif
 }
 
 void
@@ -359,12 +364,10 @@ parent_sound_get_sample_rate(int read_fd)
 	ret = read(read_fd, &tmp, 4);
 	if(ret != 4) {
 		printf("parent dying, could not get sample rate from child\n");
+		printf("ret: %d, fd: %d errno:%d\n", ret, read_fd, errno);
 		exit(1);
 	}
-
-    #ifndef _WIN32
 	close(read_fd);
-    #endif
 
 	set_audio_rate(tmp);
 }
@@ -394,10 +397,12 @@ sound_reset(double dcycs)
 			halt_printf("reset: has_irq[%02x] = %d\n", i,
 				g_doc_regs[i].has_irq_pending);
 		}
+		g_doc_regs[i].has_irq_pending = 0;
 	}
 	if(g_num_osc_interrupting) {
 		halt_printf("reset: num_osc_int:%d\n", g_num_osc_interrupting);
 	}
+	g_num_osc_interrupting = 0;
 
 	g_doc_num_osc_en = 1;
 	UPDATE_G_DCYCS_PER_DOC_UPDATE(1);
@@ -406,9 +411,13 @@ sound_reset(double dcycs)
 void
 sound_shutdown()
 {
+#ifdef _WIN32
+	win32snd_shutdown();
+#else
 	if((g_audio_enable != 0) && g_pipe_fd[1] != 0) {
 		close(g_pipe_fd[1]);
 	}
+#endif
 }
 
 
@@ -456,7 +465,7 @@ int	g_c030_state = 0;
 
 int	g_sound_file_num = 0;
 int	g_sound_file_fd = -1;
-int	g_send_sound_to_file = 0; 
+int	g_send_sound_to_file = 0;
 int	g_send_file_bytes = 0;
 
 void
@@ -569,7 +578,7 @@ send_sound_to_file(word32 *addr, int shm_pos, int num_samps)
 }
 
 void
-send_sound(int fd, int real_samps, int size)
+send_sound(int real_samps, int size)
 {
 	word32	tmp;
 	int	ret;
@@ -587,11 +596,17 @@ send_sound(int fd, int real_samps, int size)
 	DOC_LOG("send_sound", -1, g_last_sound_play_dsamp,
 						(real_samps << 30) + size);
 
-	ret = write(fd, &tmp, 4);
+#if defined(MAC) || defined(_WIN32)
+	ret = 0;
+	child_sound_playit(tmp);
+#else
+	/* Although this looks like a big/little-endian issue, since the */
+	/*  child is also reading an int, it just works with no byte swap */
+	ret = write(g_pipe_fd[1], &tmp, 4);
 	if(ret != 4) {
 		halt_printf("send_sound, wr ret: %d, errno: %d\n", ret, errno);
 	}
-
+#endif
 }
 
 void
@@ -1020,13 +1035,13 @@ sound_play(double dsamps)
 	
 			if(g_queued_nonsamps) {
 				/* force out old 0 samps */
-				send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
+				send_sound(0, g_queued_nonsamps);
 				g_queued_nonsamps = 0;
 			}
 	
 			if(g_send_sound_to_file) {
-				send_sound_to_file(g_sound_shm_addr, g_sound_shm_pos,
-					num_samps);
+				send_sound_to_file(g_sound_shm_addr,
+						g_sound_shm_pos, num_samps);
 			}
 	
 			g_queued_samps += num_samps;
@@ -1044,7 +1059,7 @@ sound_play(double dsamps)
 	
 			if(g_queued_samps) {
 				/* force out old non-0 samps */
-				send_sound(g_pipe_fd[1], 1, g_queued_samps);
+				send_sound(1, g_queued_samps);
 				g_queued_samps = 0;
 			}
 	
@@ -1062,12 +1077,12 @@ sound_play(double dsamps)
 
 	if(g_audio_enable != 0) {
 		if(g_queued_samps >= (g_audio_rate/32)) {
-			send_sound(g_pipe_fd[1], 1, g_queued_samps);
+			send_sound(1, g_queued_samps);
 			g_queued_samps = 0;
 		}
 
 		if(g_queued_nonsamps >= (g_audio_rate/32)) {
-			send_sound(g_pipe_fd[1], 0, g_queued_nonsamps);
+			send_sound(0, g_queued_nonsamps);
 			g_queued_nonsamps = 0;
 		}
 	}
@@ -1109,6 +1124,7 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 	Doc_reg	*rptr, *orptr;
 	int	mode, omode;
 	int	other_osc;
+	int	one_shot_stop;
 	int	ctl;
 
 	/* handle osc stopping and maybe interrupting */
@@ -1166,8 +1182,12 @@ doc_sound_end(int osc, int can_repeat, double eff_dsamps, double dsamps)
 		return;
 	} else if((mode == 3) || (omode == 3)) {
 		/* swap mode (even if we're one_shot and partner is swap)! */
+		/* unless we're one-shot and we hit a 0-byte--then */
+		/* Olivier Goguel says just stop */
 		rptr->ctl |= 1;
-		if(!orptr->running && (orptr->ctl & 0x1)) {
+		one_shot_stop = (mode == 1) && (!can_repeat);
+		if(!one_shot_stop && !orptr->running &&
+							(orptr->ctl & 0x1)) {
 			orptr->ctl = orptr->ctl & (~1);
 			start_sound(other_osc, eff_dsamps, dsamps);
 		}
@@ -1194,7 +1214,7 @@ add_sound_irq(int osc)
 	g_doc_regs[osc].has_irq_pending = num_osc_interrupting;
 	g_num_osc_interrupting = num_osc_interrupting;
 
-	add_irq();
+	add_irq(IRQ_PENDING_DOC);
 	if(num_osc_interrupting == 1) {
 		doc_reg_e0 = 0x00 + (osc << 1);
 	}
@@ -1220,7 +1240,9 @@ remove_sound_irq(int osc, int must)
 		g_num_osc_interrupting--;
 		g_doc_regs[osc].has_irq_pending = 0;
 		DOC_LOG("rem_irq", osc, g_cur_dcycs * g_dsamps_per_dcyc, 0);
-		remove_irq();
+		if(g_num_osc_interrupting == 0) {
+			remove_irq(IRQ_PENDING_DOC);
+		}
 
 		first = 0x40 | (doc_reg_e0 >> 1);
 					/* if none found, then def = no ints */
@@ -1623,13 +1645,13 @@ doc_read_c03d(double dcycs)
 
 	if(doc_sound_ctl & 0x40) {
 		/* Read RAM */
-		doc_saved_val = doc_ram[doc_ptr];
+		doc_saved_val = doc_ram[g_c03ef_doc_ptr];
 	} else {
 		/* Read DOC */
 		doc_saved_val = 0;
 
-		osc = doc_ptr & 0x1f;
-		type = (doc_ptr >> 5) & 0x7;
+		osc = g_c03ef_doc_ptr & 0x1f;
+		type = (g_c03ef_doc_ptr >> 5) & 0x7;
 		rptr = &(g_doc_regs[osc]);
 
 		switch(type) {
@@ -1680,24 +1702,24 @@ doc_read_c03d(double dcycs)
 			default:
 				doc_saved_val = 0;
 				halt_printf("Reading bad doc_reg[%04x]: %02x\n",
-							doc_ptr, doc_saved_val);
+					g_c03ef_doc_ptr, doc_saved_val);
 			}
 			break;
 		default:
 			doc_saved_val = 0;
 			halt_printf("Reading bad doc_reg[%04x]: %02x\n",
-						doc_ptr, doc_saved_val);
+					g_c03ef_doc_ptr, doc_saved_val);
 		}
 	}
 
 	doc_printf("read c03d, doc_ptr: %04x, ret: %02x, saved: %02x\n",
-		doc_ptr, ret, doc_saved_val);
+		g_c03ef_doc_ptr, ret, doc_saved_val);
 
-	DOC_LOG("read c03d", -1, dsamps, (doc_ptr << 16) +
+	DOC_LOG("read c03d", -1, dsamps, (g_c03ef_doc_ptr << 16) +
 			(doc_saved_val << 8) + ret);
 
 	if(doc_sound_ctl & 0x20) {
-		doc_ptr = (doc_ptr + 1) & 0xffff;
+		g_c03ef_doc_ptr = (g_c03ef_doc_ptr + 1) & 0xffff;
 	}
 
 
@@ -1740,17 +1762,17 @@ doc_write_c03d(int val, double dcycs)
 	dsamps = dcycs * g_dsamps_per_dcyc;
 	eff_dsamps = dsamps;
 	doc_printf("write c03d, doc_ptr: %04x, val: %02x\n",
-		doc_ptr, val);
+		g_c03ef_doc_ptr, val);
 
-	DOC_LOG("write c03d", -1, dsamps, (doc_ptr << 16) + val);
+	DOC_LOG("write c03d", -1, dsamps, (g_c03ef_doc_ptr << 16) + val);
 
 	if(doc_sound_ctl & 0x40) {
 		/* RAM */
-		doc_ram[doc_ptr] = val;
+		doc_ram[g_c03ef_doc_ptr] = val;
 	} else {
 		/* DOC */
-		osc = doc_ptr & 0x1f;
-		type = (doc_ptr >> 5) & 0x7;
+		osc = g_c03ef_doc_ptr & 0x1f;
+		type = (g_c03ef_doc_ptr >> 5) & 0x7;
 		
 		rptr = &(g_doc_regs[osc]);
 		ctl = rptr->ctl;
@@ -1759,14 +1781,14 @@ doc_write_c03d(int val, double dcycs)
 			if(type < 2 || type == 4 || type == 6) {
 				halt_printf("Osc %d is running, old ctl: %02x, "
 					"but write reg %02x=%02x\n",
-					osc, ctl, doc_ptr & 0xff, val);
+					osc, ctl, g_c03ef_doc_ptr & 0xff, val);
 			}
 		}
 #endif
 
 		switch(type) {
 		case 0x0:	/* freq lo */
-			if((rptr->freq & 0xff) == val) {
+			if((rptr->freq & 0xff) == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1778,7 +1800,7 @@ doc_write_c03d(int val, double dcycs)
 			doc_recalc_sound_parms(osc, eff_dsamps, dsamps);
 			break;
 		case 0x1:	/* freq hi */
-			if((rptr->freq >> 8) == val) {
+			if((rptr->freq >> 8) == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1790,7 +1812,7 @@ doc_write_c03d(int val, double dcycs)
 			doc_recalc_sound_parms(osc, eff_dsamps, dsamps);
 			break;
 		case 0x2:	/* vol */
-			if(rptr->vol == val) {
+			if(rptr->vol == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1811,7 +1833,7 @@ doc_write_c03d(int val, double dcycs)
 #endif
 			break;
 		case 0x4:	/* wave ptr register */
-			if(rptr->waveptr == val) {
+			if(rptr->waveptr == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1826,13 +1848,13 @@ doc_write_c03d(int val, double dcycs)
 #if 0
 			printf("doc_write ctl osc %d, val: %02x\n", osc, val);
 #endif
-			if(rptr->ctl == val) {
+			if(rptr->ctl == (word32)val) {
 				break;
 			}
 			doc_write_ctl_reg(osc, val, dsamps);
 			break;
 		case 0x6:	/* wavesize register */
-			if(rptr->wavesize == val) {
+			if(rptr->wavesize == (word32)val) {
 				break;
 			}
 			if((ctl & 1) == 0) {
@@ -1878,40 +1900,26 @@ doc_write_c03d(int val, double dcycs)
 				}
 
 				break;
-			case 0x02:	/* 0xe2 */
-				/* this should be illegale, but Turkey Shoot */
-				/*  writes to e2, for no apparent reason */
-				doc_printf("Writing doc 0xe2 with %02x\n", val);
-				/* set_halt(1); */
-				break;
 			default:
-				halt_printf("Wr %02x into bad doc_reg[%04x]\n",
-					val, doc_ptr);
+				/* this should be illegal, but Turkey Shoot */
+				/* and apparently TaskForce, OOTW, etc */
+				/*  writes to e2-ff, for no apparent reason */
+				doc_printf("Writing doc 0x%x with %02x\n",
+						g_c03ef_doc_ptr, val);
+				break;
 			}
 			break;
 		default:
 			halt_printf("Writing %02x into bad doc_reg[%04x]\n",
-				val, doc_ptr);
+				val, g_c03ef_doc_ptr);
 		}
 	}
 
 	if(doc_sound_ctl & 0x20) {
-		doc_ptr = (doc_ptr + 1) & 0xffff;
+		g_c03ef_doc_ptr = (g_c03ef_doc_ptr + 1) & 0xffff;
 	}
 
 	doc_saved_val = val;
-}
-
-void
-doc_write_c03e(int val)
-{
-	doc_ptr = (doc_ptr & 0xff00) + val;
-}
-
-void
-doc_write_c03f(int val)
-{
-	doc_ptr = (doc_ptr & 0xff) + (val << 8);
 }
 
 void
@@ -1923,8 +1931,8 @@ doc_show_ensoniq_state(int osc)
 	printf("Ensoniq state\n");
 	printf("c03c doc_sound_ctl: %02x, doc_saved_val: %02x\n",
 		doc_sound_ctl, doc_saved_val);
-	printf("doc_ptr: %04x,    num_osc_en: %02x, e0: %02x\n", doc_ptr,
-		g_doc_num_osc_en, doc_reg_e0);
+	printf("doc_ptr: %04x,    num_osc_en: %02x, e0: %02x\n",
+		g_c03ef_doc_ptr, g_doc_num_osc_en, doc_reg_e0);
 
 	for(i = 0; i < 32; i += 8) {
 		printf("irqp: %02x: %04x %04x %04x %04x %04x %04x %04x %04x\n",

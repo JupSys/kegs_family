@@ -1,14 +1,15 @@
 
-OBJECTS = engine_s.o $(OBJECTS1)
-CC = cc -Ae -C +DA1.1
+TARGET = xkegs
+OBJECTS = engine_s.o $(OBJECTS1) sound_driver.o xdriver.o
+CC = cc -Ae +DA1.1
 CCOPTS = -O
 OPTS =  -DNDEBUG
 SUFFIX =
-NAME = kegs
+NAME = xkegs
 LDFLAGS =
 LDOPTS = -z
 LD = $(CC)
-EXTRA_LIBS = -lXext -lX11 -lAlib -lcl -lc
+EXTRA_LIBS = -lXext -lX11 -lcl -lc
 EXTRA_SPECIALS = 8inst_s 16inst_s 8size 16size size_s Alib.h
 
 AS = cc -Ae

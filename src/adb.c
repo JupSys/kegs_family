@@ -1,25 +1,40 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1996 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
-const char rcsid_adb_c[] = "@(#)$Header: adb.c,v 1.38 99/10/11 01:30:41 kentd Exp $";
+const char rcsid_adb_c[] = "@(#)$KmKId: adb.c,v 1.73 2004-11-14 14:05:33-05 kentd Exp $";
 
 /* adb_mode bit 3 and bit 2 (faster repeats for arrows and space/del) not done*/
 
 #include "adb.h"
 
+int g_fullscreen = 0;
+
 extern int Verbose;
 extern word32 g_vbl_count;
+extern int g_num_lines_prev_superhires640;
+extern int g_num_lines_prev_superhires;
 extern int g_rom_version;
+extern int g_fast_disk_emul;
+extern int g_limit_speed;
+extern int g_irq_pending;
+extern int g_swap_paddles;
+extern int g_invert_paddles;
+extern int g_joystick_type;
+extern int g_a2vid_palette;
+extern int g_config_control_panel;
+extern word32 g_cfg_vbl_count;
+extern double g_cur_dcycs;
+
+extern byte *g_slow_memory_ptr;
+extern byte *g_memory_ptr;
+extern word32 g_mem_size_total;
 
 enum {
 	ADB_IDLE = 0,
@@ -53,7 +68,7 @@ word32	g_adb_layout_lang = 0x0;
 word32	g_adb_interrupt_byte = 0;
 int	g_adb_state = ADB_IDLE;
 
-word32	g_adb_cmd = -1;
+word32	g_adb_cmd = (word32)-1;
 int	g_adb_cmd_len = 0;
 int	g_adb_cmd_so_far = 0;
 word32	g_adb_cmd_data[16];
@@ -70,28 +85,33 @@ byte	adb_memory[256];
 
 word32 g_adb_mode = 0;		/* mode set via set_modes, clear_modes */
 
-int a2_mouse_button = 0;
-
 int g_warp_pointer = 0;
-int g_mouse_cur_x = 0;
-int g_mouse_cur_y = 0;
-int g_mouse_moved = 0;
-int g_mouse_button = 0;
+int g_hide_pointer = 0;
+int g_unhide_pointer = 0;
 
-int g_mouse_delta_x = 0;
-int g_mouse_delta_y = 0;
-int g_mouse_overflow_x = 0;
-int g_mouse_overflow_y = 0;
-int g_mouse_overflow_button = 0;
-int g_mouse_overflow_valid = 0;
+int g_mouse_a2_x = 0;
+int g_mouse_a2_y = 0;
+int g_mouse_a2_button = 0;
+int g_mouse_fifo_pos = 0;
+int g_mouse_raw_x = 0;
+int g_mouse_raw_y = 0;
+
+#define ADB_MOUSE_FIFO		8
+
+STRUCT(Mouse_fifo) {
+	double	dcycs;
+	int	x;
+	int	y;
+	int	buttons;
+};
+
+Mouse_fifo g_mouse_fifo[ADB_MOUSE_FIFO] = { { 0, 0, 0, 0 } };
+
+int g_mouse_warp_x = 0;
+int g_mouse_warp_y = 0;
 
 int	g_adb_mouse_valid_data = 0;
 int	g_adb_mouse_coord = 0;
-
-int	g_adb_data_int_sent = 0;
-int	g_adb_mouse_int_sent = 0;
-int	g_adb_kbd_srq_sent = 0;
-
 
 #define MAX_KBD_BUF		8
 
@@ -112,8 +132,12 @@ int	g_mouse_ctl_addr = 3;		/* ADB ucontroller's mouse addr*/
 			/*  are...if they are moved, mouse/keyboard funcs */
 			/*  should stop (c025, c000, c024, etc). */
 
-int	a2_key_to_ascii[128][4];
-word32	g_virtual_key_up[4];
+word32	g_virtual_key_up[4];	/* bitmask of all possible 128 a2codes */
+				/* indicates which keys are up=1 by bit */
+
+int	g_keypad_key_is_down[10] = { 0 };/* List from 0-9 of which keypad */
+					/*  keys are currently pressed */
+
 
 #define SHIFT_DOWN	( (g_c025_val & 0x01) )
 #define CTRL_DOWN	( (g_c025_val & 0x02) )
@@ -134,60 +158,31 @@ int	g_adb_init = 0;
 void
 adb_init()
 {
-	int	i;
-	int	asc1, asc2, asc3, asc4;
 	int	keycode;
+	int	i;
 
 	if(g_adb_init) {
 		halt_printf("g_adb_init = %d!\n", g_adb_init);
 	}
 	g_adb_init = 1;
 
-	for(i = 0; i < 0x80; i++) {
-		a2_key_to_ascii[i][0] = -1;
-		a2_key_to_ascii[i][1] = -1;
-		a2_key_to_ascii[i][2] = -1;
-		a2_key_to_ascii[i][3] = -1;
-	}
-
-	i = 0;
-	while(a2_key_to_ascii_raw[i][0] >= 0) {
-		keycode = a2_key_to_ascii_raw[i][0];
-		asc1 = a2_key_to_ascii_raw[i][1];
-		asc2 = a2_key_to_ascii_raw[i][2];
-		asc3 = a2_key_to_ascii_raw[i][3];
-
-		if(keycode < 0 || keycode >= 0x80) {
-			printf("ADB keycode out of range: %d: %d\n",
+	for(i = 0; i < 128; i++) {
+		keycode = a2_key_to_ascii[i][0];
+		if(keycode != i) {
+			printf("ADB keycode lost/skipped: i=%x: keycode=%x\n",
 				i, keycode);
 			my_exit(1);
 		}
-		a2_key_to_ascii[keycode][0] = asc1;
-		a2_key_to_ascii[keycode][1] = asc2;
-		asc4 = asc2;
-		if(asc3 == 0) {
-			asc3 = asc1 & 0x1f;
-			asc4 = asc3;
-		} else if(asc3 > 0) {
-			if(asc3 >= 0x80) {
-				/* special case for null */
-				asc3 = 0;
-			}
-			asc4 = asc3;
-		} else {
-			/* asc3 < 0 */
-			asc3 = asc1;
-		}
-		a2_key_to_ascii[keycode][2] = asc3;
-		a2_key_to_ascii[keycode][3] = asc4;
-
-		i++;
 	}
 
 	g_c025_val = 0;
 
 	for(i = 0; i < 4; i++) {
 		g_virtual_key_up[i] = -1;
+	}
+
+	for(i = 0; i < 10; i++) {
+		g_keypad_key_is_down[i] = 0;
 	}
 
 	adb_reset();
@@ -208,9 +203,9 @@ adb_reset()
 	g_kbd_ctl_addr = 2;
 	g_mouse_ctl_addr = 3;
 
-	g_adb_data_int_sent = 0;
-	g_adb_mouse_int_sent = 0;
-	g_adb_kbd_srq_sent = 0;
+	adb_clear_data_int();
+	adb_clear_mouse_int();
+	adb_clear_kbd_srq();
 
 	g_adb_data_pending = 0;
 	g_adb_interrupt_byte = 0;
@@ -220,7 +215,9 @@ adb_reset()
 
 	g_kbd_reg0_pos = 0;
 	g_kbd_reg3_16bit = 0x602;
+
 }
+
 
 #define LEN_ADB_LOG	16
 STRUCT(Adb_log) {
@@ -268,8 +265,6 @@ show_adb_log(void)
 	printf("kbd: dev: %x, ctl: %x; mouse: dev: %x, ctl: %x\n",
 		g_kbd_dev_addr, g_kbd_ctl_addr,
 		g_mouse_dev_addr, g_mouse_ctl_addr);
-	printf("adb_data_int_sent: %d, adb_kbd_srq_sent: %d, mouse_int: %d\n",
-		g_adb_data_int_sent, g_adb_kbd_srq_sent, g_adb_mouse_int_sent);
 	printf("g_adb_state: %d, g_adb_interrupt_byte: %02x\n",
 		g_adb_state, g_adb_interrupt_byte);
 }
@@ -289,11 +284,8 @@ adb_add_kbd_srq()
 {
 	if(g_kbd_reg3_16bit & 0x200) {
 		/* generate SRQ */
-		g_adb_interrupt_byte |= 0x08;;
-		if(!g_adb_kbd_srq_sent) {
-			g_adb_kbd_srq_sent = 1;
-			add_irq();
-		}
+		g_adb_interrupt_byte |= 0x08;
+		add_irq(IRQ_PENDING_ADB_KBD_SRQ);
 	} else {
 		printf("Got keycode but no kbd SRQ!\n");
 	}
@@ -302,10 +294,7 @@ adb_add_kbd_srq()
 void
 adb_clear_kbd_srq()
 {
-	if(g_adb_kbd_srq_sent) {
-		remove_irq();
-		g_adb_kbd_srq_sent = 0;
-	}
+	remove_irq(IRQ_PENDING_ADB_KBD_SRQ);
 
 	/* kbd SRQ's are the only ones to handle now, so just clean it out */
 	g_adb_interrupt_byte &= (~(0x08));
@@ -315,10 +304,7 @@ void
 adb_add_data_int()
 {
 	if(g_c027_val & ADB_C027_DATA_INT) {
-		if(!g_adb_data_int_sent) {
-			g_adb_data_int_sent = 1;
-			add_irq();
-		}
+		add_irq(IRQ_PENDING_ADB_DATA);
 	}
 }
 
@@ -326,31 +312,20 @@ void
 adb_add_mouse_int()
 {
 	if(g_c027_val & ADB_C027_MOUSE_INT) {
-		if(!g_adb_mouse_int_sent) {
-			/* printf("Mouse int sent\n"); */
-			g_adb_mouse_int_sent = 1;
-			add_irq();
-		}
+		add_irq(IRQ_PENDING_ADB_MOUSE);
 	}
 }
 
 void
 adb_clear_data_int()
 {
-	if(g_adb_data_int_sent) {
-		remove_irq();
-		g_adb_data_int_sent = 0;
-	}
+	remove_irq(IRQ_PENDING_ADB_DATA);
 }
 
 void
 adb_clear_mouse_int()
 {
-	if(g_adb_mouse_int_sent) {
-		remove_irq();
-		g_adb_mouse_int_sent = 0;
-		/* printf("Mouse int clear, button: %d\n", a2_mouse_button); */
-	}
+	remove_irq(IRQ_PENDING_ADB_MOUSE);
 }
 
 
@@ -498,8 +473,8 @@ adb_kbd_talk_reg0()
 void
 adb_set_config(word32 val0, word32 val1, word32 val2)
 {
-	word32	new_mouse;
-	word32	new_kbd;
+	int	new_mouse;
+	int	new_kbd;
 	int	tmp1;
 
 	new_mouse = val0 >> 4;
@@ -528,6 +503,10 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 	}
 
 	tmp1 = val2 & 0xf;
+	if(g_rom_version >= 3) {
+		tmp1 = 9 - tmp1;
+	}
+
 	switch(tmp1) {
 	case 0:
 		g_adb_repeat_rate = 1;
@@ -560,6 +539,7 @@ adb_set_config(word32 val0, word32 val1, word32 val2)
 	case 9:
 		/* I don't know what this should be, ROM 03 uses it */
 		g_adb_repeat_rate = 60;
+		break;
 	default:
 		halt_printf("Bad repeat rate: %02x\n", tmp1);
 	}
@@ -593,7 +573,7 @@ adb_read_c026()
 	case ADB_IDLE:
 		ret = g_adb_interrupt_byte;
 		g_adb_interrupt_byte = 0;
-		if(g_adb_kbd_srq_sent) {
+		if(g_irq_pending & IRQ_PENDING_ADB_KBD_SRQ) {
 			g_adb_interrupt_byte |= 0x08;
 		}
 		if(g_adb_data_pending == 0) {
@@ -641,8 +621,8 @@ adb_read_c026()
 void
 adb_write_c026(int val)
 {
-	word32	dev;
 	word32	tmp;
+	int	dev;
 
 	adb_printf("Writing c026 with %02x\n", val);
 	adb_log(0x1c026, val);
@@ -710,7 +690,7 @@ adb_write_c026(int val)
 				(g_adb_char_set << 12) +
 				(g_adb_layout_lang << 8) +
 				(g_adb_repeat_info << 0);
-			tmp = (0x82 << 24) + tmp;
+			tmp = (0x82U << 24) + tmp;
 			adb_send_bytes(4, tmp, 0, 0);
 			break;
 		case 0x0d:	/* Get Version */
@@ -807,9 +787,9 @@ adb_write_c026(int val)
 			}
 			break;
 		default:
-			printf("ADB ucontroller cmd %02x unknown!\n", val);
-			adb_error();
-			halt_on_all_c027 = 1;
+			halt_printf("ADB ucontroller cmd %02x unknown!\n", val);
+			/* The Gog's says ACS Demo 2 has a bug and writes to */
+			/*  c026 */
 			break;
 		}
 		break;
@@ -839,7 +819,7 @@ adb_write_c026(int val)
 void
 do_adb_cmd()
 {
-	word32	dev;
+	int	dev;
 	int	new_kbd;
 	int	addr;
 	int	val;
@@ -935,7 +915,7 @@ do_adb_cmd()
 					dev, g_adb_cmd_data[1]);
 				adb_error();
 			}
-			if(g_adb_cmd_data[0] != g_kbd_dev_addr) {
+			if(g_adb_cmd_data[0] != (word32)g_kbd_dev_addr) {
 				/* see if app is trying to change addr */
 				printf("KBD listen to dev %x reg 3: 0:%02x!\n",
 					dev, g_adb_cmd_data[0]);
@@ -944,7 +924,7 @@ do_adb_cmd()
 			g_kbd_reg3_16bit = ((g_adb_cmd_data[0] & 0xf) << 12) +
 				(g_kbd_reg3_16bit & 0x0fff);
 		} else if(dev == g_mouse_dev_addr) {
-			if(g_adb_cmd_data[0] != dev) {
+			if(g_adb_cmd_data[0] != (word32)dev) {
 				/* see if app is trying to change mouse addr */
 				printf("MOUS listen to dev %x reg3: 0:%02x!\n",
 					dev, g_adb_cmd_data[0]);
@@ -1001,8 +981,11 @@ adb_read_c027()
 		ret |= ADB_C027_MOUSE_COORD;
 	}
 
+#if 0
 	adb_printf("Read c027: %02x, int_byte: %02x, d_pend: %d\n",
 		ret, g_adb_interrupt_byte, g_adb_data_pending);
+#endif
+
 #if 0
 	adb_log(0xc027, ret);
 #endif
@@ -1098,43 +1081,157 @@ write_adb_ram(word32 addr, int val)
 }
 
 int
-update_mouse(int x, int y, int button_state, int button_valid)
+adb_get_keypad_xy(int get_y)
 {
+	int	x, y;
+	int	key;
+	int	num_keys;
+	int	i, j;
 
-	if(x < 0 && y < 0) {
+	key = 1;
+	num_keys = 0;
+	x = 0;
+	y = 0;
+	for(i = 0; i < 3; i++) {
+		for(j = 0; j < 3; j++) {
+			if(g_keypad_key_is_down[key]) {
+				num_keys++;	
+				x = x + (j - 1)*32768;
+				y = y + (1 - i)*32768;
+			}
+			key++;
+		}
+	}
+	if(num_keys == 0) {
+		num_keys = 1;
+	}
+
+	adb_printf("get_xy=%d, num_keys: %d, x:%d, y:%d\n", get_y,
+							num_keys, x, y);
+
+	if(get_y) {
+		return y / num_keys;
+	} else {
+		return x / num_keys;
+	}
+}
+
+int
+update_mouse(int x, int y, int button_states, int buttons_valid)
+{
+	double	dcycs;
+	int	button1_changed;
+	int	mouse_moved;
+	int	unhide;
+	int	pos;
+	int	i;
+
+	dcycs = g_cur_dcycs;
+
+	g_mouse_raw_x = x;
+	g_mouse_raw_y = y;
+
+	unhide = 0;
+	if(x < 0) {
+		x = 0;
+		unhide = 1;
+	}
+	if(x >= 640) {
+		x = 639;
+		unhide = 1;
+	}
+	if(y < 0) {
+		y = 0;
+		unhide = 1;
+	}
+	if(y >= 400) {
+		y = 399;
+		unhide = 1;
+	}
+
+
+	g_unhide_pointer = unhide && !g_warp_pointer;
+
+	if(!g_warp_pointer) {
+		if(g_hide_pointer && g_unhide_pointer) {
+			/* cursor has left a2 window, show it */
+			g_hide_pointer = 0;
+			x_hide_pointer(0);
+		}
+		if((g_num_lines_prev_superhires == 200) &&
+				(g_num_lines_prev_superhires640 == 0) &&
+				((g_slow_memory_ptr[0x19d00] & 0x80) == 0)) {
+			// In 320-mode superhires, cut mouse range in half
+			x = x >> 1;
+		}
+		y = y >> 1;
+	}
+
+	mouse_compress_fifo(dcycs);
+
+#if 0
+	printf("Update Mouse called with buttons:%d x,y:%d,%d, fifo:%d,%d, "
+		" a2: %d,%d\n", buttons_valid, x, y,
+		g_mouse_fifo[0].x, g_mouse_fifo[0].y,
+		g_mouse_a2_x, g_mouse_a2_y);
+#endif
+
+	if((buttons_valid < 0) && g_warp_pointer) {
+		/* Warping the pointer causes it to jump here...this is not */
+		/*  real motion, just update info and get out */
+		g_mouse_a2_x += (x - g_mouse_fifo[0].x);
+		g_mouse_a2_y += (y - g_mouse_fifo[0].y);
+		g_mouse_fifo[0].x = x;
+		g_mouse_fifo[0].y = y;
 		return 0;
 	}
 
-	if((x == X_A2_WINDOW_WIDTH/2) && (y == X_A2_WINDOW_HEIGHT/2) &&
-							g_warp_pointer) {
-		/* skip it */
-		g_mouse_cur_x = x;
-		g_mouse_cur_y = y;
-		g_mouse_moved = 0;
-	} else {
-		g_mouse_moved = 1;
+#if 0
+	printf("...real move, warp: %d, %d, new x: %d, %d, a2:%d,%d\n",
+		g_mouse_warp_x, g_mouse_warp_y, g_mouse_fifo[0].x,
+		g_mouse_fifo[0].y, g_mouse_a2_x, g_mouse_a2_y);
+#endif
+
+	mouse_moved = (g_mouse_fifo[0].x != x) || (g_mouse_fifo[0].y != y);
+
+	g_mouse_a2_x += g_mouse_warp_x;
+	g_mouse_a2_y += g_mouse_warp_y;
+	g_mouse_fifo[0].x = x;
+	g_mouse_fifo[0].y = y;
+	g_mouse_fifo[0].dcycs = dcycs;
+	g_mouse_warp_x = 0;
+	g_mouse_warp_y = 0;
+
+	button1_changed = (buttons_valid & 1) &&
+			((button_states & 1) != (g_mouse_fifo[0].buttons & 1));
+
+	if((button_states & 4) && !(g_mouse_fifo[0].buttons & 4) &&
+							(buttons_valid & 4)) {
+		/* right button pressed */
+		adb_increment_speed();
+	}
+	if((button_states & 2) && !(g_mouse_fifo[0].buttons & 2) &&
+							(buttons_valid & 2)) {
+		/* middle button pressed */
+		halt2_printf("Middle button pressed\n");
 	}
 
-	g_mouse_delta_x += x - g_mouse_cur_x;
-	g_mouse_delta_y += y - g_mouse_cur_y;
-	g_mouse_cur_x = x;
-	g_mouse_cur_y = y;
-
-	if(button_valid) {
-		if(!g_mouse_overflow_valid && (button_state != g_mouse_button)){
-			/* copy delta to overflow, set overflow */
-			g_mouse_overflow_x = g_mouse_delta_x;
-			g_mouse_overflow_y = g_mouse_delta_y;
-			g_mouse_overflow_button = g_mouse_button;
-			g_mouse_overflow_valid = 1;
-			g_mouse_delta_x = 0;
-			g_mouse_delta_y = 0;
+	pos = g_mouse_fifo_pos;
+	if((pos < (ADB_MOUSE_FIFO - 2)) && button1_changed) {
+		/* copy delta to overflow, set overflow */
+		/* overflow ensures the mouse button state is precise at */
+		/*  button up/down times.  Using a mouse event list where */
+		/*  deltas accumulate until a button change would work, too */
+		for(i = pos; i >= 0; i--) {
+			g_mouse_fifo[i + 1] = g_mouse_fifo[i];	/* copy struct*/
 		}
-
-		g_mouse_button = button_state;
+		g_mouse_fifo_pos = pos + 1;
 	}
 
-	if(g_mouse_moved || button_valid) {
+	g_mouse_fifo[0].buttons = (button_states & buttons_valid) |
+				(g_mouse_fifo[0].buttons & ~buttons_valid);
+
+	if(mouse_moved || button1_changed) {
 		if( (g_mouse_ctl_addr == g_mouse_dev_addr) &&
 						((g_adb_mode & 0x2) == 0)) {
 			g_adb_mouse_valid_data = 1;
@@ -1142,16 +1239,21 @@ update_mouse(int x, int y, int button_state, int button_valid)
 		}
 	}
 
-	return g_mouse_moved;
+	return mouse_moved;
 }
 
-
 int
-mouse_read_c024()
+mouse_read_c024(double dcycs)
 {
-	int	delta;
 	word32	ret;
+	word32	tool_start;
+	int	em_active;
+	int	target_x, target_y;
+	int	delta_x, delta_y;
+	int	a2_x, a2_y;
 	int	mouse_button;
+	int	clamped;
+	int	pos;
 
 	if(((g_adb_mode & 0x2) != 0) || (g_mouse_dev_addr != g_mouse_ctl_addr)){
 		/* mouse is off, return 0, or mouse is not autopoll */
@@ -1160,80 +1262,176 @@ mouse_read_c024()
 		return 0;
 	}
 
-	if(g_adb_mouse_coord) {
-		/* y coord */
-		if(g_mouse_overflow_valid) {
-			delta = g_mouse_overflow_y;
-			if(delta > 0x3f) {
-				delta = 0x3f;
-			} else if(delta < (-0x3f)) {
-				delta = -0x3f;
-			}
-			g_mouse_overflow_y -= delta;
-			mouse_button = g_mouse_overflow_button;
-			if(g_mouse_overflow_y == 0 && g_mouse_overflow_x == 0) {
-				g_mouse_overflow_valid = 0;
-			}
-		} else {
-			delta = g_mouse_delta_y;
-			if(delta > 0x3f) {
-				delta = 0x3f;
-			} else if(delta < (-0x3f)) {
-				delta = -0x3f;
-			}
-			g_mouse_delta_y -= delta;
-			mouse_button = g_mouse_button;
-		}
-		ret = ((!mouse_button) << 7) + (delta & 0x7f);
+	mouse_compress_fifo(dcycs);
 
-		irq_printf("Read c024, mouse y: %02x\n", ret);
-		a2_mouse_button = mouse_button;
-	} else {
-		/* x coord */
-		if(g_mouse_overflow_valid) {
-			delta = g_mouse_overflow_x;
-			if(delta > 0x3f) {
-				delta = 0x3f;
-			} else if(delta < (-0x3f)) {
-				delta = -0x3f;
-			}
-			g_mouse_overflow_x -= delta;
-			if(g_mouse_overflow_y == 0 && g_mouse_overflow_x == 0 &&
-				  (a2_mouse_button == g_mouse_overflow_button)){
-				g_mouse_overflow_valid = 0;
-			}
-		} else {
-			delta = g_mouse_delta_x;
-			if(delta > 0x3f) {
-				delta = 0x3f;
-			} else if(delta < (-0x3f)) {
-				delta = -0x3f;
-			}
-			g_mouse_delta_x -= delta;
-		}
+	pos = g_mouse_fifo_pos;
+	target_x = g_mouse_fifo[pos].x;
+	target_y = g_mouse_fifo[pos].y;
+	mouse_button = (g_mouse_fifo[pos].buttons & 1);
+	delta_x = target_x - g_mouse_a2_x;
+	delta_y = target_y - g_mouse_a2_y;
 
-		ret = 0x80 | (delta & 0x7f);
-
-		irq_printf("Read c024, mouse x: %02x\n", ret);
+	clamped = 0;
+	if(delta_x > 0x3f) {
+		delta_x = 0x3f;
+		clamped = 1;
+	} else if(delta_x < -0x3f) {
+		delta_x = -0x3f;
+		clamped = 1;
+	}
+	if(delta_y > 0x3f) {
+		delta_y = 0x3f;
+		clamped = 1;
+	} else if(delta_y < -0x3f) {
+		delta_y = -0x3f;
+		clamped = 1;
 	}
 
-	if(!g_mouse_overflow_valid && !g_mouse_delta_x && !g_mouse_delta_y &&
-			(g_mouse_button == a2_mouse_button)) {
+	if(pos > 0) {
+		/* peek into next entry's button info if we are not clamped */
+		/*  and we're returning the y-coord */
+		if(!clamped && g_adb_mouse_coord) {
+			mouse_button = g_mouse_fifo[pos - 1].buttons & 1;
+		}
+	}
+
+	if(g_adb_mouse_coord) {
+		/* y coord */
+		delta_x = 0;	/* clear unneeded x delta */
+	} else {
+		delta_y = 0;	/* clear unneeded y delta */
+	}
+
+
+	adb_printf(" pre a2_x:%02x,%02x,%02x,%02x\n",
+		g_slow_memory_ptr[0x100e9], g_slow_memory_ptr[0x100ea],
+		g_slow_memory_ptr[0x100eb], g_slow_memory_ptr[0x100ec]);
+	adb_printf(" pre a2_x:%02x,%02x,%02x,%02x\n",
+		g_slow_memory_ptr[0x10190], g_slow_memory_ptr[0x10192],
+		g_slow_memory_ptr[0x10191], g_slow_memory_ptr[0x10193]);
+
+	/* Update event manager internal state */
+	tool_start = (g_slow_memory_ptr[0x103ca] << 16) +
+			(g_slow_memory_ptr[0x103c9] << 8) +
+			g_slow_memory_ptr[0x103c8];
+
+	em_active = 0;
+	if((tool_start >= 0x20000) && (tool_start < (g_mem_size_total - 28)) ) {
+		/* seems to be valid ptr to addr of mem space for tools */
+		/* see if event manager appears to be active */
+		em_active = g_memory_ptr[tool_start + 6*4] +
+				(g_memory_ptr[tool_start + 6*4 + 1] << 8);
+		if(g_warp_pointer) {
+			em_active = 0;
+		}
+	}
+
+	a2_x = g_mouse_a2_x;
+	a2_y = g_mouse_a2_y;
+
+	if(em_active) {
+		if((!g_hide_pointer) && (g_num_lines_prev_superhires == 200) &&
+				!g_unhide_pointer) {
+			/* if super-hires and forcing tracking, then hide */
+			g_hide_pointer = 1;
+			x_hide_pointer(1);
+		}
+		if(g_adb_mouse_coord == 0) {
+			/* update x coord values */
+			g_slow_memory_ptr[0x47c] = a2_x & 0xff;
+			g_slow_memory_ptr[0x57c] = a2_x >> 8;
+			g_memory_ptr[0x47c] = a2_x & 0xff;
+			g_memory_ptr[0x57c] = a2_x >> 8;
+
+			g_slow_memory_ptr[0x10190] = a2_x & 0xff;
+			g_slow_memory_ptr[0x10192] = a2_x >> 8;
+		} else {
+			g_slow_memory_ptr[0x4fc] = a2_y & 0xff;
+			g_slow_memory_ptr[0x5fc] = a2_y >> 8;
+			g_memory_ptr[0x4fc] = a2_y & 0xff;
+			g_memory_ptr[0x5fc] = a2_y >> 8;
+
+			g_slow_memory_ptr[0x10191] = a2_y & 0xff;
+			g_slow_memory_ptr[0x10193] = a2_y >> 8;
+		}
+	} else {
+		if(g_hide_pointer && !g_warp_pointer) {
+			g_hide_pointer = 0;
+			x_hide_pointer(0);
+		}
+	}
+
+	ret = ((!mouse_button) << 7) + ((delta_x | delta_y) & 0x7f);
+	if(g_adb_mouse_coord) {
+		g_mouse_a2_button = mouse_button;	/* y coord has button*/
+	} else {
+		ret |= 0x80;	/* mouse button not down on x coord rd */
+	}
+
+	a2_x += delta_x;
+	a2_y += delta_y;
+	g_mouse_a2_x = a2_x;
+	g_mouse_a2_y = a2_y;
+	if(g_mouse_fifo_pos) {
+		if((target_x == a2_x) && (target_y == a2_y) &&
+					(g_mouse_a2_button == mouse_button)) {
+			g_mouse_fifo_pos--;
+		}
+	}
+
+
+	adb_printf("Read c024, mouse is_y:%d, %02x, vbl:%08x, dcyc:%f, em:%d\n",
+		g_adb_mouse_coord, ret, g_vbl_count, dcycs, em_active);
+	adb_printf("...mouse targ_x:%d,%d delta_x,y:%d,%d fifo:%d, a2:%d,%d\n",
+		target_x, target_y, delta_x, delta_y, g_mouse_fifo_pos,
+		a2_x, a2_y);
+	adb_printf("   post a2_x:%02x,%02x,%02x,%02x\n",
+		g_slow_memory_ptr[0x10190], g_slow_memory_ptr[0x10192],
+		g_slow_memory_ptr[0x10191], g_slow_memory_ptr[0x10193]);
+
+	if((g_mouse_fifo_pos == 0) && (g_mouse_fifo[0].x == a2_x) &&
+			(g_mouse_fifo[0].y == a2_y) &&
+			((g_mouse_fifo[0].buttons & 1) == g_mouse_a2_button)) {
 		g_adb_mouse_valid_data = 0;
 		adb_clear_mouse_int();
 	}
 
-	g_adb_mouse_coord ^= 1;
+	g_adb_mouse_coord = !g_adb_mouse_coord;
 	return ret;
+}
+
+void
+mouse_compress_fifo(double dcycs)
+{
+	int	pos;
+
+	/* The mouse fifo exists so that fast button changes don't get lost */
+	/*  if the emulator lags behind the mouse events */
+	/* But the FIFO means really old mouse events are saved if */
+	/*  the emulated code isn't looking at the mouse registers */
+	/* This routine compresses all mouse events > 0.5 seconds old */
+
+	for(pos = g_mouse_fifo_pos; pos >= 1; pos--) {
+		if(g_mouse_fifo[pos].dcycs < (dcycs - 500*1000.0)) {
+			/* Remove this entry */
+			adb_printf("Old mouse FIFO pos %d removed\n", pos);
+			g_mouse_fifo_pos = pos - 1;
+			continue;
+		}
+		/* Else, stop searching the FIFO */
+		break;
+	}
 }
 
 void
 adb_key_event(int a2code, int is_up)
 {
 	word32	special;
+	word32	vbl_count;
 	int	key;
 	int	hard_key;
 	int	pos;
+	int	tmp_ascii;
 	int	ascii;
 
 	if(is_up) {
@@ -1259,29 +1457,32 @@ adb_key_event(int a2code, int is_up)
 
 	/* convert key to ascii, if possible */
 	hard_key = 0;
-	if(a2_key_to_ascii[a2code][0] & 0xef00) {
+	if(a2_key_to_ascii[a2code][1] & 0xef00) {
 		/* special key */
 	} else {
 		/* we have ascii */
 		hard_key = 1;
 	}
 
-	pos = 0;
-	ascii = a2_key_to_ascii[a2code][0];
+	pos = 1;
+	ascii = a2_key_to_ascii[a2code][1];
 	if(CAPS_LOCK_DOWN && (ascii >= 'a' && ascii <= 'z')) {
-		pos = 1;
-        if (SHIFT_DOWN && g_adb_mode&0x40) {
-            pos =0;
-        }
+		pos = 2;
+		if(SHIFT_DOWN && (g_adb_mode & 0x40)) {
+			/* xor shift mode--capslock and shift == lowercase */
+			pos = 1;
+		}
 	} else if(SHIFT_DOWN) {
-        pos = 1;
-	}
-
-	if(CTRL_DOWN) {
-		pos += 2;
+		pos = 2;
 	}
 
 	ascii = a2_key_to_ascii[a2code][pos];
+	if(CTRL_DOWN) {
+		tmp_ascii = a2_key_to_ascii[a2code][3];
+		if(tmp_ascii >= 0) {
+			ascii = tmp_ascii;
+		}
+	}
 	key = (ascii & 0x7f) + 0x80;
 
 	special = (ascii >> 8) & 0xff;
@@ -1303,7 +1504,11 @@ adb_key_event(int a2code, int is_up)
 			g_a2code_down = a2code;
 
 			/* first key down, set up autorepeat */
-			g_adb_repeat_vbl = g_vbl_count + g_adb_repeat_delay;
+			vbl_count = g_vbl_count;
+			if(g_config_control_panel) {
+				vbl_count = g_cfg_vbl_count;
+			}
+			g_adb_repeat_vbl = vbl_count + g_adb_repeat_delay;
 			if(g_adb_repeat_delay == 0) {
 				g_key_down = 0;
 			}
@@ -1335,6 +1540,8 @@ adb_key_event(int a2code, int is_up)
 word32
 adb_read_c000()
 {
+	word32	vbl_count;
+
 	if( ((g_kbd_buf[0] & 0x80) == 0) && (g_key_down == 0)) {
 		/* nothing happening, just get out */
 		return g_kbd_buf[0];
@@ -1343,14 +1550,21 @@ adb_read_c000()
 		/* got one */
 		if((g_kbd_read_no_update++ > 5) && (g_kbd_chars_buffered > 1)) {
 			/* read 5 times, keys pending, let's move it along */
-			printf("Read %02x 3 times, tossing\n", g_kbd_buf[0]);
+			printf("Read %02x %d times, tossing\n", g_kbd_buf[0],
+					g_kbd_read_no_update);
 			adb_access_c010();
 		}
-	} else if(g_key_down && g_vbl_count >= g_adb_repeat_vbl) {
-		/* repeat the g_key_down */
-		g_c025_val |= 0x8;
-		adb_key_event(g_a2code_down, 0);
-		g_adb_repeat_vbl = g_vbl_count + g_adb_repeat_rate;
+	} else {
+		vbl_count = g_vbl_count;
+		if(g_config_control_panel) {
+			vbl_count = g_cfg_vbl_count;
+		}
+		if(g_key_down && vbl_count >= g_adb_repeat_vbl) {
+			/* repeat the g_key_down */
+			g_c025_val |= 0x8;
+			adb_key_event(g_a2code_down, 0);
+			g_adb_repeat_vbl = vbl_count + g_adb_repeat_rate;
+		}
 	}
 
 	return g_kbd_buf[0];
@@ -1399,12 +1613,40 @@ adb_is_option_key_down()
 }
 
 void
+adb_increment_speed()
+{
+	const char *str;
+
+	g_limit_speed++;
+	if(g_limit_speed > 3) {
+		g_limit_speed = 0;
+	}
+
+	str = "";
+	switch(g_limit_speed) {
+	case 0:
+		str = "...as fast as possible!";
+		break;
+	case 1:
+		str = "...1.024MHz!";
+		break;
+	case 2:
+		str = "...2.8MHz!";
+		break;
+	case 3:
+		str = "...8.0MHz!";
+		break;
+	}
+	printf("Toggling g_limit_speed to %d%s\n", g_limit_speed, str);
+}
+
+void
 adb_physical_key_update(int a2code, int is_up)
 {
-	int	bitpos;
-	word32	mask;
 	int	autopoll;
-	int	i;
+	int	special;
+	int	ascii_and_type;
+	int	ascii;
 
 	/* this routine called by xdriver to pass raw codes--handle */
 	/*  ucontroller and ADB bus protocol issues here */
@@ -1413,21 +1655,44 @@ adb_physical_key_update(int a2code, int is_up)
 
 	adb_printf("adb_phys_key_update: %02x, %d\n", a2code, is_up);
 
-	autopoll = 1;
-	if(g_adb_mode & 1) {
-		/* autopoll is explicitly off */
-		autopoll = 0;
-	}
-	if(g_kbd_dev_addr != g_kbd_ctl_addr) {
-		/* autopoll is off because ucontroller doesn't know kbd moved */
-		autopoll = 0;
-	}
-
 	adb_printf("Handle a2code: %02x, is_up: %d\n", a2code, is_up);
 
 	if(a2code < 0 || a2code > 0x7f) {
 		halt_printf("a2code: %04x!\n", a2code);
 		return;
+	}
+
+	/* Remap 0x7b-0x7e to 0x3b-0x3e (arrow keys on new mac keyboards) */
+	if(a2code >= 0x7b && a2code <= 0x7e) {
+		a2code = a2code - 0x40;
+	}
+
+	/* Now check for special keys (function keys, etc) */
+	ascii_and_type = a2_key_to_ascii[a2code][1];
+	special = 0;
+	if((ascii_and_type & 0xf000) == 0x8000) {
+		/* special function key */
+		special = ascii_and_type & 0xff;
+		switch(special) {
+		case 0x01: /* F1 - remap to cmd */
+			a2code = 0x37;
+			special = 0;
+			break;
+		case 0x02: /* F2 - remap to option */
+			a2code = 0x3a;
+			special = 0;
+			break;
+		case 0x03: /* F3 - remap to escape for OS/2 */
+			a2code = 0x35;
+			special = 0;
+			break;
+		case 0x0c: /* F12 - remap to reset */
+			a2code = 0x7f;
+			special = 0;
+			break;
+		default:
+			break;
+		}
 	}
 
 	/* Only process reset requests here */
@@ -1438,9 +1703,92 @@ adb_physical_key_update(int a2code, int is_up)
 		return;
 	}
 
-	i = (a2code >> 5) & 3;
-	bitpos = a2code & 0x1f;
-	mask = (1 << bitpos);
+	if(special && !is_up) {
+		switch(special) {
+		case 0x04: /* F4 - Emulator config panel */
+			cfg_toggle_config_panel();
+			break;
+		case 0x06: /* F6 - emulator speed */
+			if(SHIFT_DOWN) {
+				halt2_printf("Shift-F6 pressed\n");
+			} else {
+				adb_increment_speed();
+			}
+			break;
+		case 0x07: /* F7 - fast disk emul */
+			g_fast_disk_emul = !g_fast_disk_emul;
+			printf("g_fast_disk_emul is now %d\n",
+							g_fast_disk_emul);
+			break;
+		case 0x08: /* F8 - warp pointer */
+			g_warp_pointer = !g_warp_pointer;
+			if(g_hide_pointer != g_warp_pointer) {
+				g_hide_pointer = g_warp_pointer;
+				x_hide_pointer(g_hide_pointer);
+			}
+			break;
+		case 0x09: /* F9 - swap paddles */
+			if(SHIFT_DOWN) {
+				g_swap_paddles = !g_swap_paddles;
+				printf("Swap paddles is now: %d\n",
+							g_swap_paddles);
+			} else {
+				g_invert_paddles = !g_invert_paddles;
+				printf("Invert paddles is now: %d\n",
+							g_invert_paddles);
+			}
+			break;
+		case 0x0a: /* F10 - change a2vid paletter */
+			change_a2vid_palette((g_a2vid_palette + 1) & 0xf);
+			break;
+		case 0x0b: /* F11 - full screen */
+			g_fullscreen = !g_fullscreen;
+			x_full_screen(g_fullscreen);
+			break;
+		}
+
+		return;
+	}
+	/* Handle Keypad Joystick here partly...if keypad key pressed */
+	/*  while in Keypad Joystick mode, do not pass it on as a key press */
+	if((ascii_and_type & 0xff00) == 0x1000) {
+		/* Keep track of keypad number keys being up or down even */
+		/*  if joystick mode isn't keypad.  This avoid funny cases */
+		/*  if joystick mode is changed while a key is pressed */
+		ascii = ascii_and_type & 0xff;
+		if(ascii > 0x30 && ascii <= 0x39) {
+			g_keypad_key_is_down[ascii - 0x30] = !is_up;
+		}
+		if(g_joystick_type == 0) {
+			/* If Joystick type is keypad, then do not let these */
+			/*  keypress pass on further, except for cmd/opt */
+			if(ascii == 0x30) {
+				/* remap '0' to cmd */
+				a2code = 0x37;
+			} else if(ascii == 0x2e || ascii == 0x2c) {
+				/* remap '.' and ',' to option */
+				a2code = 0x3a;
+			} else {
+				/* Just ignore it in this mode */
+				return;
+			}
+		}
+	}
+
+	autopoll = 1;
+	if(g_adb_mode & 1) {
+		/* autopoll is explicitly off */
+		autopoll = 0;
+	}
+	if(g_kbd_dev_addr != g_kbd_ctl_addr) {
+		/* autopoll is off because ucontroller doesn't know kbd moved */
+		autopoll = 0;
+	}
+	if(g_config_control_panel) {
+		/* always do autopoll */
+		autopoll = 1;
+	}
+
 
 	if(is_up) {
 		if(!autopoll) {
@@ -1489,6 +1837,23 @@ adb_virtual_key_update(int a2code, int is_up)
 		if(g_virtual_key_up[i] & mask) {
 			g_virtual_key_up[i] &= (~mask);
 			adb_key_event(a2code, is_up);
+		}
+	}
+}
+
+void
+adb_all_keys_up()
+{
+	word32	mask;
+	int	i, j;
+
+	for(i = 0; i < 4; i++) {
+		for(j = 0; j < 32; j++) {
+			mask = 1 << j;
+			if((g_virtual_key_up[i] & mask) == 0) {
+				/* create key-up event */
+				adb_physical_key_update(i*32 + j, 1);
+			}
 		}
 	}
 }

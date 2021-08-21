@@ -1,14 +1,15 @@
 
-OBJECTS = $(OBJECTS1) engine_c.o
+TARGET = xkegs
+OBJECTS = $(OBJECTS1) xdriver.o
 CC = gcc
 CCOPTS = -O
 OPTS =  -DNDEBUG
 SUFFIX =
-NAME = kegs
+NAME = xkegs
 LDFLAGS =
 LDOPTS = -z
 LD = $(CC)
-EXTRA_LIBS = -lXext -lX11 -lAlib -lcl -lc
+EXTRA_LIBS = -lXext -lX11 -lcl -lc
 EXTRA_SPECIALS = Alib.h
 
 AS = cc -Ae

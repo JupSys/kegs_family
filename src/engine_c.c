@@ -1,17 +1,14 @@
-/****************************************************************/
-/*			Apple IIgs emulator			*/
-/*			Copyright 1998 Kent Dickey		*/
-/*								*/
-/*	This code may not be used in a commercial product	*/
-/*	without prior written permission of the author.		*/
-/*								*/
-/*	You may freely distribute this code.			*/ 
-/*								*/
-/*	You can contact the author at kentd@cup.hp.com.		*/
-/*	HP has nothing to do with this software.		*/
-/****************************************************************/
+/************************************************************************/
+/*			KEGS: Apple //gs Emulator			*/
+/*			Copyright 2002 by Kent Dickey			*/
+/*									*/
+/*		This code is covered by the GNU GPL			*/
+/*									*/
+/*	The KEGS web page is kegs.sourceforge.net			*/
+/*	You may contact the author at: kadickey@alumni.princeton.edu	*/
+/************************************************************************/
 
-const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.40 2000/09/24 01:32:18 kentd Exp $";
+const char rcsid_engine_c_c[] = "@(#)$KmKId: engine_c.c,v 1.57 2004-12-03 23:51:01-05 kentd Exp $";
 
 #include "defc.h"
 #include "protos_engine_c.h"
@@ -29,7 +26,12 @@ const char rcsid_engine_c_c[] = "@(#)$Header: engine_c.c,v 1.40 2000/09/24 01:32
 #endif
 
 extern int halt_sim;
+extern int g_code_red;
+extern int g_ignore_halts;
+extern int g_user_halt_bad;
 extern double g_fcycles_stop;
+extern double g_last_vbl_dcycs;
+extern double g_cur_dcycs;
 extern int g_wait_pending;
 extern int g_irq_pending;
 extern int g_testing;
@@ -44,12 +46,16 @@ extern byte *g_dummy_memory1_ptr;
 extern int g_num_breakpoints;
 extern word32 g_breakpts[];
 
-extern Pc_log *log_pc_ptr;
-extern Pc_log *log_pc_start_ptr;
-extern Pc_log *log_pc_end_ptr;
+extern Pc_log *g_log_pc_ptr;
+extern Pc_log *g_log_pc_start_ptr;
+extern Pc_log *g_log_pc_end_ptr;
+
+extern Data_log *g_log_data_ptr;
+extern Data_log *g_log_data_start_ptr;
+extern Data_log *g_log_data_end_ptr;
 
 int size_tab[] = {
-#include "size_c"
+#include "size_c.h"
 };
 
 int bogus[] = {
@@ -58,6 +64,10 @@ int bogus[] = {
 };
 
 #define FINISH(arg1, arg2)	g_ret1 = arg1; g_ret2 = arg2; goto finish;
+#define INC_KPC_1	kpc = (kpc & 0xff0000) + ((kpc + 1) & 0xffff);
+#define INC_KPC_2	kpc = (kpc & 0xff0000) + ((kpc + 2) & 0xffff);
+#define INC_KPC_3	kpc = (kpc & 0xff0000) + ((kpc + 3) & 0xffff);
+#define INC_KPC_4	kpc = (kpc & 0xff0000) + ((kpc + 4) & 0xffff);
 
 #define CYCLES_PLUS_1	fcycles += fplus_1;
 #define CYCLES_PLUS_2	fcycles += fplus_2;
@@ -71,8 +81,9 @@ int bogus[] = {
 
 #define FCYCLES_ROUND	fcycles = (int)(fcycles + fplus_x_m1);
 
-#define	LOG_PC_MACRO()							\
-		tmp_pc_ptr = log_pc_ptr++;				\
+#ifdef LOG_PC
+# define LOG_PC_MACRO()							\
+		tmp_pc_ptr = g_log_pc_ptr++;				\
 		tmp_pc_ptr->dbank_kpc = (dbank << 24) + kpc;		\
 		tmp_pc_ptr->instr = (opcode << 24) + arg_ptr[1] +	\
 			(arg_ptr[2] << 8) + (arg_ptr[3] << 16);		\
@@ -81,9 +92,27 @@ int bogus[] = {
 		tmp_pc_ptr->xreg_yreg = (xreg << 16) + yreg;		\
 		tmp_pc_ptr->stack_direct = (stack << 16) + direct;	\
 		tmp_pc_ptr->dcycs = fcycles + g_last_vbl_dcycs - fplus_2; \
-		if(log_pc_ptr >= log_pc_end_ptr) {			\
-			log_pc_ptr = log_pc_start_ptr;			\
+		if(g_log_pc_ptr >= g_log_pc_end_ptr) {			\
+			/*halt2_printf("log_pc oflow %f\n", tmp_pc_ptr->dcycs);*/ \
+			g_log_pc_ptr = g_log_pc_start_ptr;		\
 		}
+
+# define LOG_DATA_MACRO(in_addr, in_val, in_size)			\
+		g_log_data_ptr->dcycs = fcycles + g_last_vbl_dcycs;	\
+		g_log_data_ptr->addr = in_addr;				\
+		g_log_data_ptr->val = in_val;				\
+		g_log_data_ptr->size = in_size;				\
+		g_log_data_ptr++;					\
+		if(g_log_data_ptr >= g_log_data_end_ptr) {		\
+			g_log_data_ptr = g_log_data_start_ptr;		\
+		}
+
+#else
+# define LOG_PC_MACRO()
+# define LOG_DATA_MACRO(addr, val, size)
+/* Just do nothing */
+#endif
+
 
 #define	GET_1BYTE_ARG	arg = arg_ptr[1];
 #define	GET_2BYTE_ARG	arg = arg_ptr[1] + (arg_ptr[2] << 8);
@@ -128,7 +157,7 @@ extern word32 slow_mem_changed[];
 
 #define GET_MEMORY(addr,dest)	GET_MEMORY8(addr, dest)
 
-#define GET_MEMORY16(addr, dest)				\
+#define GET_MEMORY16(addr, dest, in_bank)			\
 	save_addr = addr;					\
 	stat = GET_PAGE_INFO_RD(((addr) >> 8) & 0xffff);	\
 	wstat = PTR2WORD(stat) & 0xff;				\
@@ -136,7 +165,7 @@ extern word32 slow_mem_changed[];
 	if((wstat & (1 << (31 - BANK_IO_BIT))) || (((addr) & 0xff) == 0xff)) { \
 		fcycles_tmp1 = fcycles;				\
 		dest = get_memory16_pieces_stub((addr), stat,	\
-			&fcycles_tmp1, fplus_ptr);		\
+			&fcycles_tmp1, fplus_ptr, in_bank);	\
 		fcycles = fcycles_tmp1;				\
 	} else {						\
 		CYCLES_PLUS_2;					\
@@ -144,7 +173,7 @@ extern word32 slow_mem_changed[];
 	}							\
 	addr_latch = save_addr;
 
-#define GET_MEMORY24(addr, dest)				\
+#define GET_MEMORY24(addr, dest, in_bank)			\
 	save_addr = addr;					\
 	stat = GET_PAGE_INFO_RD(((addr) >> 8) & 0xffff);	\
 	wstat = PTR2WORD(stat) & 0xff;				\
@@ -152,7 +181,7 @@ extern word32 slow_mem_changed[];
 	if((wstat & (1 << (31 - BANK_IO_BIT))) || (((addr) & 0xfe) == 0xfe)) { \
 		fcycles_tmp1 = fcycles;				\
 		dest = get_memory24_pieces_stub((addr), stat,	\
-			&fcycles_tmp1, fplus_ptr);		\
+			&fcycles_tmp1, fplus_ptr, in_bank);	\
 		fcycles = fcycles_tmp1;				\
 	} else {						\
 		CYCLES_PLUS_3;					\
@@ -169,14 +198,14 @@ extern word32 slow_mem_changed[];
 	}								\
 	if((psr & 0x100) && (((addr) & 0xff) == 0xff)) {		\
 		GET_MEMORY8(save_addr, getmem_tmp);			\
-		save_addr++;						\
+		save_addr = (save_addr + 1) & 0xffff;			\
 		if((direct & 0xff) == 0) {				\
 			save_addr = (save_addr & 0xff) + direct;	\
 		}							\
 		GET_MEMORY8(save_addr, dest);				\
 		dest = (dest << 8) + getmem_tmp;			\
 	} else {							\
-		GET_MEMORY16(save_addr, dest);				\
+		GET_MEMORY16(save_addr, dest, 1);			\
 	}
 
 
@@ -196,7 +225,7 @@ extern word32 slow_mem_changed[];
 	} else {						\
 		stack -= 2;					\
 		stack = stack & 0xffff;				\
-		SET_MEMORY16(stack + 1, arg);			\
+		SET_MEMORY16(stack + 1, arg, 1);		\
 	}
 
 #define PUSH16_UNSAFE(arg)					\
@@ -206,7 +235,7 @@ extern word32 slow_mem_changed[];
 		stack = 0x100 | (stack & 0xff);			\
 	}							\
 	stack = stack & 0xffff;					\
-	SET_MEMORY16(save_addr, arg);
+	SET_MEMORY16(save_addr, arg, 1);
 
 #define PUSH24_UNSAFE(arg)					\
 	save_addr = (stack - 2) & 0xffff;			\
@@ -215,7 +244,7 @@ extern word32 slow_mem_changed[];
 		stack = 0x100 | (stack & 0xff);			\
 	}							\
 	stack = stack & 0xffff;					\
-	SET_MEMORY24(save_addr, arg);
+	SET_MEMORY24(save_addr, arg, 1);
 
 #define PULL8(dest)						\
 	stack++;						\
@@ -231,7 +260,7 @@ extern word32 slow_mem_changed[];
 		PULL8(pull_tmp);				\
 		dest = (pull_tmp << 8) + dest;			\
 	} else {						\
-		GET_MEMORY16(stack + 1, dest);			\
+		GET_MEMORY16(stack + 1, dest, 1);		\
 		stack = (stack + 2) & 0xffff;			\
 		if(psr & 0x100) {				\
 			stack = 0x100 | (stack & 0xff);		\
@@ -243,7 +272,7 @@ extern word32 slow_mem_changed[];
 	if(psr & 0x100) {					\
 		stack = 0x100 | (stack & 0xff);			\
 	}							\
-	GET_MEMORY16(stack, dest);				\
+	GET_MEMORY16(stack, dest, 1);				\
 	stack = (stack + 1) & 0xffff;				\
 	if(psr & 0x100) {					\
 		stack = 0x100 | (stack & 0xff);			\
@@ -257,7 +286,7 @@ extern word32 slow_mem_changed[];
 		PULL8(dest);					\
 		dest = (dest << 16) + pull_tmp;			\
 	} else {						\
-		GET_MEMORY24(stack + 1, dest);			\
+		GET_MEMORY24(stack + 1, dest, 1);		\
 		stack = (stack + 3) & 0xffff;			\
 		if(psr & 0x100) {				\
 			stack = 0x100 | (stack & 0xff);		\
@@ -265,6 +294,7 @@ extern word32 slow_mem_changed[];
 	}
 
 #define SET_MEMORY8(addr, val)						\
+	LOG_DATA_MACRO(addr, val, 8);					\
 	CYCLES_PLUS_1;							\
 	stat = GET_PAGE_INFO_WR(((addr) >> 8) & 0xffff);		\
 	wstat = PTR2WORD(stat) & 0xff;					\
@@ -279,17 +309,15 @@ extern word32 slow_mem_changed[];
 	}
 
 
-
-
-
-#define SET_MEMORY16(addr, val)						\
+#define SET_MEMORY16(addr, val, in_bank)				\
+	LOG_DATA_MACRO(addr, val, 16);					\
 	stat = GET_PAGE_INFO_WR(((addr) >> 8) & 0xffff);		\
 	wstat = PTR2WORD(stat) & 0xff;					\
 	ptr = stat - wstat + ((addr) & 0xff);				\
-	if((wstat) || (((addr) & 0xff) == 0xff)) {		\
+	if((wstat) || (((addr) & 0xff) == 0xff)) {			\
 		fcycles_tmp1 = fcycles;					\
 		set_memory16_pieces_stub((addr), (val),			\
-			&fcycles_tmp1, fplus_ptr);			\
+			&fcycles_tmp1, fplus_1, fplus_x_m1, in_bank);	\
 		fcycles = fcycles_tmp1;					\
 	} else {							\
 		CYCLES_PLUS_2;						\
@@ -297,17 +325,18 @@ extern word32 slow_mem_changed[];
 		ptr[1] = (val) >> 8;					\
 	}
 
-#define SET_MEMORY24(addr, val)						\
+#define SET_MEMORY24(addr, val, in_bank)				\
+	LOG_DATA_MACRO(addr, val, 24);					\
 	stat = GET_PAGE_INFO_WR(((addr) >> 8) & 0xffff);		\
 	wstat = PTR2WORD(stat) & 0xff;					\
 	ptr = stat - wstat + ((addr) & 0xff);				\
 	if((wstat) || (((addr) & 0xfe) == 0xfe)) {			\
 		fcycles_tmp1 = fcycles;					\
 		set_memory24_pieces_stub((addr), (val), 		\
-			&fcycles_tmp1, fplus_ptr);			\
+			&fcycles_tmp1, fplus_ptr, in_bank);		\
 		fcycles = fcycles_tmp1;					\
 	} else {							\
-		CYCLES_PLUS_2;						\
+		CYCLES_PLUS_3;						\
 		ptr[0] = (val);						\
 		ptr[1] = (val) >> 8;					\
 		ptr[2] = (val) >> 16;					\
@@ -321,8 +350,8 @@ check_breakpoints(word32 addr)
 
 	count = g_num_breakpoints;
 	for(i = 0; i < count; i++) {
-		if(g_breakpts[i] == addr) {
-			halt_printf("Hit breakpoint at %06x\n", addr);
+		if((g_breakpts[i] & 0xffffff) == addr) {
+			halt2_printf("Hit breakpoint at %06x\n", addr);
 		}
 	}
 }
@@ -352,12 +381,13 @@ get_memory8_io_stub(word32 addr, byte *stat, double *fcycs_ptr,
 
 word32
 get_memory16_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr,
-		Fplus	*fplus_ptr)
+		Fplus	*fplus_ptr, int in_bank)
 {
 	byte	*ptr;
 	double	fcycles, fcycles_tmp1;
 	double	fplus_1;
 	double	fplus_x_m1;
+	word32	addrp1;
 	word32	wstat;
 	word32	addr_latch;
 	word32	ret;
@@ -367,19 +397,24 @@ get_memory16_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr,
 	fplus_1 = fplus_ptr->plus_1;
 	fplus_x_m1 = fplus_ptr->plus_x_minus_1;
 	GET_MEMORY8(addr, tmp1);
-	GET_MEMORY8(addr+1, ret);
+	addrp1 = addr + 1;
+	if(in_bank) {
+		addrp1 = (addr & 0xff0000) + (addrp1 & 0xffff);
+	}
+	GET_MEMORY8(addrp1, ret);
 	*fcycs_ptr = fcycles;
 	return (ret << 8) + (tmp1);
 }
 
 word32
 get_memory24_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr,
-		Fplus *fplus_ptr)
+		Fplus *fplus_ptr, int in_bank)
 {
 	byte	*ptr;
 	double	fcycles, fcycles_tmp1;
 	double	fplus_1;
 	double	fplus_x_m1;
+	word32	addrp1, addrp2;
 	word32	wstat;
 	word32	addr_latch;
 	word32	ret;
@@ -390,8 +425,16 @@ get_memory24_pieces_stub(word32 addr, byte *stat, double *fcycs_ptr,
 	fplus_1 = fplus_ptr->plus_1;
 	fplus_x_m1 = fplus_ptr->plus_x_minus_1;
 	GET_MEMORY8(addr, tmp1);
-	GET_MEMORY8(addr+1, tmp2);
-	GET_MEMORY8(addr+2, ret);
+	addrp1 = addr + 1;
+	if(in_bank) {
+		addrp1 = (addr & 0xff0000) + (addrp1 & 0xffff);
+	}
+	GET_MEMORY8(addrp1, tmp2);
+	addrp2 = addr + 2;
+	if(in_bank) {
+		addrp2 = (addr & 0xff0000) + (addrp2 & 0xffff);
+	}
+	GET_MEMORY8(addrp2, ret);
 	*fcycs_ptr = fcycles;
 	return (ret << 16) + (tmp2 << 8) + tmp1;
 }
@@ -445,41 +488,51 @@ set_memory8_io_stub(word32 addr, word32 val, byte *stat, double *fcycs_ptr,
 
 void
 set_memory16_pieces_stub(word32 addr, word32 val, double *fcycs_ptr,
-		Fplus	*fplus_ptr)
+		double fplus_1, double fplus_x_m1, int in_bank)
 {
 	byte	*ptr;
 	byte	*stat;
 	double	fcycles, fcycles_tmp1;
-	double	fplus_1;
-	double	fplus_x_m1;
+	word32	addrp1;
 	word32	wstat;
 
 	fcycles = *fcycs_ptr;
-	fplus_1 = fplus_ptr->plus_1;
-	fplus_x_m1 = fplus_ptr->plus_x_minus_1;
 	SET_MEMORY8(addr, val);
-	SET_MEMORY8(addr+1, val >> 8);
+	addrp1 = addr + 1;
+	if(in_bank) {
+		addrp1 = (addr & 0xff0000) + (addrp1 & 0xffff);
+	}
+	SET_MEMORY8(addrp1, val >> 8);
 
 	*fcycs_ptr = fcycles;
 }
 
 void
 set_memory24_pieces_stub(word32 addr, word32 val, double *fcycs_ptr,
-		Fplus	*fplus_ptr)
+		Fplus	*fplus_ptr, int in_bank)
 {
 	byte	*ptr;
 	byte	*stat;
 	double	fcycles, fcycles_tmp1;
 	double	fplus_1;
 	double	fplus_x_m1;
+	word32	addrp1, addrp2;
 	word32	wstat;
 
 	fcycles = *fcycs_ptr;
 	fplus_1 = fplus_ptr->plus_1;
 	fplus_x_m1 = fplus_ptr->plus_x_minus_1;
 	SET_MEMORY8(addr, val);
-	SET_MEMORY8(addr+1, val >> 8);
-	SET_MEMORY8(addr+2, val >> 16);
+	addrp1 = addr + 1;
+	if(in_bank) {
+		addrp1 = (addr & 0xff0000) + (addrp1 & 0xffff);
+	}
+	SET_MEMORY8(addrp1, val >> 8);
+	addrp2 = addr + 2;
+	if(in_bank) {
+		addrp2 = (addr & 0xff0000) + (addrp2 & 0xffff);
+	}
+	SET_MEMORY8(addrp2, val >> 16);
 
 	*fcycs_ptr = fcycles;
 }
@@ -503,14 +556,6 @@ get_memory_c(word32 addr, int cycs)
 	GET_MEMORY8(addr, ret);
 	return ret;
 }
-#if 0
-	stat = page_info[(addr>>8) & 0xffff].rd;
-	ptr = (byte *)((stat & 0xffffff00) | (addr & 0xff));
-	if(stat & (1 << (31 -BANK_IO_BIT))) {
-		return get_memory_io(addr, &in_fcycles);
-	}
-	return *ptr;
-#endif
 
 word32
 get_memory16_c(word32 addr, int cycs)
@@ -543,16 +588,27 @@ set_memory_c(word32 addr, word32 val, int cycs)
 	double	fplus_x_m1;
 	word32	wstat;
 
-	fcycles = 0;
+	fcycles = g_cur_dcycs - g_last_vbl_dcycs;
 	fplus_1 = 0;
 	fplus_x_m1 = 0;
 	SET_MEMORY8(addr, val);
 }
+
 void
 set_memory16_c(word32 addr, word32 val, int cycs)
 {
-	set_memory_c(addr, val, 0);
-	set_memory_c(addr + 1, val >> 8, 0);
+	byte	*stat;
+	byte	*ptr;
+	double	fcycles, fcycles_tmp1;
+	double	fplus_1, fplus_2;
+	double	fplus_x_m1;
+	word32	wstat;
+
+	fcycles = g_cur_dcycs - g_last_vbl_dcycs;
+	fplus_1 = 0;
+	fplus_2 = 0;
+	fplus_x_m1 = 0;
+	SET_MEMORY16(addr, val, 0);
 }
 
 void
@@ -673,10 +729,10 @@ fixed_memory_ptrs_init()
 	/* set g_slow_memory_ptr, g_rom_fc_ff_ptr, g_dummy_memory1_ptr, */
 	/*  and rom_cards_ptr */
 
-	g_slow_memory_ptr = memalloc_align(128*1024, 0);
-	g_dummy_memory1_ptr = memalloc_align(256, 1024);
-	g_rom_fc_ff_ptr = memalloc_align(256*1024, 1024);
-	g_rom_cards_ptr = memalloc_align(16*256, 1024);
+	g_slow_memory_ptr = memalloc_align(128*1024, 0, 0);
+	g_dummy_memory1_ptr = memalloc_align(256, 1024, 0);
+	g_rom_fc_ff_ptr = memalloc_align(256*1024, 512, 0);
+	g_rom_cards_ptr = memalloc_align(16*256, 256, 0);
 
 #if 0
 	printf("g_memory_ptr: %08x, dummy_mem: %08x, slow_mem_ptr: %08x\n",
@@ -693,14 +749,43 @@ fixed_memory_ptrs_init()
 word32
 get_itimer()
 {
+#if defined(__i386) && defined(__GNUC__)
+	/* Here's my bad ia32 asm code to do rdtsc */
+	/* Linux source uses: */
+	/* asm volatile("rdtsc" : "=a"(ret) : : "edx"); */
+	/* asm volatile("rdtsc" : "=%eax"(ret) : : "%edx"); */
+
+	/* GCC bug report 2001-03/msg00786.html used: */
+	/*register word64 dtmp; */
+	/*asm volatile ("rdtsc" : "=A" (dtmp)); */
+	/*return (word32)dtmp; */
+
+	register word32 ret;
+
+	asm volatile ("rdtsc;movl %%eax,%0" : "=r"(ret) : : "%eax","%edx");
+
+	return ret;
+#else
+# if defined(__POWERPC__) && defined(__GNUC__)
+	register word32 ret;
+
+	asm volatile ("mftb %0" : "=r"(ret));
+	return ret;
+# else
 	return 0;
+# endif
+#endif
 }
 
 void
 set_halt_act(int val)
 {
-	halt_sim |= val;
-	g_fcycles_stop = (double)0.0;
+	if(val == 1 && g_ignore_halts && !g_user_halt_bad) {
+		g_code_red++;
+	} else {
+		halt_sim |= val;
+		g_fcycles_stop = (double)0.0;
+	}
 }
 
 void
@@ -721,6 +806,7 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 	word32	wstat;
 	word32	save_addr;
 	word32	arg;
+	word32	addrp1;
 	int	size;
 
 	fcycles = 0;
@@ -731,31 +817,32 @@ get_remaining_operands(word32 addr, word32 opcode, word32 psr, Fplus *fplus_ptr)
 
 	size = size_tab[opcode];
 
+	addrp1 = (addr & 0xff0000) + ((addr + 1) & 0xffff);
 	switch(size) {
 	case 0:
-		arg = 0;
+		arg = 0;	/* no args */
 		break;
 	case 1:
-		GET_MEMORY8(addr+1, arg);
-		break;
+		GET_MEMORY8(addrp1, arg);
+		break;		/* 1 arg, already done */
 	case 2:
-		GET_MEMORY16(addr+1, arg);
+		GET_MEMORY16(addrp1, arg, 1);
 		break;
 	case 3:
-		GET_MEMORY24(addr+1, arg);
+		GET_MEMORY24(addrp1, arg, 1);
 		break;
 	case 4:
 		if(psr & 0x20) {
-			GET_MEMORY8(addr+1, arg);
+			GET_MEMORY8(addrp1, arg);
 		} else {
-			GET_MEMORY16(addr+1, arg);
+			GET_MEMORY16(addrp1, arg, 1);
 		}
 		break;
 	case 5:
 		if(psr & 0x10) {
-			GET_MEMORY8(addr+1, arg);
+			GET_MEMORY8(addrp1, arg);
 		} else {
-			GET_MEMORY16(addr+1, arg);
+			GET_MEMORY16(addrp1, arg, 1);
 		}
 		break;
 	default:
@@ -861,6 +948,7 @@ enter_engine(Engine_reg *engine_ptr)
 	fplus_x_m1 = fplus_ptr->plus_x_minus_1;
 
 	g_ret1 = 0;
+	g_ret2 = 0;
 
 recalc_accsize:
 	if(psr & 0x20) {
@@ -873,9 +961,7 @@ recalc_accsize:
 
 			FETCH_OPCODE;
 
-#ifdef LOG_PC
 			LOG_PC_MACRO();
-#endif
 
 			switch(opcode) {
 			default:
@@ -885,16 +971,14 @@ recalc_accsize:
 #include "defs_instr.h"
 				* 2;
 				break;
-#include "8inst_c"
+#include "8inst_c.h"
 				break;
 			}
 		}
 	} else {
 		while(fcycles <= g_fcycles_stop) {
 			FETCH_OPCODE;
-#ifdef LOG_PC
 			LOG_PC_MACRO();
-#endif
 
 			switch(opcode) {
 			default:
@@ -904,7 +988,7 @@ recalc_accsize:
 #include "defs_instr.h"
 				* 2;
 				break;
-#include "16inst_c"
+#include "16inst_c.h"
 				break;
 			}
 		}
@@ -926,7 +1010,7 @@ finish:
 
 	engine_ptr->psr = psr;
 
-	return (g_ret1 << 28);
+	return (g_ret1 << 28) + g_ret2;
 }
 
 
